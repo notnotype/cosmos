@@ -73,7 +73,7 @@ NormalizedContent
 ├─ updatedAt?: TemporalValue           // ★修订语义用
 ├─ metrics: ContentMetrics             // ★见 3.4
 ├─ media: MediaItem[]                  // 图/视频/音频/封面，各带类型与 URL
-├─ references: ContentReference[]      // ★父子/引用：in_reply_to、quoted、转载、外链
+├─ references: ContentReference[]      // ★父子/引用：类型清单后置（2026-08-09 决定），实现时再排
 ├─ context: DiscoveryContext           // ★发现上下文：hot/search("DeepSeek")/feed/关注
 ├─ tags: string[]                      // 话题标签/分类/subreddit/category
 ├─ flags: { nsfw?, isLive?, isRetweet?, isEdited? }
@@ -115,7 +115,7 @@ Publisher
 - X `profile DeepSeek` 解析到空壳账号 → 需要用户名交叉验证
 - 微信 download 的 author 与页面 DOM 作者不一致 → 采集时保留多来源，标记不确定
 
-### 3.4 `ContentMetrics` 与可信指标
+### 3.4 `ContentMetrics` 与可信指标（字段集已定稿 2026-08-09）
 
 ```text
 metrics: {
@@ -125,6 +125,20 @@ metrics: {
     capturedAt: string                  // 指标是时点快照，会过期
 }
 ```
+
+**字段集定稿（2026-08-09）**：
+
+- `values` 保持通用六项 `{ likes, views, reposts, comments, collects, score }`，覆盖所有平台的内容互动语义：
+  - `likes`：B站 like / X likes / 微博 likes / 知乎 votes / Reddit score / **GitHub stars（语义归并：用户表达认可，已定稿算作 likes）**
+  - `views`：B站 view / X views / YouTube views
+  - `reposts`：X retweets / 微博 reposts
+  - `comments`：各平台评论数
+  - `collects`：B站 favorite / 小红书 collects
+  - `score`：平台特殊计分（如 Reddit upvotes−downvotes）
+- **平台特有且无法归并的**（GitHub forks、B站 coin）→ 留在 `extensions`（宽容合同，不强制统一）。
+- **内容互动与发布者声望分家**：YouTube subscribers、Reddit karma 是**发布者**指标，进 `Publisher.metrics`（§3.3），不进 content `values`。
+
+`raw` 保留原文文本（本地化数值需解析归一化），`reliability` 标注来源可信度（X profile → low），`capturedAt` 标记时点快照（刷新策略见 §7.3）。
 
 ### 3.5 签名 URL 独立标记（已定稿）
 
@@ -203,7 +217,7 @@ NormalizedIngestItem 新增字段（Phase 2 前的最小集）：
 
 ```text
 TemporalValue = {
-    exact: DateTime | null,             // 优先级 1：证据层精准值（ISO/RFC2822/unix 已归一）
+    exact: DateTime | null,             // 优先级 1：证据层精准值（统一转 UTC，定稿 2026-08-09）
     exactPrecision: "second" | null,    // exact 的来源精度（unix 秒/ISO 秒）
     fallback: {                         // 优先级 2：展示文本解析结果（仅 exact 为 null 时存在）
         raw: string,                    // 原文，永远保留（不可重算）
@@ -217,6 +231,10 @@ TemporalValue = {
 ```
 
 `updatedAt` 用同结构；YouTube "（修改过）" 修饰词解析出的时间记为 `updatedAt` 的 fallback（`publishedAt` 留 null）。
+
+**exact 统一转 UTC（定稿 2026-08-09）**：证据层时间戳时区各异（微博 `+0800`、YouTube `-07:00`、Reddit unix 秒），`exact` 存储时一律转为 UTC 时间戳，简化排序与比较（§4.5 排序规则对 exact 之间直接比时间戳）。不保留原时区偏移；"平台本地时间"信息不再保留，需要时靠 fallback 原文。
+
+**fallback → exact 覆盖不产生 Revision（定稿 2026-08-09）**：列表层解析出的低精度 fallback，在用户展开详情拿到证据层精确值后，**原地更新**当前 Revision 的时间字段，不生成新 Revision。理由：与 metrics"快照覆盖不修订"原则一致（时间精度提升和指标刷新本质同类，都是"掌握更准的外部信息"而非"内容实体变化"）；避免"点开详情就刷 Revision"的噪音。可追溯性由 fallback.raw（永远保留）+ capturedAt（修正时刻）保证，不在 Revision 历史中体现。
 
 ### 4.2 责任边界（定稿）
 
@@ -367,6 +385,10 @@ compare(a, b):
 - [ ] 通用信息模型落地路径决策（§3.6 的 A/B/C）与 Phase 1 合同的兼容方案。**已定稿：路径 C（2026-08-08）。**
 - [ ] Publisher 独立实体的存储与索引设计（Phase 2 Subject 前身）。**已定稿（2026-08-08）：内嵌 JSON，Phase 2 物化。见 §7.1。**
 - [x] **证据层优先（三级优先级）定为时间处理第一原则**（2026-08-09）：精准时间戳 > 解析文本 > 无时间，见 §4.0。
+- [x] exact 统一转 UTC（2026-08-09）：证据层时间戳一律转 UTC 存储，简化排序比较。
+- [x] fallback → exact 覆盖不产生 Revision（2026-08-09）：原地更新当前 Revision，与 metrics 快照原则一致。
+- [x] metrics 字段集定稿（2026-08-09）：通用六项 values + 平台特有进 extensions + subscribers/karma 归发布者；GitHub stars 算 likes。
+- [x] references 关系类型清单：**后置**（2026-08-09 决定）。Phase 1（RSS/Bilibili/AI HOT）用不到；真正消费者是评论采集与 Story 归并（Phase 2+）。仅保留方向：受管理类型注册 + target 支持库内对象/外部 URL 两种形态。
 - [ ] 时间解析器实现 Task（**兜底定位**）：仅处理 exact 缺失的展示文本——精度族识别（含 week）、非时间成分剥离（地域/修饰词/前缀）、排序比较器、失败降级。第一消费场景：YouTube/小红书评论、微信 search、GitHub trending。
 - [ ] 平台行为参数（默认时区、隐藏年份切换点、时间展示策略）的配置形态：Connector 声明（format 族 + 证据层优先字段）。
 - [ ] 路径 C 落地实现（远端同步后对象明确）：改 `NormalizedIngestItem`（加 kind/publisher/metrics）+ 升级 `plugins/collectors` 的 Bilibili 标准化（author 从 summary 挪到 publisher）+ 替换简化版 `normalizeDate`。见 §8.2。

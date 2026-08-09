@@ -1,8 +1,8 @@
 # Cosmos 信息模型、相关推荐与持续工作区
 
-> 状态：Draft v0.10
+> 状态：Draft v0.11
 >
-> 最后更新：2026-08-08
+> 最后更新：2026-08-09
 >
 > 产品共同语言：[`../../CONTEXT.md`](../../CONTEXT.md)
 >
@@ -162,6 +162,13 @@ Entry 是用户在信息库中看到、搜索、收藏、标注和引用的最�
 - 独立教程。
 
 “原始报道”不适合作为总称，因为上面的内容并不都属于新闻报道。
+
+Entry 携带稳定身份与规范化内容属性（2026-08-09 定稿，讨论详见 [`../research/2026-08-08-universal-content-model.md`](../research/2026-08-08-universal-content-model.md)）：
+
+- **`publisher`（发布者）**：内容的发布者（作者、频道、公众号、子版块），独立于 Entry 内容本身，也与"平台提供者 Producer/Provider"（Bilibili、RSS 等数据源）区分。保存平台内 ID、显示名、handle 等；发布者声望指标（followers、subscribers、karma 等）挂在发布者上，不与内容互动指标混写。
+- **`kind`（内容形态）**：post / article / video / audio / image / comment / listing，区分正文与榜单条目等形态。
+- **`metrics`（内容互动指标）**：统一六项 `{ likes, views, reposts, comments, collects, score }`（GitHub stars 归并 likes；平台特有指标如 forks、coin 保留在扩展区）。指标是带 `capturedAt` 的时点快照，**不属于内容版本**——指标变化不产生新 Entry Revision。
+- **签名 URL**：带时效参数（小红书 `xsec_token`、微信直链 `signature`）的地址独立标记、归属 Connector State Store，不作为身份键。
 
 ### 3.3 URL 只是可选来源属性
 
@@ -371,6 +378,13 @@ Story 的身份、成员关系和历史事实不能因为摘要刷新而改变�
 只有造成语义实质变化时才创建新的 Story Revision；排序分数、Spotlight Placement 和临时运行进度不写入 Story Revision。历史 Artifact、Publication 和批注引用精确 Revision，因此当前 Story 更新不会改写过去已经发布的内容。
 
 人类接受的内容修改可以形成字段级保护。Agent 继续分析时先生成候选 Revision；未被人类保护的字段可以按维护策略自动提升，受保护字段不能被静默覆盖。第一版不引入复杂的三方合并编辑器，候选结果至少可以整体接受、拒绝，并保留每个字段的 producer、actor 和依据。
+
+Entry Revision 层遵循同一原则，并明确两个"不产生 Revision"的边界（2026-08-09 定稿）：
+
+- **时间精度提升不是内容实质变化**：列表层解析出的低精度 fallback 在拿到证据层精确值（exact）后，原地更新当前 Revision 的时间字段，不生成新 Revision；可追溯性由 fallback.raw（原文永远保留）+ capturedAt 保证。
+- **互动指标变化不是内容实质变化**：metrics 是带 `capturedAt` 的时点快照，按 §3.2 快照覆盖，不进入 Revision，也不进入内容指纹。
+
+只有标题、摘要、正文等**内容语义**实质变化才产生新的 Entry Revision。
 
 ## 5. Topic：主观、长期、目的驱动的组织
 
@@ -928,6 +942,12 @@ Topic 的成员和 Workspace 的用户状态不会因为生成 v2 而丢失。
 这些问题已明确标为后置，不阻塞本次 Phase 0 基线，也不继续作为本次 grilling 的问题。
 
 ## 14. 变更记录
+
+### v0.11 - 2026-08-09
+
+- §3.2 Entry 补充规范化内容属性：publisher（发布者，独立于平台提供者）、kind（内容形态七类）、metrics（统一六项互动指标快照）、签名 URL 归属。
+- §4.7 明确 Entry Revision 层两个"不产生 Revision"边界：时间精度提升（fallback → exact）原地更新、互动指标变化不进 Revision 与内容指纹。
+- 内容来自研究纪要 [`../research/2026-08-08-universal-content-model.md`](../research/2026-08-08-universal-content-model.md)，实现载体为 [`../tasks/05-normalized-content-model/README.md`](../tasks/05-normalized-content-model/README.md)。
 
 ### v0.10 - 2026-08-08
 

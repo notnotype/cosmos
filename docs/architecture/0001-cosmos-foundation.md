@@ -1,8 +1,8 @@
 # Cosmos 总体架构设计
 
-> 状态：Draft v0.15
+> 状态：Draft v0.16
 >
-> 最后更新：2026-08-08
+> 最后更新：2026-08-09
 >
 > 原始需求真相源：[`../requirements/0001-original-requirements.md`](../requirements/0001-original-requirements.md)
 >
@@ -540,6 +540,28 @@ cosmos://entry/01J...
 
 内部地址用于看板、Artifact 引用和离线跳转，不假装它是外部网页 URL。
 
+### 6.1.1 时间处理：证据层优先
+
+`occurredAt`（来源时间）和 `updatedAt`（来源修订时间）采用三级优先级，统一定稿于 2026-08-09（讨论详见 [`../research/2026-08-08-universal-content-model.md`](../research/2026-08-08-universal-content-model.md)）：
+
+```text
+优先级 1（主路径）：Connector 从证据层拿到精准时间/时间戳 → 直接使用，不做文本解析
+    → ISO 8601、RFC2822、unix 秒、完整日期；统一转换为 UTC 存储
+    → 例如：YouTube video 的 publishDate、微博 user-posts 的 created_at、
+            Reddit created_utc、知乎 created_at、B站完整时间
+
+优先级 2（兜底）：拿不到精准时间戳时，才解析展示文本
+    → 相对时间（"3小时前"、"6天前"、"x周前"）、隐藏年份日期（"07-29"）等
+    → 使用精度族规则（滚动秒/分/时，滚动 7 天取整的周，自然日历日/月/年），
+      产物为精度下界 + 精度标记 + 原文保留
+
+优先级 3（无时间）：二者都没有 → 不猜测、不编造，时间为空
+```
+
+`TemporalValue` 结构：`exact`（证据层精准值，统一 UTC）+ `fallback`（仅 exact 为空时的解析结果，含 raw 原文、lowerBound、precision、timezone、confidence）。
+
+时间精度提升（fallback → exact）**不产生新 Revision**：原地更新当前 Entry Revision 的时间字段，与互动指标的"快照覆盖"原则一致；可追溯性由 fallback.raw（永远保留）+ capturedAt（修正时刻）保证。列表层解析出的低精度值只用于列表排序，不进入最终事实。
+
 ### 6.2 Discovery Context
 
 同一条内容为什么被发现，会影响后续推荐与审计。每次采集记录：
@@ -574,6 +596,13 @@ Later poll
 例如 Telegram 消息被编辑时，旧 Observation 和 Revision 保留，新版本追加。来源删除时追加 delete Observation，并在 Entry 上投影当前可见状态；本地是否保留已采集内容由用户保留策略决定。
 
 跨平台的两篇报道仍是两个 Entry。它们可以被标记为副本、转载或加入同一个 Story，但不丢失各自来源身份。
+
+`NormalizedIngestItem` 是 Connector 的标准化输出合同，当前按路径 C 逐步升级（2026-08-09 定稿，实现见 [`../tasks/05-normalized-content-model/README.md`](../tasks/05-normalized-content-model/README.md)）：
+
+- **`publisher`**：独立内容属性，表示内容的发布者（作者/频道/公众号/子版块），与平台提供者 Producer/Provider（Bilibili、RSS 等）区分。存储内嵌 JSON（`publisherJson`，同 `sourceLocatorJson` 模式），未来 Subject/Entity 化时物化独立表。
+- **`kind`**：内容形态（post / article / video / audio / image / comment / listing），用于区分榜单条目与正文内容等形态。
+- **`metrics`**：内容互动指标，统一六项 `{ likes, views, reposts, comments, collects, score }`；平台特有指标保留在扩展区。指标是时点快照（含 `capturedAt`），**不属于内容版本**——指标变化不产生新 Revision，`fingerprintEntryRevision` 不包含 metrics。发布者声望（subscribers、karma 等）归 `publisher.metrics`，不与内容互动指标混写。
+- **签名 URL**：带时效参数（如小红书 `xsec_token`、微信直链 `signature`）的 URL 独立标记，归属 Connector State Store（非秘密状态），不作为身份键。
 
 ### 6.4 Asset 与“尽可能保存”
 
@@ -1097,7 +1126,7 @@ Channel Adapter 负责把平台无关的优先级、图片、正文和链接映�
 | 原始证据 | Observation、原始 payload、已保存原图 | 按保留策略删除，不能由重分析替代 |
 | 核心身份 | Entry、SourceInstance、Story 人工修正 | 持久真相 |
 | 用户真相 | Label、Annotation、Collection、Board、交互进度 | 持久真相，升级必须迁移 |
-| 派生理解 | 摘要、实体建议、embedding、Story 自动归并 | 可重建，但保留版本和当前选择 |
+| 派生理解 | 摘要、实体建议、embedding、Story 自动归并、ContentMetrics 时点快照 | 可重建，但保留版本和当前选择 |
 | 共享知识记忆 | `nb-memory` 的 episode、facts、registry、state | 由 `nb-memory` 自己维护事实源与替换语义；索引可重建，不替代 Cosmos 来源事实 |
 | Artifact | 报告、网页、附件包 | 版本化产物；未被引用的旧版本按策略清理 |
 | 缓存 | 缩略图、转码、临时候选、查询 cache | 可删除、可重建、有容量预算 |
@@ -1112,7 +1141,8 @@ Channel Adapter 负责把平台无关的优先级、图片、正文和链接映�
 - Artifact Root：版本化 Artifact 文件夹。
 - Cache Root：缩略图、转码、临时抓取和重建索引。
 - Secret Store：与普通配置分离；具体使用 OS 凭据库还是加密文件待实现 Task 决定。
-- Connector State Store：保存命名空间化、版本化的非秘密 Adapter 状态；不替代 Secret Store，也不允许扩展直接写核心表。
+- Connector State Store：保存命名空间化、版本化的非秘密 Adapter 状态；不替代 Secret Store，也不允许扩展直接写核心表。签名 URL（小红书 `xsec_token`、微信直链 `signature` 等带时效参数的地址）属于此边界，不作为内容身份键。
+- Publisher 存储：`EntryRevision.publisherJson` 内嵌 JSON（同 `sourceLocatorJson` 模式）；按作者筛选使用受控 SQL Adapter 的 `json_extract` 与表达式索引，Phase 2 需要跨 Entry 聚合作者时再物化独立表。
 - `nb-memory` Storage Root：由 `NbMemoryPort`/Adapter 管理，保存知识管理者共享记忆；具体是否位于 Data Root 内、如何备份和如何与 Node 生产运行时兼容，留待接入 Task 决定。
 
 建议运行时目录：
@@ -1603,8 +1633,19 @@ Phase 1B 扩展 API 与 Worker 的采集能力，但不改变 Phase 1 的模块�
 44. Entry → Story 的处理策略可以由用户或 Agent 配置为不同 Knowledge Workflow，但任何策略都不能覆盖旧 Observation。
 45. Research 不直接嵌入 Ingest；研究请求、触发原因和 Research Workflow Run 必须可追踪、可重试和可恢复。
 46. Research Workflow 发现的新来源内容重新经过 Observation → Entry，不直接把未经入库的外部结果写入 Story。
+47. Connector 能获取证据层精准时间戳时直接使用（统一转 UTC），不解析展示文本；解析只在证据层缺失时发生。
+48. 时间精度提升（fallback → exact）原地更新当前 Entry Revision 时间字段，不产生新 Revision；`fingerprintEntryRevision` 只包含内容字段，互动指标变化同样不产生新 Revision。
+49. 发布者（Publisher）是独立内容属性，与平台提供者（Producer/Provider）区分；内容互动指标与发布者声望指标分开保存，签名 URL 不作为身份键。
 
 ## 22. 变更记录
+
+### v0.16 - 2026-08-09
+
+- 新增 §6.1.1 时间处理证据层优先：三级优先级（精准时间戳 > 解析展示文本 > 无时间），`TemporalValue` 结构（exact 统一 UTC + fallback 解析兜底），时间精度提升不产生新 Revision。
+- §6.3 补充 `NormalizedIngestItem` 路径 C 合同：publisher（独立内容属性）、kind（内容形态）、metrics（统一六项互动指标，快照不进 Revision）、签名 URL 归属。
+- §13.1 将 ContentMetrics 归入派生理解（可重建）；§13.2 明确 publisher 内嵌 JSON 存储与签名 URL 归 Connector State Store。
+- 新增架构不变量 47-49（证据层优先、Revision 边界、Publisher 与 Producer 划界）。
+- 以上内容来自研究纪要 [`../research/2026-08-08-universal-content-model.md`](../research/2026-08-08-universal-content-model.md)，实现载体为 [`../tasks/05-normalized-content-model/README.md`](../tasks/05-normalized-content-model/README.md)。
 
 ### v0.15 - 2026-08-08
 

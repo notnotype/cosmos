@@ -102,6 +102,14 @@ Timeline 是按时间展示 Story 或 Topic 更新的视图，不是与 Story、
 
 看板（Board）把 Spotlight、精华、Workspace、Artifact 和 Feed 组合、分区和排序，但不拥有底层内容。
 
+### 发布者（Publisher）
+
+发布者是内容的作者或来源账号（B站 UP 主、知乎用户、公众号、Reddit 子版块等），是内容的独立属性，与"平台提供者 Producer/Provider"（Bilibili、RSS 等数据源）区分。发布者声望指标（粉丝数、subscribers、karma 等）挂在发布者上，不与内容的互动指标混写。
+
+### 证据层优先（时间处理）
+
+能拿到精准时间/时间戳（ISO、RFC2822、unix 秒）就直接使用，不解析时间描述文本；只有拿不到时才解析展示文本（"3小时前"、"07-29"等）。二者都没有则不设时间。时间精度提升不产生新 Revision。
+
 ## 关系速记
 
 ```text

@@ -1,8 +1,8 @@
 # Cosmos 产品需求文档
 
-> 状态：Draft v0.13
+> 状态：Draft v0.14
 >
-> 最后更新：2026-08-08
+> 最后更新：2026-08-09
 >
 > 原始需求真相源：[`0001-original-requirements.md`](0001-original-requirements.md)
 >
@@ -264,6 +264,7 @@ flowchart LR
 | ING-014 | Phase 3 | Research 不与 Ingest 强耦合；知识分析可以产生紧急、需要研究或来源冲突信号，再由 Trigger 启动独立 Research Workflow。 | Research Request/触发原因可追溯；研究结果重新经过 Observation → Entry，不直接写入 Story；研究失败不丢失原始 Entry。 |
 | ING-015 | 跨阶段 | 每个 Connector 必须返回外部稳定 external key；没有外部 ID 时必须由完整 `sourceLocator` 和规范化内容生成 fallback key。 | 同标题、同时间但不同来源位置的无 URL 内容不会被错误合并；key 规则版本化且可回放。 |
 | ING-016 | 跨阶段 | 每个 Observation 必须保存结构化 `originLocator`、`discoveryContext`、原始 payload 引用、媒体保存状态和产生它的 WorkflowRun。 | 能区分关注账号、推荐流、搜索、公告监控、手动导入、Agent 调研和 Research 发现；旧 Observation 不被覆盖。 |
+| ING-017 | Phase 1B | Connector 标准化输出携带发布者、内容形态和互动指标，不把发布者拼进标题或摘要。 | Bilibili Connector 的 `author` 进入 publisher 字段而非 summary；内容形态区分榜单条目与视频条目；互动指标按统一六项（likes/views/reposts/comments/collects/score）归一化，平台特有指标保留在扩展区。`当前假设（2026-08-09 讨论定稿，待实现验证，来源见研究纪要 `2026-08-08-universal-content-model.md`）。` |
 
 ### 7.3.1 KnowledgeSignal 与 ResearchRequest
 
@@ -818,3 +819,5 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 - Workflow 使用 `kind + tags` 做轻量分类，不为 Ingest、Knowledge、Research、Maintenance、Delivery 和 Interaction 复制不同 Runtime。
 - 知识管理者是共享 `nb-memory` 之上的高权限系统角色，可以通过 Web Chat、`cosmos cli` 和 ingest/research Workflow 参与系统操作；它不是单一 Session。
 - 个性化配置由 Agent 记忆、Cosmos 观察到的用户行为和未来其它信号共同生成；当前不要求逐字段 provenance，也不独立建模平台推荐偏好信号。
+- Connector 标准化输出的通用信息模型（发布者 Publisher、内容形态 ContentKind、互动指标 ContentMetrics）来自多平台抓取调研的架构推导（ING-017），不是用户原始需求原话；以研究纪要 `2026-08-08-universal-content-model.md` 为讨论真相源，当前按“当前假设”处理，待路径 C 实现验证。
+- 时间字段处理采用证据层优先：Connector 优先获取证据层精准时间戳（ISO/RFC2822/unix），拿不到才解析展示文本（相对时间、隐藏年份等），二者都没有则不设时间；列表层解析的低精度值在拿到证据层精确值后原地更新，不产生新 Revision。

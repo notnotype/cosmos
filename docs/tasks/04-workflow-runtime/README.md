@@ -291,7 +291,7 @@ type WorkflowContext = {
 
 ### 2026-08-10
 
-- Action 合同切片完成（由独立 PR 交付）：`ActionDefinition`/`ActionDescriptor` schema 与 Action 错误码进 `packages/contracts`；`ActionRegistry`、`ActionHandler`、`ActionExecutionError` 与 `IngestConnectorActionAdapter` 进 `packages/application`。
+- Action 合同切片完成（由独立 PR 交付）：`ActionDefinition`/`ActionDescriptor` schema 与 Action 错误码进 `packages/contracts`；`ActionRegistry`、`ActionHandler`、`ActionExecutionError` 与 `IngestConnectorActionAdapter` 进 `packages/application`；新增 contracts/application focused 测试 29 个，全量测试 92 个通过。
 - 设计规格：[`docs/superpowers/specs/2026-08-10-action-contract-design.md`](../../superpowers/specs/2026-08-10-action-contract-design.md)。
 - 交付边界：合同 + 注册 + connector 适配器试点；Job/Workflow 执行路径、API endpoint、manifest 解析留给本 Task 后续 Step。
 

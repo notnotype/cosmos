@@ -8,6 +8,7 @@ coverage/
 # Local runtime data
 .cosmos/
 .agent/
+.worktree/
 var/
 cache/
 

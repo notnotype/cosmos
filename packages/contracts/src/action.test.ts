@@ -88,6 +88,34 @@ describe("action contracts", () => {
         })).toMatchObject({ ref: "http.fetch" });
     });
 
+    it("rejects invalid numeric execution constraints", () => {
+        const cases: Array<Record<string, unknown>> = [
+            { timeoutMs: 0 },
+            { timeoutMs: -1 },
+            { retryPolicy: { maxAttempts: 0, backoffMs: 1_000 } },
+            { retryPolicy: { maxAttempts: 3, backoffMs: -1 } },
+        ];
+
+        for (const execution of cases) {
+            expect(() => actionDefinitionSchema.parse({
+                ref: "rss.poll",
+                kind: "connector",
+                description: "Poll an RSS source.",
+                version: "v1",
+                capabilities: [],
+                inputSchema: z.unknown(),
+                outputSchema: z.unknown(),
+                execution: {
+                    idempotent: true,
+                    supportsCancellation: false,
+                    timeoutMs: 30_000,
+                    retryPolicy: null,
+                    ...execution,
+                },
+            })).toThrow();
+        }
+    });
+
     it("requires the execution contract fields", () => {
         expect(() => actionDefinitionSchema.parse({
             ref: "rss.poll",
@@ -142,5 +170,8 @@ describe("action contracts", () => {
             timeoutMs: null,
             retryPolicy: null,
         });
+
+        // JSON round-trip: a descriptor must be plain serializable data.
+        expect(JSON.parse(JSON.stringify(descriptor))).toEqual(descriptor);
     });
 });

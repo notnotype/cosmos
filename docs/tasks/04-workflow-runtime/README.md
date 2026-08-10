@@ -289,6 +289,12 @@ type WorkflowContext = {
 
 ## 9. 变更记录
 
+### 2026-08-10
+
+- Action 合同切片完成（由独立 PR 交付）：`ActionDefinition`/`ActionDescriptor` schema 与 Action 错误码进 `packages/contracts`；`ActionRegistry`、`ActionHandler`、`ActionExecutionError` 与 `IngestConnectorActionAdapter` 进 `packages/application`。
+- 设计规格：[`docs/superpowers/specs/2026-08-10-action-contract-design.md`](../../superpowers/specs/2026-08-10-action-contract-design.md)。
+- 交付边界：合同 + 注册 + connector 适配器试点；Job/Workflow 执行路径、API endpoint、manifest 解析留给本 Task 后续 Step。
+
 ### 2026-08-08
 
 - 建立 Workflow Runtime 持续 Task。

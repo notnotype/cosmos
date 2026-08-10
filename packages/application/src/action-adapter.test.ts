@@ -191,6 +191,27 @@ describe("IngestConnectorActionAdapter", () => {
         expect((error as ActionExecutionError).retryable).toBe(false);
     });
 
+    it("maps plain validate errors to invalid_configuration", async () => {
+        const connector = stubConnector({
+            validate() {
+                throw new Error("bad config");
+            },
+        });
+        const registry = new ActionRegistry();
+        const adapter = new IngestConnectorActionAdapter(connector);
+        registry.register(adapter.definition(), adapter.handler());
+
+        const error = await registry.call(
+            "fixture-rss.poll",
+            { source: source(), cursor: null },
+            { idempotencyKey: "run-7" },
+        ).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(ActionExecutionError);
+        expect((error as ActionExecutionError).code).toBe("invalid_configuration");
+        expect((error as ActionExecutionError).retryable).toBe(false);
+    });
+
     it("describes the registered action through the registry", () => {
         const registry = new ActionRegistry();
         const adapter = new IngestConnectorActionAdapter(stubConnector());

@@ -73,6 +73,23 @@ export class IngestConnectorActionAdapter {
             }
             try {
                 this.connector.validate(parsed.source);
+            } catch (err) {
+                if (err instanceof ConnectorExecutionError) {
+                    throw new ActionExecutionError(
+                        err.code,
+                        err.message,
+                        err.retryable,
+                        { cause: err },
+                    );
+                }
+                throw new ActionExecutionError(
+                    "invalid_configuration",
+                    err instanceof Error ? err.message : "Invalid connector configuration",
+                    false,
+                    { cause: err },
+                );
+            }
+            try {
                 const result = await this.connector.fetchItems({
                     source: parsed.source,
                     cursor: parsed.cursor,

@@ -1058,3 +1058,4 @@ export function createHealthSnapshot(input: {
 }
 
 export * from "./action.js";
+export * from "./action-adapter.js";

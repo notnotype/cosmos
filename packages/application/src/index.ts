@@ -1,5 +1,6 @@
 import {
     protocolVersion,
+    type ActionErrorCode,
     type CreateSourceCommand,
     type ConnectorDescriptor,
     type FeedPage,
@@ -197,14 +198,8 @@ export interface IngestConnector {
     }>;
 }
 
-export type ConnectorErrorCode =
-    | "dependency_unavailable"
-    | "authentication_required"
-    | "timeout"
-    | "rate_limited"
-    | "malformed_payload"
-    | "unsupported_version"
-    | "invalid_configuration";
+/** Connector 错误码已并入 Action 错误合同；保留别名避免破坏现有调用方。 */
+export type ConnectorErrorCode = ActionErrorCode;
 
 export class ConnectorExecutionError extends Error {
     constructor(

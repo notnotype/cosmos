@@ -140,9 +140,21 @@
         "@cosmos/contracts": "workspace:*",
         "@cosmos/domain": "workspace:*",
         "@cosmos/logging": "workspace:*",
+        "@cosmos/plugin-opencli": "workspace:*",
         "@cosmos/plugin-rss": "workspace:*",
-        "@jackwener/opencli": "1.8.6",
         "zod": "^4.0.0",
+      },
+      "devDependencies": {
+        "@types/node": "^24.0.0",
+        "typescript": "^5.0.0",
+      },
+    },
+    "plugins/opencli": {
+      "name": "@cosmos/plugin-opencli",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cosmos/application": "workspace:*",
+        "@jackwener/opencli": "1.8.6",
       },
       "devDependencies": {
         "@types/node": "^24.0.0",
@@ -245,6 +257,8 @@
     "@cosmos/logging": ["@cosmos/logging@workspace:packages/logging"],
 
     "@cosmos/plugin-collectors": ["@cosmos/plugin-collectors@workspace:plugins/collectors"],
+
+    "@cosmos/plugin-opencli": ["@cosmos/plugin-opencli@workspace:plugins/opencli"],
 
     "@cosmos/plugin-rss": ["@cosmos/plugin-rss@workspace:plugins/rss"],
 

@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createLogger } from "@cosmos/logging";
 import type { SourceSnapshot } from "@cosmos/contracts";
+import type { OpenCliRunner } from "@cosmos/plugin-opencli";
 
 import {
     createAiHotConnector,
     createBilibiliConnector,
     createBuiltInConnectorRegistry,
-    type OpenCliRunner,
 } from "./index.js";
 
 function source(input: {

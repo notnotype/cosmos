@@ -18,5 +18,8 @@
     "dependencies": {
         "@cosmos/contracts": "workspace:*",
         "@cosmos/domain": "workspace:*"
+    },
+    "devDependencies": {
+        "zod": "^4.0.0"
     }
 }

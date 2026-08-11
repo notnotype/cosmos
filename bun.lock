@@ -87,6 +87,9 @@
         "@cosmos/contracts": "workspace:*",
         "@cosmos/domain": "workspace:*",
       },
+      "devDependencies": {
+        "zod": "^4.0.0",
+      },
     },
     "packages/blob-store": {
       "name": "@cosmos/blob-store",

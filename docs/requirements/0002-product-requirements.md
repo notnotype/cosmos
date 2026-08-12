@@ -1,8 +1,8 @@
 # Cosmos 产品需求文档
 
-> 状态：Draft v0.13
+> 状态：Draft v0.17
 >
-> 最后更新：2026-08-08
+> 最后更新：2026-08-11
 >
 > 原始需求真相源：[`0001-original-requirements.md`](0001-original-requirements.md)
 >
@@ -11,6 +11,10 @@
 > 信息领域模型：[`../architecture/0002-information-model.md`](../architecture/0002-information-model.md)
 >
 > Workflow Runtime Task：[`../tasks/04-workflow-runtime/README.md`](../tasks/04-workflow-runtime/README.md)
+>
+> Kernel Convergence Task：[`../tasks/06-nb-workflow-kernel-convergence/README.md`](../tasks/06-nb-workflow-kernel-convergence/README.md)
+>
+> API 与 DTO 草案：[`../api/README.md`](../api/README.md)
 
 ## 0. 文档职责
 
@@ -176,7 +180,10 @@ flowchart LR
 
 - 第一优先级是服务器部署；产品同时为客户端模式，以及客户端与服务分离模式保留兼容边界。
 - 三种模式共用版本化的 Service Endpoint、Command、Query、Event 和流式 Transport 合同。客户端通过该合同访问应用能力，不直接访问 Prisma、SQLite、Data Root 或 Blob/Artifact Root。
-- Web 使用 React + Next.js App Router；API 使用 NestJS；固定 Ingest/Probe Job 由独立 Worker 进程运行。通用脚本优先 Workflow Runtime 是后续设计合同，不把 Phase 1 固定 Job 误称为通用 Runtime。
+- Web 使用 React + Next.js App Router；API 使用 NestJS。当前任务 worktree 已用
+  独立 Worker、Run/StepRun/Action Job 和固定 Ingest 验证一条 Durable Runtime
+  Spike，但该 Spike 尚未合并，也不是目标规范 Kernel；插件加载、用户自定义
+  Definition/Action、稳定管理 API 和 Graph 编辑器仍是后续产品能力。
 - 开发环境使用 Bun，生产环境使用 Node。共享代码、构建产物和 Worker 运行时保持 Node-compatible，不把 Bun-only API 写入领域层或公共合同。
 - 初始持久化使用 Prisma + SQLite；FTS5/BM25、虚拟表、触发器和其它 SQLite 专用能力通过受控 SQL Adapter 使用，以便未来替换存储实现。
 - UI 初步使用 Tailwind、shadcn/ui、React Hook Form 和 Zod。shadcn 的组件代码归 Cosmos 源码所有，skill/CLI 只作为开发辅助。
@@ -184,6 +191,17 @@ flowchart LR
 - Desktop Shell 只负责承载 UI、连接本地或远程服务并管理必要的本地生命周期；Tauri、Electron 或其它壳的选择后置，不进入领域模型。
 - Phase 1 直接使用 `pi-ai` 满足少量 Agent/LLM 调用。`neuro-agent-harness` 独立演进，稳定后再通过运行时和能力适配合同接入；Harness 的 sidecar 不属于其核心职责。
 - Graph、IR 和 Comfy 类可视化表达属于 Workflow 的上层编排格式，可以转换为脚本式 Workflow 语义；不为它们建立第二套执行 Runtime。
+- Product Service API、Worker Admin API 和 Worker Gateway 是三个独立边界：
+  Product Service 面向 Web/CLI/Desktop，Worker Admin 只负责运维，远程 Worker
+  通过 Gateway 主动连接。远程 Worker v1 使用 HTTPS long-poll claim；本地可信
+  Worker 仍可直接使用 SQL TaskStore。
+- ActionDefinition 声明 `host`、`trusted_worker` 或 `remote_worker` 执行位置。
+  领域写入留在 Host；Worker Admin 不提供同步 Job execute 端点；Gateway 不成为
+  第二套 Job/lease 真相。
+- 工程实施先在独立任务中稳定 `nb-workflow` Kernel API、Memory Backend 和
+  conformance；通过门禁后，Cosmos 再以 Task 04 Spike 的持久恢复证据和
+  `docs/api/` Draft v0.2 为输入实现本地 Worker/Durable Host。Worker Admin
+  随本地 Worker 收敛，远程 Worker Gateway 在此之后单独实施。
 
 ## 7. 功能需求
 
@@ -210,15 +228,16 @@ flowchart LR
 | AUT-008 | 跨阶段 | WorkflowDefinition 和 ActionDefinition 版本化。 | 已执行 Run 始终能定位到当时的定义；修改配置不会改变历史 Run 含义。 |
 | AUT-009 | Phase 2 | 用户可以创建可复用的 ConnectionInstance，并让多个 SourceInstance/采集计划引用同一个连接。 | 用户能看到连接状态、授权范围和失效原因；撤销凭证不删除已录入历史；普通配置、Job payload 和日志不包含凭证明文。 |
 | AUT-010 | Phase 2 | 一个连接下可以配置多个独立采集计划，每个计划拥有自己的来源操作、范围、频率、预算、checkpoint、发现上下文和失败状态。 | 同一 Bilibili 账号可以独立配置“动态每 30 分钟”和“推荐流每 2 小时”，两者的 Run、错误、重试和游标互不混淆。 |
-| AUT-011 | Phase 3 | Agent 或 Action 可以通过持久 Runtime 请求子 Workflow/子 Job，而不是直接创建进程内任务。 | 子任务有父 Run/Step、因果 Event、能力/来源引用、预算和递归深度；重启后可以查询、接管或收口；未来权限策略可以在同一合同上扩展。 |
-| AUT-012 | 跨阶段 | Workflow 以脚本式执行语义为底层核心；Graph/IR/Comfy 类表达可以转换为脚本式 Workflow，不形成第二套执行引擎。 | 脚本、Graph 和 Agent 生成的流程都使用同一套 Run、Step、Job、重试、取消、恢复和 Event 合同；任意 Graph 不能绕过 Action/Capability 边界。 |
+| AUT-011 | Phase 3 | Agent 或 Action 可以通过持久 Runtime 请求子 Workflow/子 Job，而不是直接创建进程内任务。 | 子任务有父 Run/Activity、因果 Event、能力/来源引用、预算和递归深度；重启后可以查询、接管或收口；未来权限策略可以在同一合同上扩展。 |
+| AUT-012 | 跨阶段 | Workflow 以脚本式执行语义为底层核心；Graph/IR/Comfy 类表达可以转换为脚本式 Workflow，不形成第二套执行引擎。 | 脚本、Graph 和 Agent 生成的流程都使用同一套 Run、Activity、Job/Attempt、重试、取消、恢复和 Event 合同；Step 只是可选逻辑/UI 投影；任意 Graph 不能绕过 Action/Capability 边界。 |
 | AUT-013 | 跨阶段 | Workflow 支持轻量主分类和 tags，例如 `ingest`、`knowledge`、`research`、`maintenance`、`delivery`、`interaction` 和 `custom`。 | 分类用于展示、默认预算/优先级和运维统计，不改变 Runtime，也不为不同分类复制执行引擎。 |
 | AUT-014 | 跨阶段 | 脚本式 Workflow 通过稳定 `WorkflowContext` 调用 Action、Query、Child Workflow、等待、Event、checkpoint、取消和预算能力。 | Workflow 不直接访问 Prisma、SQLite、Blob Root、任意 HTTP 或进程 API；新增 Adapter/LLM/来源只需注册 Action/Query，不修改 Runtime 核心。 |
 | AUT-015 | 跨阶段 | WorkflowDefinition、ActionDefinition 和 TriggerBinding 必须版本化。 | 已启动的 WorkflowRun 始终引用不可变的定义版本；修改注册项不会改变历史执行含义。 |
 | AUT-016 | 跨阶段 | WorkflowRun 必须保存触发原因、定义版本、输入快照、预算快照和父子关系。 | 排队后修改 Source、Connection 或 Workflow 配置不会改变已创建 Run 的输入和解释。 |
 | AUT-017 | 跨阶段 | Workflow/Run/Job 的终态收口必须在同一持久一致性边界内完成。 | 旧 Worker 或失效 lease 不能在中途写入事实、推进 checkpoint、覆盖 FTS 或提交新的终态。 |
+| AUT-018 | 跨阶段 | ActionDefinition 必须声明 `host`、`trusted_worker` 或 `remote_worker` execution placement。 | `library.ingest`、checkpoint 等领域写入不发送给远程 Worker；需要 Browser Bridge/本机 profile 的 Action 不发送给普通远程 Worker；远程可执行 Action 仍需 manifest hash、schema 和 capability 精确匹配。 |
 
-`ActionDefinition` 是可复用能力的版本化合同，不是某一次执行任务。它声明输入/输出、能力范围、幂等、超时、取消和恢复语义；具体一次调用仍通过 Workflow、Run、Step 和 Job 执行。
+`ActionDefinition` 是可复用能力的版本化合同，不是某一次执行任务。它声明输入/输出、能力范围、幂等、超时、取消和恢复语义；具体调用记录为 Workflow Activity，需要外部执行时由 Host 创建 Job，每次 Worker 执行形成带 lease 的 Attempt。Step 只在需要命名逻辑分组或 UI 投影时出现。
 
 当前产品把以下对象都视为同一 Runtime 下的 Workflow：
 
@@ -234,15 +253,17 @@ flowchart LR
 
 | ID | 阶段 | 需求 | 验收条件 |
 | --- | --- | --- | --- |
-| RUN-001 | Phase 1 | 每次 Workflow 和 Step 都有持久状态、开始/结束时间、输入摘要、输出引用和错误。 | 应用重启后可以查看历史，并判断哪些工作需恢复、重试或人工处理。 |
+| RUN-001 | Phase 1 | 每次 WorkflowRun 和 Activity 都有可恢复状态、时间、输入 fingerprint、输出引用和错误；命名 Step 投影可选。 | 应用重启后可以查看历史，并判断哪些工作需恢复、重试或人工处理；未创建 Step 不影响 replay。 |
 | RUN-002 | Phase 1 | 内部任务按至少一次执行设计，并使用业务幂等键阻止无界重复。 | 同一来源游标被重复处理时不产生重复 Entry；旧 Worker 不能覆盖接管者结果。 |
 | RUN-003 | Phase 1 | Worker 使用有期限租约、心跳、有界重试和终态失败。 | Worker 中断后任务可接管；超过预算后进入可查询终态，不无限重试。 |
 | RUN-004 | Phase 2 | 用户可以取消、重新运行或从安全步骤恢复 Run。 | UI/API 明确说明会重用哪些结果、产生哪些新副作用。 |
 | RUN-005 | Phase 5 | 外部发送结果未知时保存 `uncertain`，不能自动伪装为成功或普通失败。 | 渠道支持查询时可对账收敛；不支持时按明确策略或用户确认处理。 |
 | RUN-006 | 跨阶段 | 交互、紧急、录入、分析、Artifact 和维护任务使用不同优先级与预算。 | 大批量采集不能长期阻塞用户操作或紧急状态检查。 |
-| RUN-007 | Phase 3 | Run、Step 和 Job 可以表达 Action 版本、父子关系、fan-out/fan-in、等待输入和可恢复的子任务。 | 一个 LLM 研究计划拆出的多个平台搜索任务可以独立重试、合并结果，并在父 Run 中显示进度和最终收口原因。 |
+| RUN-007 | Phase 3 | Run、Activity、Job 和 Attempt 可以表达 Action 版本、父子关系、fan-out/fan-in、等待输入和可恢复的子任务；Step 可作为命名进度投影。 | 一个 LLM 研究计划拆出的多个平台搜索任务可以独立重试、合并结果，并在父 Run 中显示进度和最终收口原因。 |
 | RUN-008 | 跨阶段 | lease fencing 必须覆盖 Job 的所有受保护写入和 checkpoint 收口。 | 旧 Worker lease 失效后，写 Observation/Entry/Revision/Asset/FTS、DomainEvent、checkpoint 或 terminal result 均被拒绝；新 Worker 可以安全接管。 |
 | RUN-009 | 跨阶段 | Job 必须保存 priority、lane、budget、waiting reason、lease token、heartbeat 和 retry 状态。 | urgent、interactive、ingestion、analysis 和 maintenance 任务有可观察的调度与恢复边界，不因普通采集长期阻塞紧急研究或用户交互。 |
+| RUN-010 | Phase 1C | 远程 Worker 通过独立 Worker Gateway Session、HTTPS long-poll claim、Attempt heartbeat、Receipt 和幂等 Result API 执行任务。 | Gateway 先在 SQL TaskStore 原子 claim 再返回 Job；Session heartbeat 不代替 Attempt lease；旧 token、过期 Session 和迟到结果不能覆盖当前 owner；Gateway 不保存第二份 Job 终态。 |
+| RUN-011 | Phase 1C | Direct Worker 和 Gateway Worker 必须通过同一 TaskStore/Attempt/Receipt conformance 行为套件。 | 两种 Transport 使用同一 Job 状态机、retry policy、manifest/schema 校验、lease fencing、取消和 external-result-unknown 语义；Transport 差异不会产生两套 canonical logic。 |
 
 ### 7.3 信息采集与本地保存
 
@@ -358,7 +379,7 @@ flowchart LR
 | AGT-014 | Phase 3 | 当前单用户阶段知识管理者和 Agent 按最大产品权限运行，可以创建或维护 Topic、Workspace、Artifact、Source 和研究任务；所有操作仍通过 Service/Workflow/Capability/Application Command 合同。 | Agent 不直接访问数据库或绕过持久 Runtime；外部副作用仍有独立 Run/Delivery 账本，未来多人、远端或不可信扩展再增加权限策略。 |
 | AGT-015 | Phase 3 | 知识管理者是用户与 Cosmos 交互的高权限窗口，可以通过 Web GUI 聊天或 `cosmos cli` 代替用户执行 GUI/Command 操作；当前单用户阶段按最大产品权限运行。 | Web Chat 和 CLI 使用同一 Service/Workflow/Capability 合同；知识管理者不直接访问数据库或绕过持久运行时；未来权限策略不改变该入口合同。 |
 | AGT-016 | Phase 3 | 知识管理者可以有多个聊天、ingest、研究或其它专业分身，并共享 `nb-memory` 维护的长期记忆与知识库。 | 分身不各自复制一套长期记忆；不同入口可以读取同一知识边界，并保留各自 Run/操作上下文。 |
-| AGT-017 | Phase 3 | ingest、research 和其它 Workflow 可以调用知识管理者进行知识点细究、补充研究或生成 Proposal。 | 需要外部搜索或后续处理时，通过持久子 Run/Step/Job 创建任务；知识管理者不能在进程内私自派发不可恢复任务。 |
+| AGT-017 | Phase 3 | ingest、research 和其它 Workflow 可以调用知识管理者进行知识点细究、补充研究或生成 Proposal。 | 需要外部搜索或后续处理时，通过持久子 Run/Activity/Job 创建任务；知识管理者不能在进程内私自派发不可恢复任务。 |
 
 当前个性化配置草案为：
 
@@ -400,7 +421,7 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 | ID | 阶段 | 需求 | 验收条件 |
 | --- | --- | --- | --- |
 | OPS-001 | Phase 1 | 用户可以查看 Source 健康、最近运行、checkpoint、录入数量和错误。 | 能区分“无新内容”“认证失败”“平台限流”“解析失败”和“存储失败”。 |
-| OPS-002 | Phase 1 | 用户可以查看 Run/Step 状态、重试次数、预算和关联产物。 | 失败报告能定位到具体 Source、Action 和输入，不只显示通用错误。 |
+| OPS-002 | Phase 1 | 用户可以查看 Run、Activity、Job/Attempt 和可选 Step 投影的状态、重试次数、预算和关联产物。 | 失败报告能定位到具体 Source、Action 和输入，不只显示通用错误。 |
 | OPS-003 | Phase 2 | 用户可以查看 Blob、Artifact、缓存和数据库占用。 | 原始数据、用户数据、可重建缓存和可清理旧产物分别统计。 |
 | OPS-004 | Phase 2 | 系统提供明确的备份、恢复、导出和清理入口。 | 清理前列出影响范围；备份不依赖源码 checkout。 |
 | OPS-005 | 跨阶段 | Secret 与普通配置分离，日志默认脱敏。 | 日志不包含令牌、密码、完整私信/邮件正文或未经允许的原始 payload。 |
@@ -408,6 +429,8 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 | OPS-007 | Phase 0 | v1 和默认产品合同面向单个本地用户；未来协作能力不得破坏 actor/revision 审计。 | 第一版不引入多人账户、共享租户、云端同步或复杂协作权限。 |
 | OPS-008 | Phase 1 | 服务器、客户端和客户端与服务分离模式共用稳定的 Service Endpoint 与 Transport 合同。 | Web UI 可以连接本地 API 或远端 API；Command/Query/Event/流式更新使用版本化 payload；SSE 断线、恢复、健康检查、版本不兼容和服务不可用都有可识别状态；UI 不直接依赖 Prisma/SQLite。 |
 | OPS-009 | 跨阶段 | SecretStore、ConnectorStateStore、Blob/Artifact Root 和普通数据库状态必须有清晰的所有权与生命周期边界。 | 备份、删除、撤销连接、重建索引和清理缓存不会误删其它类别的数据；敏感状态不进入普通日志和事件 payload。 |
+| OPS-010 | Phase 1C | Product Service API、Worker Admin API 和 Worker Gateway 使用独立路径、版本与责任边界。 | Product API 不返回 lease/Secret 或执行插件；Worker Admin 只提供 health/readiness/status/capability/metrics/drain；Gateway 面向主动连接的远程 Worker，不提供同步反向 execute。 |
+| OPS-011 | Phase 1C | API liveness、API readiness、产品健康和 Worker readiness 分开表达。 | Worker 停止时 API 仍可 ready 并读取已保存内容；Product health 显示 Worker unavailable；draining Worker 的进程仍 alive 但 execution readiness 为 false。 |
 
 ### 7.11 扩展与插件
 
@@ -420,6 +443,7 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 | EXT-005 | Phase 1 | 第一版只运行用户明确安装的本地可信扩展，不建设细粒度权限 UI 或不可信插件沙箱。 | 自定义代码仍通过 SDK/能力边界访问系统；未来可以提高隔离等级而不改写扩展合同。 |
 | EXT-006 | Phase 2 | 插件 manifest 可以声明多个 Source Operation、认证方式、配置/状态 schema、Action、能力、预算和错误/恢复语义。 | Web/API 可以根据声明展示配置和登录状态；增加新 Adapter 不需要修改核心数据库表或 Worker 的专用分支。 |
 | EXT-007 | Phase 2 | Adapter manifest 必须声明 Source Operation 的输入/输出、稳定 external key、discovery context、媒体状态、SecretRef、StateStore 命名空间和 Action 能力。 | Adapter 不自行持久化 Secret 或核心领域状态；Cosmos 可以校验能力、版本、预算和恢复语义，并通过同一合同支持多个采集计划。 |
+| EXT-008 | Phase 1C | API 只加载 Plugin/Source/Workflow/Action manifest、schema 和 capability；Worker 独占 executable。 | `/source-definitions` 等 Catalog Query 在没有 Connector executable 的 API 构建中仍可工作；Worker 注册精确 manifest evidence；API 不访问外部平台。 |
 
 ## 8. 主要产品界面
 
@@ -614,7 +638,10 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 
 ### Phase 1：信息录入与离线查询
 
-> Phase 1 最小垂直切片完成 ≠ Phase 1 全部产品需求完成。当前已验证的是 fixture/RSS 为主的最小服务器闭环；Source 删除、完整 Step/Run 控制、Docker、真实 RSS/RSSHub、长时间恢复和全部媒体/搜索字段仍需分别验收或实现。
+> Phase 1 最小垂直切片完成 ≠ Phase 1 全部产品需求完成。当前已验证的是
+> fixture/RSS 为主的最小服务器闭环和固定 Ingest Workflow 生产接线；Source
+> 删除、完整 Step/Run 管理、Docker、真实 RSS/RSSHub、长时间恢复和全部
+> 媒体/搜索字段仍需分别验收或实现。
 
 范围：
 
@@ -637,7 +664,11 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 - 同一 Web/Transport 合同可以在本地服务和远端服务之间复用；SSE 断线后能进入可解释的恢复或服务不可用状态。
 - Bun 开发命令与 Node 生产启动路径都通过最小兼容性检查；Docker 镜像/Compose 验证若环境未提供 Docker，明确记录为未运行。
 
-当前不应从上述最小闭环推断已完成：通用 Workflow Runtime、Connection/Secret/State、多采集计划、Source 删除、Step API、完整 Run 取消/重试/恢复、真实 RSS/RSSHub、Docker Compose、长时间 Worker 接管和真实平台验收。
+当前不应从上述最小闭环推断已完成：用户自定义 Workflow 产品面、
+Connection/Secret/State、多采集计划、Source 删除、Step API、完整 Run
+管理/运维、真实 RSS/RSSHub、Docker Compose、长时间 Worker 接管和真实平台
+验收。底层脚本 Runtime 已有等待、子 Workflow、取消、重试和接管行为测试，
+但这些能力尚未全部形成稳定的用户/API 产品面。
 
 ### Phase 2：组织与可配置看板
 
@@ -718,12 +749,14 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 10. 显式 state migration command 的批量操作、撤销和用户确认边界。
 11. Bun 开发与 Node 生产在 Next、Nest、Prisma、Worker 和 Harness Adapter 上的完整兼容矩阵及发布检查。
 12. Prisma/SQLite 的 FTS5 migration、触发器、Raw SQL Repository 和未来存储替换边界。
-13. 三种部署模式的认证、Service Endpoint、SSE 恢复、Blob/Artifact 访问与版本协商合同。
+13. 三种部署模式的认证、公网暴露、SSE 恢复和 Blob/Artifact transfer
+    capability；Product/Worker/Admin 三面、HTTPS long-poll Gateway 和 Action
+    execution placement 已有独立草案。
 14. Desktop Shell 的具体实现、Node sidecar 生命周期以及安装、升级和卸载行为。
 15. `pi-ai` 直接接入到 Harness `ModelRuntime` 的迁移门槛，以及 NeuroBook Harness 与独立 Harness 的行为差异。
 16. SecretStore 的第一版后端是操作系统凭据库、加密文件还是其它本地实现；无论实现如何，公共合同均只暴露 SecretRef/能力受限租约。
 17. Adapter 的 Source 操作是由多个 SourceDefinition、一个带 operation 的 SourceDefinition，还是用户可见的“采集计划”聚合表达。
-18. 脚本优先的 Workflow Runtime 如何表达 fan-out/fan-in、等待、子 Workflow、取消/接管和可恢复 journal；Graph/IR 转换为脚本语义的具体 API。
+18. `nb-workflow` Kernel/Backend Port 与 Cosmos Durable Host 如何映射 Activity、Job/Attempt、fan-out/fan-in、等待、子 Workflow、取消/接管和可恢复 journal；Graph/IR 转换为脚本语义的具体 API。
 19. Entry → Story 的 Proposal 在什么置信度、来源类型和用户设置下可以自动接受，哪些字段必须人工确认。
 20. 推荐系统的第一版 Feed surface、用户反馈权重、LLM 异步特征和 Top-N rerank 的预算边界。
 21. `nb-memory` Adapter/Port 的具体 API、存储根目录、Node 生产兼容性以及 Cosmos Observation/Behavior 到 memory 的映射。
@@ -759,13 +792,15 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 | React + Next.js、Tailwind、shadcn/ui、Prisma、SQLite、Docker、React Hook Form 和 Zod 的初步技术选择 | 6.1、OPS-008、Phase 1 |
 | Bun 开发、Node 生产，以及服务器、客户端、客户端与服务分离三种运行模式 | 6.1、OPS-008、NFR-010、NFR-012、待决定事项 11 至 14 |
 | Phase 1 先使用 `pi-ai`；`neuro-agent-harness` 去领域化、持续演进并后续通过适配合同接入；sidecar 移出 Harness Core | 6.1、待决定事项 15 |
-| Run、Step、Job、Domain 和 DomainEvent 的职责区分，以及数据库状态、持久事件和可重建 Projection 的边界 | AUT-009 至 AUT-011、RUN-007、OPS-006、OPS-009 |
+| Run、Activity、Job、Attempt、可选 Step、Domain 和 DomainEvent 的职责区分，以及数据库状态、持久事件和可重建 Projection 的边界 | AUT-009 至 AUT-012、RUN-001、RUN-007、OPS-002、OPS-006、OPS-009 |
 | Workflow 作为主动行为核心、脚本优先执行、Graph/IR 转换、Workflow Context 和轻量 kind 分类 | AUT-012 至 AUT-014、RUN-001 至 RUN-007、待决定事项 18、24 |
 | Adapter/Connector 可扩展、Connection/Secret/State 统一管理，以及一个连接下多个独立采集计划 | AUT-009 至 AUT-010、ING-010、ING-012、EXT-006、待决定事项 16 至 17 |
 | Ingest Workflow、可配置 Entry → Story Knowledge Workflow、Research Workflow 和研究结果重新入库 | AUT-006、ING-001 至 ING-005、ING-011、ING-013 至 ING-014、ORG-021 至 ORG-022、待决定事项 19、24 |
 | 代码与 LLM 结合的 Admission/Ranking 推荐系统，以及平台推荐与 Cosmos 推荐的边界 | REC-001 至 REC-004、REC-017、待决定事项 20 |
 | 知识管理者的 Web/CLI 入口、共享 `nb-memory` 记忆、多个分身和 ingest/research 参与方式 | AGT-015 至 AGT-017、待决定事项 21 至 23 |
 | Agent 记忆、Cosmos 行为观察和未来信号生成程序可读配置；暂不建模平台推荐偏好信号 | 4.1、AGT-015 至 AGT-017、REC-002 |
+| Web/API/Worker 可分宿主、SQLite TaskStore、可选 Redis Wakeup、`nb-workflow` Kernel 与 Cosmos Host 分工 | RUN-008 至 RUN-011、OPS-008 至 OPS-011、EXT-008 |
+| NestJS Product API、Worker Admin API、远程 Worker Gateway、HTTPS long-poll 和三档 Action execution placement | AUT-018、RUN-010 至 RUN-011、OPS-010 至 OPS-011、EXT-008、`docs/api/` |
 
 ## 15. 当前解释与勘误候选
 
@@ -809,12 +844,21 @@ Agent 记忆 + Cosmos 观察到的用户行为 + 未来可能的其它信号
 - Phase 1 的 Story 只实现最小 projection；完整跨来源聚类、merge、split、Topic 维护和推荐排序不被提前假设为已完成。
 - 服务器部署优先，但三种运行模式共用 Service Endpoint/Transport；Desktop Shell 和 Harness 接入细节保持后置。
 - 数据库是事实、状态、历史和用户真相的持久中心，但插件和 Agent 不直接依赖 Prisma 表；DomainEvent 是持久事实日志，不代替领域状态。
-- `Run` 表示一次完整 Workflow，`Step` 表示其中一个阶段，`Job` 表示 Worker 可领取的任务单；未来 LLM 子任务必须复用同一持久 Runtime。
+- `Run` 表示一次完整 Workflow，`Activity` 是 journal 恢复单元，`Job` 是 Host
+  创建的可领取任务，`Attempt` 是持有 lease 的一次执行；`Step` 只是可选逻辑/UI
+  投影。未来 LLM 子任务必须复用同一持久 Runtime。
 - 凭证建议由 Cosmos SecretStore 统一管理，Adapter 负责认证协议；非秘密 cursor、ETag、分页 token 和限流状态通过命名空间化 StateStore 保存。
 - 用户可在同一 Connection 下配置多个独立采集计划，例如 Bilibili 动态每 30 分钟、推荐流每 2 小时；计划分别拥有 Trigger、Workflow、checkpoint、预算和错误边界。
 - Ingest 本身是一种 Workflow；Entry → Story 采用“同步确定性事实入库 + 异步可配置 Knowledge Workflow”两条路径，LLM 不能改写 Observation 或绕过 Runtime/Capability/预算合同。
 - 推荐系统区分外部候选、Admission 和 Cosmos Ranking；代码负责硬约束和降级，LLM 提供可追溯的异步特征或受限 rerank。
 - 运行控制采用 `Job + Workflow` 组合；脚本式 Workflow 是底层执行形态，Graph/IR/Comfy 类表达转换为脚本语义并落到同一持久 Runtime。
+- `nb-workflow` 是规范脚本 Kernel，Cosmos 提供 Durable Backend/Host；持久化
+  Backend 能力必须显式，TaskStore 是 Job/lease 真相，WakeupBus 只负责可选通知。
+- 当前工程顺序是先独立稳定 `nb-workflow`，再参考 Task 04 Spike 和 API/DTO
+  Draft v0.2 实现 Cosmos 本地 Worker/Host；在 Kernel 稳定前不继续扩展 Cosmos
+  的平行 replay 内核，远程 Gateway 不进入下一轮本地 Worker 实施。
+- Agent 调用属于可选 Workflow Extension，具体 Harness Adapter 等
+  `neuro-agent-harness` 合同稳定后接入，Core 不依赖 Harness。
 - Research 不直接耦合到 Ingest；分析信号产生 Research Request，由 Trigger 启动独立 Research Workflow，研究结果重新经过 Observation → Entry。
 - Workflow 使用 `kind + tags` 做轻量分类，不为 Ingest、Knowledge、Research、Maintenance、Delivery 和 Interaction 复制不同 Runtime。
 - 知识管理者是共享 `nb-memory` 之上的高权限系统角色，可以通过 Web Chat、`cosmos cli` 和 ingest/research Workflow 参与系统操作；它不是单一 Session。

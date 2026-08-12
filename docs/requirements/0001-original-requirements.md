@@ -250,3 +250,31 @@
 > 2. 研究型任务：既要访问信息库又要主动访问渠道信息
 > 3. ingest 也是一种 workflow
 > 4. 要不要为 workflow 分类？
+
+## 2026-08-11：服务拆分、nb-workflow、队列和 API 合同
+
+> 1. 关于现在的服务架构：Web、NestJS API、Worker 能否部署在不同的宿主上？目前 NestJS 和 Worker 是绑死的吗？二者通过 sqlite 交流？以后可以考虑拆分。Worker 也可以暴露 API 服务。目前 sqlite 承担了消息队列的职责吗？以后是否能把 redis 加入这个架构？
+> 2. 目前这个 spike 和 nb-workflow 的区别是什么？好像计划是扩展 nb-workflow 的。Worker 基于 nb-workflow 构建
+
+> 我觉得 nb-workflow 可以像 langchain 一样提供，持久化是和选的。和你说的一样拆成多个组件。
+> ——-
+> 好，那你现在来重新设计一下整体的架构
+
+> 关于：“Worker 使用数据库轮询，不需要 Redis。”。这里要不要引入一个队列？用 redis 这种队列是不是更好？Worker 允许多并发吗？并发控制好不好处理？
+> 关于 wf.invoke_agent：目前这个好像是依赖 neuro-agent-harness 的。等 harness 文档后可以接入。
+
+> 同意。
+> 可以把新架构同步一下。nb-workflow 这边架构只是初步的草案，实际执行应该新开任务继续调整。
+
+> 我觉得下一步就是可以定义好 NestJS 以及 Worker 这两个向外提供的 API。
+
+> 1. 同意
+> 2. 同意
+> ---
+> 下一步深入调查分析，了解原始需求和系统所需要的能力。然后制定完整的 API、DTO 草案（后续实现过程中可修改）。单独存放。最后派发多个子代理进行审查，查漏补缺，看是否还有什么未考虑到的情况。
+
+## 2026-08-11：文档收口与 `nb-workflow` 优先顺序
+
+> 等一下，本轮还是先同步文档。整理项目。把之前对话中定好的 API 草案、架构同步到文档中。其他的地方还是先不要动。
+>
+> 整理完成停止。后续后可以考虑规划先做 nb-workflow，等 nb-workflow 稳定后。参考 spike 出来的 workflow runtime 和本次定好的 Worker API 草案来实现 Worker。

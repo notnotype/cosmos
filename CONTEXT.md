@@ -1,6 +1,6 @@
 # Cosmos Context
 
-> 最后更新：2026-08-08。
+> 最后更新：2026-08-11。
 >
 > 本文件维护 Cosmos 经常使用、跨模块出现或容易歧义的产品共同语言。它不是数据库实体清单，也不提前记录尚未在产品讨论中出现的实现对象。
 
@@ -141,10 +141,27 @@ Story --Ranking--> Feed --> Board
 ## 自动化语言
 
 - `Source`：从哪里获取什么信息。
+- `Connection`：用户在某个外部平台上可复用的一次登录或授权关系。
+- `CollectionPlan`：用户可见的采集计划；它把 Connection/Source Operation、Trigger、Workflow、checkpoint、预算和重叠策略组合成一个独立采集目标。
 - `Trigger`：何时或因何开始。
 - `Workflow`：要完成的过程，负责流程、分支、等待、子任务和收口。
-- `Action`：Workflow 调用的一项可复用能力。
-- `Agent`：受用户配置范围和预算约束的一种 Action；它可以像协作者一样维护 Topic 或 Workspace，但不能改写来源原文。
+- `Activity`：Workflow 中一次需要 journal 的外部读取、写入、等待或非确定性操作。
+- `ActionDefinition`：Activity 可以调用的一项版本化能力合同。
+- `WorkflowRun`：某一版 WorkflowDefinition 对一份输入快照的一次执行。
+- `Job`：宿主为了执行 Activity 而创建的可领取任务。
+- `Attempt`：Worker 对 Job 的一次实际执行；它持有本次执行的 lease。
+- `Step`：可选的命名逻辑分组和 UI 投影，不是每次执行都必须创建的底层原语。
+- `TaskStore`：Job、状态、重试和 lease 的持久权威来源。
+- `WakeupBus`：通知 Worker 有工作可领取的机制；它不拥有 Job 的状态或终态。
+- `Product Service API`：Web、CLI、Desktop 和知识管理者工具访问 Cosmos 产品
+  Command、Query、Event 与受控文件的公共边界。
+- `Worker Admin API`：单个 Worker 面向运维的健康、能力、指标和 drain 边界；它不
+  接受同步 Job 执行请求。
+- `Worker Gateway`：无数据库权限的远程 Worker 主动领取 Attempt、续租和回传结果
+  的协议边界；TaskStore 仍是任务和 lease 的唯一权威。
+- `Execution Placement`：ActionDefinition 对执行位置的稳定声明，区分
+  `host`、`trusted_worker` 和 `remote_worker`。
+- `Agent`：通过可选 Agent Action 参与 Workflow 的协作者；它可以维护 Topic 或 Workspace，但不能改写来源原文。
 - 人类、Agent 和系统的每次修改都记录 actor、时间、操作、基础 revision、理由和关联 Run。第一版是个人本地优先，不建设细粒度权限系统。
 - 当前单用户阶段按最大产品权限运行，不建设审批 UI 或细粒度权限模型；Service/Capability 边界首先是执行、恢复和未来隔离合同，不是当前阶段的权限拦截。
 - 未来需要多人、远端或不可信扩展时，再将外部 Source、数据范围、Secret 和外部发送纳入独立权限/审批策略。
@@ -154,14 +171,16 @@ Story --Ranking--> Feed --> Board
 
 > 本节记录本轮讨论形成的共同方向。除非明确标为“已确认”，否则仍属于待实现验证的架构建议，不等同于当前代码已经具备的能力。
 
-### Run、Step、Job、Domain 与 DomainEvent
+### Run、Activity、Job、Attempt、Step、Domain 与 DomainEvent
 
 - `Domain` 是业务领域层，不是数据库表；负责稳定身份、业务规则和可重建的领域计算，不依赖 Prisma、Nest 或 Next。
 - `Run` 是一次完整 Workflow 的执行记录，例如“每 30 分钟抓取一次 Bilibili 动态”。
-- `Step` 是 Run 内的逻辑阶段，例如拉取、标准化、入库、分类或研究。
-- `Job` 是 Worker 可以领取、租约、重试和完成的持久任务单。一个 Step 可以拆成多个 Job。
+- `Activity` 是 Run journal 中一次需要稳定识别和恢复的交互，例如查询、Action 调用、等待、计时器或子 Workflow。
+- `ActionDefinition` 是 Activity 调用的版本化能力合同；它不是某一次执行。
+- `Job` 是宿主为执行 Activity 创建的可领取任务，`Attempt` 是 Worker 持有 lease 的一次实际尝试。
+- `Step` 是可选的逻辑分组和 UI 投影，例如“拉取”或“入库”，不再是 Workflow 恢复所必需的底层原语。
 - `DomainEvent` 是已经发生的事实，例如 `entry.created`、`run.succeeded` 或 `job.failed_terminal`，用于审计、SSE 和后续 Workflow 触发；它不代替领域状态，也不是完整 Event Sourcing。
-- 当前 Phase 1 代码只实现了 Source Ingest/Probe 的最小 Run、单个 Ingest Step 和有限 Job 类型；通用 Workflow Runtime 尚未落地。
+- 当前已经有脚本优先的 Durable Workflow Runtime、Prisma Store、Run/StepRun/Action Job、等待/子 Workflow、Outbox、lane/priority、租约恢复和固定 `cosmos.ingest@1` 生产接线。API 手动触发与 schedule 走同一个 Ingest Workflow；Probe 及兼容路径仍使用旧 Source Job。通用自定义 Workflow 的稳定 API、插件加载和产品配置尚未完成。
 
 ### 数据库与扩展边界
 
@@ -193,23 +212,95 @@ Story --Ranking--> Feed --> Board
 - 推荐的执行关系为：
 
 ```text
-Connection / SourceInstance
+Connection / CollectionPlan
   -> Trigger
   -> WorkflowDefinition@version
-  -> Run
-  -> StepRun
+  -> WorkflowRun
+  -> Journal / Activity
+  -> ActionDefinition
   -> Job
-  -> Worker
-  -> Adapter / Action
+  -> Attempt + Lease
+  -> Worker / Adapter
 ```
 
 - 未来 Workflow 需要支持顺序、条件、foreach、fan-out/fan-in、等待输入、取消、重试、预算和子 Run；LLM 派发的研究任务也必须通过同一运行时创建子 Job，而不是绕过 Worker 进入内存队列。
 - 当前 `scheduleIntervalMs` 放在 Source 配置中只是 Phase 1 简化实现；长期应由持久 Trigger 表达频率、时区、错过执行策略、并发策略和限流。
-- Workflow 是 Cosmos 的主动行为核心，但不是领域事实本身。Run、Step、Job、Action、Trigger 和持久事件都围绕 Workflow Runtime 协作。
+- Workflow 是 Cosmos 的主动行为核心，但不是领域事实本身。Run、Activity、Job、Attempt、ActionDefinition、Trigger 和持久事件围绕同一个执行合同协作；Step 只作为可选投影。
 - 运行控制采用 `Job + Workflow` 组合：Job 是持久执行单元，Workflow 负责组织步骤、分支、等待、子任务和收口。
 - 脚本式 Workflow 是最底层、最灵活的执行形态；Graph/IR/Comfy 类表达属于上层编排格式，可以转换为脚本式 Workflow 语义。它们不建立第二套执行 Runtime。
-- `nb-workflow` 是脚本式 Conductor 的重要语义参考；Cosmos 需要在其上补齐持久化、Service Endpoint、领域状态、Connector、Job 和生产恢复边界。
+- `nb-workflow` 是规范的脚本执行 Kernel，拥有 Activity path/fingerprint、replay、并发、等待和恢复协议；持久化通过可选 Backend/Port 组合。
+- Cosmos Workflow Host 提供持久 Backend、TaskStore、Job/Attempt/Lease、Outbox、Worker 和领域事务；Cosmos 不再长期维护第二套脚本 replay 内核。
+- `TaskStore` 是任务权威，`WakeupBus` 只负责唤醒 Worker。Worker 收到通知后仍必须回 TaskStore 正式 claim，不能由通知消息决定 Job 归属或终态。
+- `neuro-agent-harness` 不进入 `nb-workflow` Core。Agent 能力通过可选扩展映射到版本化 ActionDefinition；Harness 负责 Agent Invocation、Session、Profile 和 Model Runtime，Cosmos 继续持有 Workflow/Job durable truth。
+- 当前实施门禁是先在独立任务中稳定 `nb-workflow` 的 Kernel API 和 conformance，
+  再参考 Task 04 Spike 的持久恢复证据与 `docs/api/` Draft v0.2 实现 Cosmos
+  Worker/Host。Worker Admin 在本地 Worker 稳定后实现，远程 Worker Gateway
+  继续后置；当前不继续扩展 Cosmos 的平行 replay 内核。
 - Workflow 可以使用轻量 `kind + tags` 分类，但所有分类共用同一 Runtime。当前建议的 kind 包括 `ingest`、`knowledge`、`research`、`maintenance`、`delivery`、`interaction` 和 `custom`。
+- 当前固定 Ingest 的生产链路是
+  `cosmos.ingest@1 → source.fetch@1 → library.ingest@1[] → source.checkpoint@1`。
+  每个领域写入同时验证 Workflow Run lease 与 Action Job lease；Run 保存定义、
+  `SourceExecutionSnapshot`、cursor/checkpoint revision、trigger 和 correlation
+  快照；`source.fetch@1` 只读取 Run 中的 Source 配置，不在执行时重新查询当前
+  Source。Source checkpoint 使用单调 revision/CAS，过期的并发 Run 只能留下
+  可追溯 Observation，不能回滚较新的 cursor。
+- 当前 Workflow Runtime 已能生成本地 `WorkerCapabilitySnapshot`，其中包含
+  `workerId`、`lane`、`workflowRefs` 和 `actionRefs`。这些 refs 是 Worker
+  的本地 claim/admission 过滤提示，不是持久 owner；Run lease 才是实际执行
+  ownership。
+- 当前 Worker 不会领取未知 Workflow ref，也不会把未知插件 Run 标记为
+  `definition_unavailable`；Run 保持 `queued`/`admissionStatus=unknown`，等拥有
+  该 ref 的 Worker 出现后接管。当前已增加持久
+   `WorkflowWorkerRegistration` projection：它记录每个 Workflow slot 的
+   workerId、lane、Workflow/Action refs、capabilities、TTL、registration token、
+   registration generation 和版本化 Workflow/Action evidence。旧 registration 默认
+  `evidenceVersion=0`/`legacy`/空 evidence；当前 Worker descriptor 产生
+  `evidenceVersion=1`/`local-executable`。这些字段仍是 Worker 自报的
+  discovery input，不是安全信任证明；Run lease 仍是实际执行 ownership。
+  Application 已有显式 CatalogAdmission source/service 和纯一致性 evaluator，
+  并已写入独立的最小 capability projection；但 authority projection、owner
+  assignment、远程 Worker 或插件 manifest handshake 仍未实现。
+- Registry 的 `listActive()` 只回答当前可路由的 active slot，空数组不是删除
+  projection 的命令。独立的 `listObserved()` inventory 读取不暴露 token 的
+  durable registration，并以 `live`、`stopped`、`expired` 区分时间观察结果。
+- Projection Runner 使用一次 `observe({ now, staleAfterMs })` 返回的
+  `checkedAt` snapshot 同时获得 active 和 observed registration，避免同一 tick
+  中两次 Registry 查询产生时序差异；`listActive/listObserved` 仍保留为兼容
+  读取。
+- Projection Store 的 `listStale()` 是有界只读查询；Projection Runner 只有在
+  Registry 可用、明确观察到 stopped/expired 且 grace period 已过时，才报告
+  cleanup candidate。Runner 本身仍不删除、不生成 tombstone、不取得 Run/Job
+  lease，也不清除 last-known admitted snapshot；Registry unavailable、active
+  set empty 或 registration 未观察到时都保持保守。
+- cleanup candidate 可以转换为版本化的
+  `cosmos.maintenance.worker-capability-projection-cleanup@1` enqueue command；
+  command id 由 worker、projection revision、registration generation 和 terminal
+  observation 稳定生成，Workflow 输入只携带 expected revision、generation 和
+  业务时间，不携带任何 lease token。
+  Application 已提供对应的版本化 Workflow/Action Definition、catalog 注册
+  seam 和最小执行实现：Action Job 先重新观察相同的 registration terminal
+  state/time 和 generation，再用 `expectedProjectionRevision` CAS 写入
+  `retiredAt`、retirement reason/terminal time，保留 last-known snapshot 并清空
+  projection lease。Prisma Store 在同一 Data Root 的单条条件更新中再次校验
+  generation 和 terminal observation，因此 registration 在 re-check 后被替换时
+  不会写入旧 tombstone；相同 Action invocation 可重放为 `already_retired`，
+  registration 已复活或 projection revision 已变化则安全跳过。该
+  Definition/Action 尚未由 `apps/worker` 默认 wiring、scheduler 或 candidate
+  consumer 自动注册/消费；InMemory Store 也不能模拟这个跨表数据库原子性。
+- 当前提供只读 `GET /api/v1/workflow-workers` 查询和对应 HTTP Service Client；
+  返回不含 registration token 的 Worker discovery envelope。`status=enabled`
+  表示注册表查询成功，即使 `items` 为空；`status=disabled` 表示功能被配置关闭
+  且不会查询注册表；Worker Registry 未显式设为 `prisma` 时默认是 disabled；
+  `status=unavailable` 表示查询失败。它不负责调度、owner assignment 或 Run
+  admission 状态迁移。
+- Workflow Run 的当前 `admissionStatus` 只接受 Worker 的正向可执行证据写入
+  `ready`；单个 Worker 缺少 Action、catalog 或 snapshot mismatch 时不得把全局
+  Run 写成 `definition_unavailable`，以免阻塞另一个拥有同一 Workflow ref 的
+  Worker。此类负面本地观察留在 diagnostics；当前新增的
+  `createCatalogAdmittedWorkflowWorkerEvidence()` 和
+  `WorkflowWorkerCatalogAdmissionService` 只产生显式诊断/候选 projection，
+  不改变 Run 状态。未来的 `definition_unavailable`/`no_capable_worker` 仍需要
+  有权威输入的独立 projector，不能由任意 Worker 直接覆盖全局状态。
 
 ### Entry、Story 与知识 Pipeline
 
@@ -247,15 +338,35 @@ Connection / SourceInstance
 ### 当前完整性判断
 
 - Phase 1 的采集、持久化、搜索和离线阅读基础已经足够继续验证。
-- 面向高扩展产品的连接管理、通用 Workflow Runtime、知识处理、Story 多成员关系和推荐反馈闭环尚未完整实现。
+- 面向高扩展产品的连接管理、通用自定义 Workflow 产品面、知识处理、Story 多成员关系和推荐反馈闭环尚未完整实现。
 - 在继续增加大量平台 Adapter 前，优先补齐 `Connection/Secret/State`、脚本优先的 Workflow API、通用 Job/子任务和 Proposal/Provenance 合同。
 - 知识管理者与 `nb-memory` 的共享记忆接入方向已确认，但 Adapter、行为观察到程序配置的转换和 Web/CLI 入口尚未实现。
-- 当前已发现的实现风险需要在进入通用运行时前收口：
-  - lease fencing 目前只覆盖最终 Job 收口，尚未保护 Ingest 中途写入、FTS 更新和 checkpoint 推进；旧 Worker 失效后仍可能写入。
-  - 无 URL 的 fallback key 当前未纳入 `sourceLocator`，可能把不同来源位置但标题和时间相同的内容错误合并。
-  - `discoveryContext` 当前在存储层硬编码为 `manual`，尚不能表达关注账号、推荐流、搜索、公告监控、Agent 调研和 Research 结果。
-  - Connection、SourceInstance、采集计划、Trigger/Workflow binding 和 StateStore 尚未真正进入当前 Prisma 模型；目前 checkpoint 仍主要按 SourceInstance 维护。
-  - Run 尚未完整保存执行时的定义版本、Source 配置和输入快照；排队后修改配置可能改变旧 Run 的实际行为。
+- 当前已发现的实现边界需要在扩展更多 Workflow/Adapter 时继续收口：
+  - 固定 Workflow Ingest 已用双 lease fencing 保护 Observation、Entry/Revision、
+    Asset、FTS、DomainEvent/Outbox 和 checkpoint，并验证旧 Worker 接管后不能写入；
+    其它未来领域 Command 必须复用该 fence，旧兼容 Ingest 路径尚未删除。
+  - 无 URL fallback identity 已包含规范化 `sourceLocator`；有条目级稳定 locator
+    时可以把来源修订归入同一 Entry。若 Adapter 只能提供页面级 locator，fallback
+    仍会包含规范化内容，正文修改可能生成新 Entry。后续需要显式
+    `identityStrength`、`identityVersion` 和 `identityBasis` 合同，不能把弱
+    fallback 误报成稳定外部身份。
+  - 固定 Ingest 已保存 `manual`/`schedule`、Workflow ref 和 Action command key；
+    关注账号、推荐流、搜索、公告监控和 Research 仍需由未来采集计划提供更完整
+    discovery context。
+  - 当前 Prisma `SourceInstance` 仍是 Phase 1 的简化 Source；Connection、多个
+    采集计划、Trigger/Workflow binding 和 StateStore 尚未建模，checkpoint 仍按
+    SourceInstance 维护。
+  - Workflow Run 已保存定义、输入、correlation、开始/结束时间和 budget 快照；
+    当前 Ingest 还会保存独立 Source execution snapshot。相同幂等键重放复用首次
+    Source/cursor 输入，不读取后来修改的配置。
+  - Source checkpoint 已有 revision/CAS，较旧并发 Run 不会覆盖较新 cursor；完整
+    Connection/多采集计划上线后，revision 必须迁移到各计划独立的 StateStore。
+  - 当前 Ingest journal 会在 Job、Action Invocation、Step output 和后续 Action
+    input 中重复保存 page/item；fixture 规模可接受，扩展大 Feed 或二进制来源前
+    必须设计 value/reference、Blob/Artifact 引用和 journal retention。
+  - capability projection retirement 的 registration replacement 窗口已经由
+    Prisma 的 `registrationGeneration` 条件更新收口，但这只覆盖同一 Data Root
+    内的 projection cleanup，不等于通用领域写入或 Ingest lease fencing。
 
 ## 当前命名结论
 
@@ -299,6 +410,13 @@ Connection / SourceInstance
 38. Ingest 本身是一种 Workflow；事实入库不等待 LLM。Entry → Story 是可由用户或 Agent 配置的 Knowledge Workflow。
 39. Research 不直接耦合 Ingest；分析信号创建 `ResearchRequest`（名称待定），由 Trigger 启动独立 Research Workflow。
 40. Research Workflow 可以查询 Cosmos 信息库并访问外部渠道；研究结果重新经过 Observation → Entry，不直接写入 Story。
+41. `Activity` 是 Workflow journal 的恢复单元；`ActionDefinition` 是能力合同；`Job` 是可领取任务；`Attempt` 是持有 lease 的一次执行；`Step` 只是可选逻辑/UI 投影。
+42. `nb-workflow` 拥有规范脚本语义，Cosmos Workflow Host 拥有持久 TaskStore、Job/Lease、Outbox 和领域事务；两者不平行实现 replay。
+43. `TaskStore` 是任务状态和 lease 的唯一真相；`WakeupBus` 是可选通知层，不能成为第二套任务权威。
+44. `CollectionPlan` 正式表示 Connection/Source Operation、Trigger、Workflow、checkpoint、预算和重叠策略组成的用户可见采集计划。
+45. 实施顺序固定为先稳定 `nb-workflow`，再以 Task 04 Spike 和 Worker API Draft
+    作为输入实现 Cosmos Worker/Host；Worker Admin 与远程 Gateway 不先于本地
+    Worker 的 Kernel convergence。
 
 ## 技术与运行形态（初步）
 

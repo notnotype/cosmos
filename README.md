@@ -2,7 +2,15 @@
 
 Cosmos 是一个面向单个本地用户、可编排的信息聚合与个人情报工作台。它持续从用户配置的渠道收集信息，把已录入的正文、图片、附件和来源关系保存在本地，再通过可配置看板、Agent 深入研究和后续消息推送，把“到处浏览”变成“集中理解和行动”。
 
-项目已完成 Phase 1 最小服务器闭环，已建立 Web、API、Worker、公共包和服务器部署入口；完整 Phase 1 产品需求、通用 Workflow Runtime、更多来源和扩展平台仍在持续实现与验收。
+`origin/master` 已完成 Phase 1 最小服务器闭环，并建立 Web、API、Worker、公共包
+和服务器部署入口。当前未合并的 Task 04 worktree 另有一套固定 Ingest Workflow
+Runtime Spike；它提供恢复、lease、Outbox、Ingest parity、Node 和浏览器证据，
+但不是目标规范 Kernel，也尚不建议合并。
+
+目标架构使用 `nb-workflow` 作为唯一规范脚本 Kernel、Cosmos 作为 Durable Host。
+后续先独立稳定 `nb-workflow`，再参考 Task 04 Spike 和 `docs/api/` Draft v0.2
+实现 Cosmos 本地 Worker/Host。Product Service、Worker Admin、Worker Gateway
+和 DTO 草案已完成五路只读审查，但仍是待实现合同，不是当前路由清单。
 
 Cosmos 按 [GNU Affero General Public License v3.0 only](LICENSE) 发布；贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
@@ -49,7 +57,17 @@ flowchart LR
 
 ### 可编排的信息采集
 
-`Source`、`Trigger`、`Workflow` 和 `Action` 相互独立。相同来源既可以手动抓取，也可以定时运行；自定义 Trigger 可以检测邮箱或网站变化；Action 可以运行 Connector、自定义代码或受控 Agent。当前实现是固定 Ingest/Probe Job；通用 Workflow Runtime 仍是后续设计合同。
+`Source`、`Trigger`、`Workflow` 和 `Action` 相互独立。相同来源既可以手动抓取，
+也可以定时运行；自定义 Trigger 可以检测邮箱或网站变化；Action 可以运行
+Connector、自定义代码或受控 Agent。当前 API 手动触发与 schedule 已统一运行
+固定 `cosmos.ingest@1` Workflow，底层具备持久 Run/StepRun/Action Job、租约、
+重试和恢复；Probe 暂时保留旧持久 Job。插件安装、用户自定义 Definition/Action、
+管理 API 和 Graph 编辑器尚未完成，因此当前不是完整的 Workflow 产品平台。
+
+后续脚本语义由 `nb-workflow` 统一提供：Activity fingerprint/replay、`map/all`、
+等待和 Child Workflow 不在 Cosmos 中维护第二套实现。Cosmos 继续负责持久
+Run/Journal、TaskStore、Job/Attempt/Lease、Outbox、Worker 和领域事务。当前
+固定 Ingest Runtime 是收敛时的 parity/回滚基线，不代表新组装已经落地。
 
 ### 不依赖 URL 的本地信息库
 
@@ -66,7 +84,10 @@ flowchart LR
 
 ### Agent、持续工作区与产物
 
-Agent 是 Workflow 中受配置范围和预算约束的一种 Action。它可以读取范围内的信息、继续调研并生成可保存、可追溯的产物，例如报告、批注、图表、附件包或可视化网页。
+Agent 是 Workflow 的可选 Extension/Action。`wf.agents.invoke` 将映射到版本化
+`agent.invoke@1`，具体实现等待 `neuro-agent-harness` 文档和稳定合同；Core
+不依赖 Harness。接入后 Agent 可以读取范围内的信息、继续调研并生成可保存、
+可追溯的产物，例如报告、批注、图表、附件包或可视化网页。
 
 当前单用户阶段知识管理者和 Agent 按最大产品权限运行，不建设审批 UI 或细粒度权限系统；所有操作仍通过 Service、Workflow、Capability 和 Application Command 合同，未来多人、远端或不可信扩展再增加独立权限策略。
 
@@ -102,10 +123,26 @@ Workspace Update 使用 `queued`、`running`、`waiting`、`succeeded`、`failed
 
 ## 当前架构基线
 
-- 服务器部署优先的本地优先模块化单体，物理上分 Next.js Web、NestJS API 和 Worker；第一阶段不引入微服务治理或消息队列集群。
+- 服务器部署优先的本地优先模块化单体，物理上分 Next.js Web、NestJS API、
+  Worker，并以独立 Migrator 为目标。Web 当前可与 API 分主机；API/Worker 仍共享
+  SQLite/Data Root，只支持同机或共享卷。
 - Web 使用 React + Next.js App Router；UI 初步使用 Tailwind、shadcn/ui、React Hook Form 和 Zod。
 - 开发使用 Bun，生产使用 Node；共享包和 Worker 运行路径保持 Node-compatible。
-- Prisma + SQLite + WAL 保存元数据、关系、任务和用户状态；FTS5/BM25、虚拟表和触发器通过受控 SQLite SQL Adapter 使用。
+- Prisma + SQLite 保存元数据、关系、任务和用户状态；FTS5/BM25、虚拟表和触发器
+  通过受控 SQLite SQL Adapter 使用。WAL/busy timeout 是 Local Durable 目标，
+  当前尚未显式验证，不能算已交付能力。
+- SQL TaskStore 是 Job、retry 和 lease 的唯一真相；本地默认自适应 polling。
+  WakeupBus/Redis Streams 只做可选通知、限流和缓存，Worker 收到通知后仍回 SQL
+  claim。
+- `nb-workflow` 目标提供规范脚本 Kernel 和可选 Backend；Cosmos Workflow Host
+  提供 Prisma 持久化、Worker、Outbox 和领域事务。先在独立 `nb-workflow` 任务
+  中稳定 API/conformance，再开始 Cosmos Host/Worker convergence；具体包拆分、
+  发布和依赖方式不在本文档提前冻结。
+- 多主机目标是 PostgreSQL + S3/MinIO + 可选 Redis；不通过共享 SQLite 网络盘
+  实现。远程 Worker 通过 Gateway 主动连接，不直接访问数据库或 Data Root。
+- Gateway Attempt owner 目标使用 Session/owner epoch/lease token/expiry 的持久
+  tuple；resume 通过 TaskStore CAS 转移并轮换 token，失租后的外部结果只能追加
+  受限 late evidence。当前尚无真实 Gateway。
 - 内容寻址 Blob Store 保存原始 payload、图片和附件；Artifact Root 保存版本化生成产物。
 - API、Worker 和 Web 服务端使用统一 `log.v1` 结构化运行日志，默认分别写入 `<Data Root>/logs/api.jsonl`、`worker.jsonl`、`web.jsonl`，也可由 `COSMOS_LOG_ROOT` 指定，并与 stdout 双写；日志只用于诊断，不替代业务事件或外部副作用账本。
 - `docker/Dockerfile` 与 `docker/compose.yml` 提供 Node 生产运行入口：API 启动前执行 migration，Web 使用 standalone server，API/Worker 共享 Data Root；Docker 验证待环境具备后执行。
@@ -127,8 +164,15 @@ Workspace Update 使用 `queued`、`running`、`waiting`、`succeeded`、`failed
 - Topic 不自动过期；人类、Agent 和系统的修改都记录操作者与 revision。
 - 第一版维护预算只限制全局日额度、单次 Run 的时间/token/工具调用和紧急保留预算，超预算时降级为确定性规则。
 - 后台 Run 使用持久 Job、幂等键、租约、有界重试和外部副作用账本。
+- 固定 Ingest 使用版本化 Workflow Run，依次调用 fetch、逐条入库和 checkpoint
+  Action；领域写入同时验证 Run/Job lease，Source checkpoint 使用 revision/CAS，
+  Run 保存来源执行配置快照，排队后修改 Source 不改变该次读取。URL-free fallback
+  已包含结构化来源定位；没有条目级稳定 locator 时，内容修订仍可能形成新 Entry。
 - Connector、Action、Agent 和 Board Block 通过版本化合同与配置能力范围扩展，不直接依赖核心数据库表。
 - 第一版只运行用户明确安装的本地可信扩展，不实现不可信插件沙箱或复杂权限 UI。
+- 当前未认证 API/Compose 只适用于本机或明确受信网络，不是公网部署模板；CORS
+  不能替代认证，公网 Product API、Worker Admin/Gateway 和文件访问需要独立发布
+  gate。
 
 ## 当前阶段与路线
 
@@ -141,7 +185,17 @@ Workspace Update 使用 `queued`、`running`、`waiting`、`succeeded`、`failed
 | Phase 4：推荐与广度 | 接入推荐页、关注账号和搜索来源，建立非 LLM 默认排序与反馈 |
 | Phase 5：摘要与推送 | 生成一致的网页/图片摘要，可靠投递到 Telegram、Email、QQ 等渠道 |
 
-当前已完成 Phase 0 文档基线、Phase 1 最小闭环和运行诊断日志切片。fixture/RSS Connector、持久 Job/lease/retry、Prisma/SQLite/FTS5、Nest API、SSE、Next Feed/Search/Story、结构化 API/Worker/Web 日志和 Node/浏览器冒烟已接通；Docker 容器、真实 RSS/RSSHub、日志卷和跨平台验收仍待执行。公开仓库已建立于 [notnotype/cosmos](https://github.com/notnotype/cosmos)。
+`origin/master` 已完成 Phase 0 文档基线和 Phase 1 最小闭环。当前未合并 Task 04
+worktree 还验证了固定 `cosmos.ingest@1`、Workflow Run/StepRun/Action Job、
+Source execution snapshot、Node 和浏览器链路；这些属于 Spike 证据，不表示
+Kernel convergence 已完成。
+
+下一工程工作是单独规划并稳定 `nb-workflow`，不是继续扩展 Cosmos 平行 Runtime。
+Kernel 门禁通过后再实现 Cosmos 本地 Worker/Durable Host，然后实现 Worker Admin；
+远程 Worker Gateway、Docker 实际验收、真实 RSS/RSSHub、跨平台、长时间恢复和
+通用自定义 Workflow 产品面继续单独处理。Cosmos 公开仓库位于
+[notnotype/cosmos](https://github.com/notnotype/cosmos)；本轮没有为
+`nb-workflow` 创建远端、发布包或固定依赖。
 
 ## 脚手架开发
 
@@ -160,10 +214,18 @@ bun run dev
 - [原始需求记录](docs/requirements/0001-original-requirements.md)：按时间追加用户原文，不做改写。
 - [总体架构设计](docs/architecture/0001-cosmos-foundation.md)：当前可调整的领域、运行时、存储和扩展设计。
 - [信息领域模型](docs/architecture/0002-information-model.md)：Entry、Story、Topic、相关推荐、热点与 Workspace 的详细边界。
+- [API 与 DTO 草案](docs/api/README.md)：Product Service、Worker Admin、Worker
+  Gateway、公共 DTO、故障场景和五路审查 disposition。
 - [项目状态](PROJECT-STATUS.md)：已完成能力、当前边界、风险和下一步。
 - [Foundation Task](docs/tasks/01-foundation/README.md)：本轮建立仓库与设计基线的过程和验证。
 - [Phase 1 Task](docs/tasks/02-rss-ingestion/README.md)：RSS/RSSHub + fixture 录入、离线查询和最小 Story projection 的实现 walkthrough。
 - [Durable Workflow Runtime ADR](docs/adr/0001-durable-workflow-runtime.md)：Job + Workflow、脚本优先执行语义和恢复边界。
+- [`nb-workflow` Kernel 与 Cosmos Host ADR](docs/adr/0002-nb-workflow-kernel-cosmos-host.md)：
+  规范脚本 Kernel、可选 Backend、TaskStore/WakeupBus、多宿主和 Agent Extension
+  的稳定决定。
 - [Workflow Runtime Task](docs/tasks/04-workflow-runtime/README.md)：后续 Workflow、Connection、Research 和 Adapter 基础建设的持续 walkthrough。
+- [Kernel Convergence Task](docs/tasks/06-nb-workflow-kernel-convergence/README.md)：
+  当前处于文档已同步、实现暂停状态；先在独立 `nb-workflow` 任务中稳定脚本
+  语义，再保持 Cosmos 固定 Ingest、Prisma/lease 与产品 parity。
 - [初始调研](docs/research/2026-08-06-daily-digest-research.md)：从远端研究项目归档的参考材料。
 - [贡献指南](CONTRIBUTING.md) 与 [Agent 约定](AGENTS.md)：后续开发和文档演进流程。

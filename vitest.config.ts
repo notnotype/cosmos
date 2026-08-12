@@ -13,6 +13,7 @@ export default defineConfig({
             "@cosmos/blob-store": resolve(rootDirectory, "packages/blob-store/src/index.ts"),
             "@cosmos/storage-prisma": resolve(rootDirectory, "packages/storage-prisma/src/index.ts"),
             "@cosmos/plugin-rss": resolve(rootDirectory, "plugins/rss/src/index.ts"),
+            "@cosmos/plugin-opencli": resolve(rootDirectory, "plugins/opencli/src/index.ts"),
             "@cosmos/plugin-collectors": resolve(rootDirectory, "plugins/collectors/src/index.ts"),
             "@cosmos/transport-http": resolve(rootDirectory, "packages/transport-http/src/index.ts"),
         },

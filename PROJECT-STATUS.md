@@ -135,6 +135,7 @@ Worker/Host。Worker Admin 随后实现，远程 Worker Gateway 继续后置。
 - 增加 Phase 1B 受管 Collector Runtime：`bilibili`、`aihot`、`rss`、`fixture-rss` 使用业务 Source kind，OpenCLI 不暴露为通用来源类型。
 - Probe 已改为异步持久 Job；API 只创建/查询 Job，Worker 执行 dry-run，Probe 不写 Observation、Entry、Asset 或 checkpoint。
 - 完成 OpenCLI 固定版本 `1.8.6`、外部 executable 覆盖、版本校验、Browser Bridge doctor 前置检查和 profile 引用边界；Cosmos 不保存 Cookie/Token。
+- 将 OpenCLI 执行器抽象为独立插件 `plugins/opencli`（`@cosmos/plugin-opencli`）：runner、退出码映射（66/69/77/超时）、doctor/version 预检和 executable 覆盖随迁并导出；Bilibili Connector 改为引用该插件，API/Worker 依赖链与 Ingest/Probe Job 路径不变。
 - 完成 AI HOT 固定 endpoint `https://aihot.virxact.com/api/v1/items`、cursor 采集、统一 Entry 标准化和错误恢复。
 - 真实 AI HOT Worker smoke 已通过：隔离 SQLite 中 queued Run 成功并保存 3 条 Entry。
 - SSE 已提供持久 Domain Event、游标回放、`Last-Event-ID`/`after`、keepalive 和 `snapshot_required`；Web 会自动刷新并展示服务/SSE 状态。
@@ -458,7 +459,7 @@ value/reference retention。URL-free identity strength/version/basis、Source
 
 - Docker/Compose 实际容器启动、共享卷和 healthcheck 验收；当前环境没有 Docker CLI。
 - 真实 RSS/RSSHub 网络来源验收、跨平台 Node 验收和更长时间的 Worker 重启演练。
-- Bilibili 真实 Entry 保存验收；当前机器 OpenCLI daemon 可运行，但 Browser Bridge 报 `Extension: not connected`，Connector 已明确返回 `dependency_unavailable`。
+- Bilibili 真实 Entry 保存验收；本机 Browser Bridge 已连接（doctor 实测 `Extension: connected v1.0.22`、profile `vmhtnh8p`、Connectivity: connected），真实 hot/feed 采集链路仍待验收。
 - 完整的 Source/Trigger/Workflow/Action 产品配置模型；Phase 1 只把固定 Ingest
   Workflow 接入生产，不包含用户自定义 Workflow 编辑/安装/管理。
 - `nb-workflow` Core/Runtime/Backend conformance、Cosmos Prisma Host 和固定

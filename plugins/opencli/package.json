@@ -1,5 +1,5 @@
 {
-    "name": "@cosmos/plugin-collectors",
+    "name": "@cosmos/plugin-opencli",
     "version": "0.1.0",
     "private": true,
     "type": "module",
@@ -16,13 +16,8 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@cosmos/application": "workspace:*",
-        "@cosmos/contracts": "workspace:*",
-        "@cosmos/domain": "workspace:*",
-        "@cosmos/logging": "workspace:*",
-        "@cosmos/plugin-opencli": "workspace:*",
-        "@cosmos/plugin-rss": "workspace:*",
-        "zod": "^4.0.0"
+        "@jackwener/opencli": "1.8.6",
+        "@cosmos/application": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "^24.0.0",

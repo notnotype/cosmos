@@ -1,5 +1,5 @@
 # Task 07：Deferred Workflow、Cosmos Host 与本地 Worker 收敛
-> 状态：Cosmos Host 代码实施尚未开始；nb-workflow Phase 1 Deferred Activity 的本地实现、package gates 和 Registry consumer 已通过；Cosmos Host 发布后接入仍待授权。
+> 状态：Cosmos Host PR A 本地实现已完成并通过 focused 门禁；Activity Host、固定 Ingest parity 和后续 Product/Worker Admin 阶段尚未开始。
 >
 > 日期：2026-08-13
 >
@@ -701,15 +701,9 @@ nb-workflow Deferred Activity conformance 通过
 Task 07 创建后，下一动作不是写 Cosmos Runtime，而是由用户指定 leader agent，
 让 leader 完成：
 
-1. 重新审计 `nb-workflow` dirty master 和所有 worktree；
-2. 建立 `nb-workflow` Deferred Activity 子工作包；
-3. 派发只读审查代理，验证候选合同和发布后的 0.2.0 公开 API；
-4. 汇总审查结果并更新本 Task walkthrough；
-5. 通过 Kernel 门禁后，才创建 Cosmos Host 实现 worktree。
+1. 先在独立 Cosmos implementation worktree 完成 PR A：Prisma/SQLite `WorkflowBackend`、Blob `ValueStore`、forward-only `WorkflowRun` migration 和 Kernel conformance。
+2. PR A 仅在本地完成 `2ba4341`；push、PR、review、merge 仍按仓库规则单独授权。
+3. PR A 之后才进入 Activity Job、Attempt、Lease、staged activation、completion dispatcher、cancel 和 durable recovery。
+4. 固定 `cosmos.ingest@1` parity、Product API manifest-only、Worker Admin、默认路径切换和旧 Runtime 删除仍后置。
 
-1. 保持 Task 03 的公开 API 与发布后 Registry consumer 证据，不把 `0.2.0` 的 Memory/包边界验证写成 Cosmos durable host 验证。
-2. 发布和依赖边界已闭环；只有获得 Cosmos 实施授权后，才在独立 Cosmos Host worktree 中实现 Phase 2 Prisma WorkflowBackend / ValueStore。
-3. 复用 Task 04 convergence 分支作为行为和 fencing 证据，逐项重建 Activity Job、双 Worker fencing、Completion Outbox 和固定 Ingest parity；历史 Spike 不作为当前验证。
-4. 只有本地 Host/Worker 收敛通过后，才进入 Product API manifest-only 收敛和 Worker Admin 门禁。
-
-本 Task 当前不授权 Cosmos Host 代码实施、发布、合并或部署；本次仅提交已获授权的文档 PR。
+本 Task 不把 PR A focused/full/package 证据写成 Cosmos Host 完成；未通过后续阶段门禁前保留旧 Ingest 路径。

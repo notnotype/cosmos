@@ -191,6 +191,45 @@ PR #8 verify -> SUCCESS
 leader 判定：Phase 1 的发布、package 和 Registry consumer 门禁完成；Cosmos Host/Worker、固定 Ingest parity、Product API 和 Worker Admin 继续停止，等待 Cosmos 实施授权与独立实现 worktree。
 
 
+## Round 4：Cosmos PR A Prisma Backend / Blob ValueStore
+
+日期：2026-08-13
+
+目标：在发布的 `@notnotype/nb-workflow@0.2.0` 之上建立真实 Cosmos durable Backend consumer，不复制 Task 04 Runtime。
+
+范围：独立 worktree `t07-prisma-workflow-backend`，分支 `feat/t07-prisma-workflow-backend`，基线 `origin/master@fb73962`。可写范围为根依赖、`packages/storage-prisma`、`packages/blob-store` 和本 Task 证据；未修改受保护主工作区、Task 04/05、nb-workflow dirty master、Action/API、Job/Attempt/Outbox。
+
+实际修改：
+
+- 根 `package.json` 和 `bun.lock` 固定 `@notnotype/nb-workflow@0.2.0`；`packages/storage-prisma`、`packages/blob-store` 声明各自运行时依赖。
+- `WorkflowRun` forward-only migration `20260813160000_workflow_run_backend` 保存完整 Kernel `WorkflowRunState` JSON、`kernelRevision`、查询投影和 `(status, updatedAt)` index。
+- `PrismaWorkflowBackend` 实现 create/load/save/list、immutable identity 校验、revision CAS、损坏 JSON/projection fail-closed 和 `WorkflowRunNotFoundError`/`WorkflowBackendConflictError`。
+- `BlobWorkflowValueStore` 使用 `canonicalJson` 和 `FileBlobStore`，返回并验证 `sha256`、key、byteSize、`application/json` media type。
+- PR A 本地提交：`2ba4341 feat: add durable workflow backend and value store`；尚未 push、创建 PR 或合并。
+
+验证命令与结果：
+
+```text
+nb-workflow clean verify worktree @ b327156：
+bun install --frozen-lockfile
+bun test -> 118 pass / 0 fail / 306 expect calls
+bun run typecheck -> passed
+bun run build -> passed
+bun run verify:package -> NODE_PACKAGE_SMOKE_OK / TARBALL_DECLARATION_CONSUMER_OK / ISOLATED_PACKAGE_SMOKE_OK
+
+Cosmos PR A focused：
+bun run test -- packages/storage-prisma/src/workflow-backend.test.ts packages/blob-store/src/workflow-value-store.test.ts
+  2 test files / 17 tests passed
+bun run typecheck:packages -> passed
+bun run build:packages -> passed
+bun run db:validate -> schema valid
+bun run db:migrate && bun run db:status（隔离 `.cosmos`）-> 4 migrations applied / schema up to date
+git diff --check -> passed
+```
+未验证和风险：Kernel package smoke 仍不证明 Cosmos durable recovery；PR A 未实现 lease、multi-worker、Job/Attempt、completion staged activation、EventSink/Domain Outbox、Action、API 或固定 Ingest parity；历史升级数据库三条 migration 保留数据的独立脚本本轮因 Windows 子进程超时未完成，必须在 PR A 外部操作前补跑。
+
+leader 判定：PR A focused、package type/build、schema validate 和 fresh migration 通过；独立审查代理因 `503 Service temporarily unavailable` 重试预算耗尽，未产出审查结论；先补真实历史 migration upgrade，再决定是否允许 push/PR。
+
 ## 后续轮次模板
 
 ```text

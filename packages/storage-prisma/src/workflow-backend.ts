@@ -310,25 +310,30 @@ function normalizeState(
 }
 
 function validateWorkflowValue(value: unknown, path: string): asserts value is WorkflowValue {
-    if (!isRecord(value) || (value.kind !== "inline" && value.kind !== "ref")) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
         throw new WorkflowStateIntegrityError(`${path} must be a WorkflowValue.`);
     }
-    if (value.kind === "inline") {
-        assertJsonValue(value.value);
+    const valueObject = value as Record<string, unknown>;
+    if (valueObject.kind !== "inline" && valueObject.kind !== "ref") {
+        throw new WorkflowStateIntegrityError(`${path} must be a WorkflowValue.`);
+    }
+    if (valueObject.kind === "inline") {
+        assertJsonValue(valueObject.value);
         return;
     }
-    const ref = value.ref;
-    if (!isRecord(ref)) {
+    const ref = valueObject.ref;
+    if (typeof ref !== "object" || ref === null || Array.isArray(ref)) {
         throw new WorkflowStateIntegrityError(`${path}.ref must be an object.`);
     }
-    const byteSize = ref.byteSize;
+    const refObject = ref as Record<string, unknown>;
+    const byteSize = refObject.byteSize;
     if (
-        typeof ref.key !== "string" ||
-        typeof ref.hash !== "string" ||
+        typeof refObject.key !== "string" ||
+        typeof refObject.hash !== "string" ||
         typeof byteSize !== "number" ||
         !Number.isSafeInteger(byteSize) ||
         byteSize < 0 ||
-        ref.mediaType !== "application/json"
+        refObject.mediaType !== "application/json"
     ) {
         throw new WorkflowStateIntegrityError(`${path}.ref is invalid.`);
     }
@@ -408,10 +413,7 @@ function parseDate(value: string, field: string): Date {
     return parsed;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isUniqueConstraintError(error: unknown): boolean {
-    return isRecord(error) && error.code === "P2002";
+    return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }

@@ -205,7 +205,7 @@ leader 判定：Phase 1 的发布、package 和 Registry consumer 门禁完成�
 - `WorkflowRun` forward-only migration `20260813160000_workflow_run_backend` 保存完整 Kernel `WorkflowRunState` JSON、`kernelRevision`、查询投影和 `(status, updatedAt)` index。
 - `PrismaWorkflowBackend` 实现 create/load/save/list、immutable identity 校验、revision CAS、损坏 JSON/projection fail-closed 和 `WorkflowRunNotFoundError`/`WorkflowBackendConflictError`。
 - `BlobWorkflowValueStore` 使用 `canonicalJson` 和 `FileBlobStore`，返回并验证 `sha256`、key、byteSize、`application/json` media type。
-- PR A 本地提交：`2ba4341 feat: add durable workflow backend and value store`；尚未 push、创建 PR 或合并。
+- PR A 提交：`79cbfd5 fix: tighten workflow state validation`（包含实现提交 `2ba4341`、证据提交 `6aa5730`），已 push 到 `feat/t07-prisma-workflow-backend` 并开放 Cosmos PR #9；尚未 merge。
 
 验证命令与结果：
 
@@ -226,9 +226,11 @@ bun run db:validate -> schema valid
 bun run db:migrate && bun run db:status（隔离 `.cosmos`）-> 4 migrations applied / schema up to date
 git diff --check -> passed
 ```
-未验证和风险：Kernel package smoke 仍不证明 Cosmos durable recovery；PR A 未实现 lease、multi-worker、Job/Attempt、completion staged activation、EventSink/Domain Outbox、Action、API 或固定 Ingest parity；历史升级数据库三条 migration 保留数据的独立脚本本轮因 Windows 子进程超时未完成，必须在 PR A 外部操作前补跑。
+未验证和风险：Kernel package smoke 仍不证明 Cosmos durable recovery；PR A 未实现 lease、multi-worker、Job/Attempt、completion staged activation、EventSink/Domain Outbox、Action、API 或固定 Ingest parity。独立审查代理因 `503 Service temporarily unavailable` 重试预算耗尽，未产出审查结论。
 
-leader 判定：PR A focused、package type/build、schema validate 和 fresh migration 通过；独立审查代理因 `503 Service temporarily unavailable` 重试预算耗尽，未产出审查结论；先补真实历史 migration upgrade，再决定是否允许 push/PR。
+补充验证：使用隔离数据库从前三条历史 migration 升级到 `20260813160000_workflow_run_backend`，保留 `Source/Run/Job/Entry`，输出 `BACKEND_MIGRATION_UPGRADE_OK source=1 runs=1 jobs=1 entries=1 foreignKeyErrors=0`。
+
+leader 判定：PR A focused、package type/build、schema validate、fresh migration 和历史 migration upgrade 均通过；PR #9 等待用户审查与合并授权，PR B 尚未创建。
 
 ## 后续轮次模板
 

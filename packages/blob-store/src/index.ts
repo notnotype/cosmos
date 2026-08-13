@@ -91,3 +91,5 @@ export class FileBlobStore {
         }
     }
 }
+
+export { BlobWorkflowValueStore } from "./workflow-value-store.js";

@@ -26,6 +26,7 @@
         "@cosmos/blob-store": "workspace:*",
         "@cosmos/contracts": "workspace:*",
         "@cosmos/domain": "workspace:*",
+        "@notnotype/nb-workflow": "0.2.0",
         "@prisma/client": "^6.0.0"
     }
 }

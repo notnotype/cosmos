@@ -1775,6 +1775,8 @@ export class PrismaCosmosRepository implements CosmosRepository {
     }
 }
 
+export { PrismaWorkflowBackend } from "./workflow-backend.js";
+
 async function assertJobLease(
     tx: Prisma.TransactionClient,
     runId: string,

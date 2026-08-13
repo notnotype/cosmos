@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "cosmos",
+      "dependencies": {
+        "@notnotype/nb-workflow": "0.2.0",
+      },
       "devDependencies": {
         "@types/node": "^24.0.0",
         "tsx": "^4.20.3",
@@ -91,6 +94,9 @@
     "packages/blob-store": {
       "name": "@cosmos/blob-store",
       "version": "0.1.0",
+      "dependencies": {
+        "@notnotype/nb-workflow": "0.2.0",
+      },
     },
     "packages/contracts": {
       "name": "@cosmos/contracts",
@@ -119,6 +125,7 @@
         "@cosmos/blob-store": "workspace:*",
         "@cosmos/contracts": "workspace:*",
         "@cosmos/domain": "workspace:*",
+        "@notnotype/nb-workflow": "0.2.0",
         "@prisma/client": "^6.0.0",
       },
       "devDependencies": {
@@ -469,6 +476,8 @@
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
     "@nolyfill/is-core-module": ["@nolyfill/is-core-module@1.0.39", "", {}, "sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA=="],
+
+    "@notnotype/nb-workflow": ["@notnotype/nb-workflow@0.2.0", "", { "peerDependencies": { "typescript": ">=5.0.0" }, "optionalPeers": ["typescript"] }, "sha512-tTA/JLA4D+TMvcdGY0/GZbqLaWwek+aBM3/MsxHbFcJaomJswpqjENtQBgiGMv32jKmZCQTc3fFsg/1OcpZkuA=="],
 
     "@nuxt/opencollective": ["@nuxt/opencollective@0.4.1", "", { "dependencies": { "consola": "^3.2.3" }, "bin": { "opencollective": "bin/opencollective.js" } }, "sha512-GXD3wy50qYbxCJ652bDrDzgMr3NFEkIS374+IgFQKkCvk9yiYcLvX2XDYr7UyQxf4wK0e+yqDYRubZ0DtOxnmQ=="],
 

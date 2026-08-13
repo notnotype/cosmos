@@ -227,3 +227,18 @@ model StoryRevision {
     story           Story   @relation("StoryRevisions", fields: [storyId], references: [id], onDelete: Cascade)
     currentForStory Story?  @relation("StoryCurrentRevision")
 }
+
+model WorkflowRun {
+    id              String   @id
+    stateJson       String
+    kernelRevision  Int      @default(0)
+    status          String
+    resumeRequired  Boolean  @default(false)
+    definitionKey   String
+    definitionVersion String
+    manifestHash    String
+    createdAt       DateTime
+    updatedAt       DateTime @updatedAt
+
+    @@index([status, updatedAt])
+}

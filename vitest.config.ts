@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 
 const rootDirectory = resolve(import.meta.dirname);
@@ -6,6 +6,7 @@ const rootDirectory = resolve(import.meta.dirname);
 export default defineConfig({
     resolve: {
         alias: {
+            "@": resolve(rootDirectory, "apps/web/src"),
             "@cosmos/contracts": resolve(rootDirectory, "packages/contracts/src/index.ts"),
             "@cosmos/logging": resolve(rootDirectory, "packages/logging/src/index.ts"),
             "@cosmos/domain": resolve(rootDirectory, "packages/domain/src/index.ts"),
@@ -15,6 +16,7 @@ export default defineConfig({
             "@cosmos/plugin-rss": resolve(rootDirectory, "plugins/rss/src/index.ts"),
             "@cosmos/plugin-collectors": resolve(rootDirectory, "plugins/collectors/src/index.ts"),
             "@cosmos/transport-http": resolve(rootDirectory, "packages/transport-http/src/index.ts"),
+            "@cosmos/worker-admin": resolve(rootDirectory, "packages/worker-admin/src/index.ts"),
         },
     },
     test: {
@@ -24,6 +26,7 @@ export default defineConfig({
             "apps/**/src/**/*.test.ts",
             "scripts/**/*.test.ts",
         ],
+        exclude: [...configDefaults.exclude, "**/*.property.test.ts"],
         environment: "node",
         passWithNoTests: false,
     },

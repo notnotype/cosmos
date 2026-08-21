@@ -278,3 +278,21 @@
 > 等一下，本轮还是先同步文档。整理项目。把之前对话中定好的 API 草案、架构同步到文档中。其他的地方还是先不要动。
 >
 > 整理完成停止。后续后可以考虑规划先做 nb-workflow，等 nb-workflow 稳定后。参考 spike 出来的 workflow runtime 和本次定好的 Worker API 草案来实现 Worker。
+
+## 2026-08-20：Cosmos 前端组件实验室与 UI 路线
+
+> 关于 cosmos 前端。能否做一个组件实验室用于调节组件？
+>
+> ---
+>
+> 按照项目最新的开发流程，如果要从零开始实现这个需求的前端部分应该怎么样开始？
+> ---
+> 1. C:\Users\notnotype\Documents\CodeRepository\GithubProjects\neuro-book\packages\nb-ui 这里有一个 vue 版本的 ui 库。他能实现组件级别自定义。要不要也做一个 react 版本的？同时把 NeuroBook + macOS 系列配色作为默认主题？
+>
+> ---
+>
+> 那现在的 cosmos 能否先作为消费者使用 shadcn 提供的默认样式？后续再换呢？
+>
+> ---
+>
+> 可以搭建 ui 组件调试，实验室。后续所有的组件都需要能在这里调。

@@ -134,6 +134,21 @@ describe("documentation governance check", () => {
         );
     });
 
+    it("rejects Git commit SHAs in the root README", async () => {
+        const fixture = await createFixture({
+            "README.md": [
+                "[agent governance](.agents/README.md)",
+                "Current baseline: a3b962f",
+            ].join("\n"),
+        });
+
+        const result = checkDocumentation(fixture.root, fixture.paths);
+
+        expect(result.failures).toContain(
+            "根 README 不得缓存 Git 提交 SHA；当前基线与验证结果只写入 PROJECT-STATUS.md",
+        );
+    });
+
     it.each([
         ["docs/tasks/README.md", "docs/tasks/"],
         ["docs/testing.md", "docs/testing.md"],

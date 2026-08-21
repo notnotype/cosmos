@@ -14,6 +14,13 @@
 - 修复和重构应解决合同或设计问题，不用 hack、类型逃逸或临时兼容层掩盖问题；无法兼容时说明取舍。
 - 验证范围按风险匹配；文档或局部改动不主动扩展到无关的浏览器、真实来源、真实 Agent 或发布验收。
 
+## 开发生命周期
+
+- 开始改动前按 [`docs/standards/repository-workflow.md`](docs/standards/repository-workflow.md) 判定生命周期阶段并选择最短 Skill 链；运行环境提供匹配 Skill 时先读取其规则，只执行当前改动需要的链路。
+- 非平凡工作先公开可观察结果、权威合同、范围边界和仍影响结果的假设。权威合同与实现冲突时停止猜测，把冲突记录到对应 Proposal 或 Task。
+- 行为切片按 `RED → GREEN → REFACTOR → runtime VERIFY` 推进；合并前按正确性、简单性、架构、安全和性能完成五轴审查。
+- 阶段完成条件与仓库唯一 Definition of Done 只在[仓库流程](docs/standards/repository-workflow.md#definition-of-done)维护，Task、PR 和汇报只记录本轮证据与偏差。
+
 ## 汇报与决策
 
 - 结论先行，按影响排序；首次出现的内部模块名就地解释。

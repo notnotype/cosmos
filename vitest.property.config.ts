@@ -47,6 +47,7 @@ export default defineConfig({
     test: {
         include: [
             "packages/**/src/**/*.property.test.ts",
+            "apps/**/src/**/*.property.test.ts",
             "test/properties/**/*.test.ts",
         ],
         fileParallelism: false,

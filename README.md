@@ -2,36 +2,12 @@
 
 Cosmos 是一个面向单个本地用户、可编排的信息聚合与个人情报工作台。它持续从用户配置的渠道收集信息，把已录入的正文、图片、附件和来源关系保存在本地，再通过可配置看板、Agent 深入研究和后续消息推送，把“到处浏览”变成“集中理解和行动”。
 
-`master` 当前本地指向 Task 07 实现提交
-`5ce628690ab0110b0525e8ebcbacbe673ced9c55`（`feat: add durable activity host and worker
-admin`），相对 `origin/master = b678fb5` ahead 1。Task 07 已本地快进合入 master；本轮
-未 push、未创建远端 PR，也未清理 worktree。
+当前已经实现的行为和边界以[实现规格](docs/spec/README.md)为准；当前基线、分层验证结果、未验证风险和下一工程切片只在 [`PROJECT-STATUS.md`](PROJECT-STATUS.md) 维护。需求、架构、ADR、API Draft 与 Task 分别保存产品意图、稳定设计、候选接口和实施证据，不替代当前实现规格。
 
-`@notnotype/nb-workflow@0.2.0` 已稳定发布并作为当前 Kernel package。合入的 Cosmos
-代码已包含 Durable Host、固定 `cosmos.ingest@1` 执行路径和 Worker Admin direct
-loopback HTTP 实现；focused 4 files / 47 tests、full 23 files / 165 tests、typecheck、
-build、Prisma generate/validate 以及 Node durable smoke 均有通过证据。测试覆盖的是当前
-代码边界，不等于完整 parity、跨进程生产恢复或所有部署场景。
+Cosmos 使用 `@notnotype/nb-workflow@0.2.0` 作为规范脚本 Kernel，Cosmos 负责 Durable Host。Worker 默认走 Durable Host；只有显式 `COSMOS_WORKFLOW_HOST_ENABLED=false` 才回退旧路径。当前代码包含固定 `cosmos.ingest@1` 执行路径和 Worker Admin direct loopback HTTP；远程 Worker Gateway、Redis 和多主机运行时仍不是当前实现。
 
-固定 Ingest 的完整 parity 矩阵、跨进程 durable recovery、双 Worker 长时 fencing、Worker
-Admin SIGTERM/活跃 Attempt deadline、Docker/browser/真实来源验收仍未完成或未验证。
-Gateway、Redis、多主机和远程 Worker 仍不是当前实现；旧 IngestionWorker 路径保留作
-显式回滚/兼容边界。
+Cosmos 按 [GNU Affero General Public License v3.0 only](LICENSE) 发布；贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，开发 Agent 治理入口见 [`.agents/README.md`](.agents/README.md)。
 
-PR #5（审计源 `96e27fd`）和 PR #6（审计源 `498018e`），以及 T04 parity/runtime
-（`dc78f05` / `9fe84f2`）和 T05（`d0b8e03`）均为保护区或历史证据，只能重建其
-有用行为，不能写成当前完成能力。
-
-实现规格入口见 [docs/spec/README.md](docs/spec/README.md)。它只描述已合入
-`5ce6286` 的实现行为；需求、架构、ADR、API Draft 与 Task 仍各自保持原职责。
-
-目标架构使用 `nb-workflow` 作为唯一规范脚本 Kernel、Cosmos 作为 Durable Host。当前
-Worker 默认走 Durable Host；只有显式 `COSMOS_WORKFLOW_HOST_ENABLED=false` 才回退旧
-路径。远程 Worker Gateway 继续后置。Product Service、Worker Gateway 和未实现的
-扩展/管理产品面仍不是当前路由清单。
-
-Cosmos 按 [GNU Affero General Public License v3.0 only](LICENSE) 发布；贡献流程见
-[CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 为什么做 Cosmos
 
@@ -143,7 +119,7 @@ Workspace Update 使用 `queued`、`running`、`waiting`、`succeeded`、`failed
   通过受控 SQLite SQL Adapter 使用。WAL/busy timeout 是 Local Durable 目标，
   当前尚未显式验证，不能算已交付能力。
 - SQL TaskStore 是 Job、retry 和 lease 的唯一真相；本地默认自适应 polling。WakeupBus/Redis Streams 只做可选通知、限流和缓存，Worker 收到通知后仍回 SQL claim。
-- `nb-workflow@0.2.0` 提供规范脚本 Kernel；Task 07 已在 `5ce628690ab0110b0525e8ebcbacbe673ced9c55` 合入 Durable Host、固定 Ingest durable path 和 Worker Admin direct loopback。代码和测试证明的是当前实现边界，不把完整 parity 或跨进程生产恢复写成已证明。
+- `nb-workflow@0.2.0` 提供规范脚本 Kernel；当前实现已包含 Durable Host、固定 Ingest durable path 和 Worker Admin direct loopback。代码和测试只证明 [`docs/spec/`](docs/spec/) 与 [`PROJECT-STATUS.md`](PROJECT-STATUS.md) 记录的边界，不把完整 parity 或跨进程生产恢复写成已证明。
 - manifest-only Product API 已有当前 catalog/公开投影实现；Worker 独占 executable。Worker Admin 是独立 loopback 运维面。它们的 Docker/browser/真实来源与 SIGTERM 活跃 Attempt deadline 验收仍待完成。
 - 具体包拆分、远程 Worker Gateway 和多主机存储仍按各自 Task/门禁推进。
 - 多主机目标是 PostgreSQL + S3/MinIO + 可选 Redis；不通过共享 SQLite 网络盘实现。远程 Worker 通过 Gateway 主动连接，不直接访问数据库或 Data Root；当前 Gateway、Redis、多主机实现均不存在。
@@ -191,7 +167,7 @@ Workspace Update 使用 `queued`、`running`、`waiting`、`succeeded`、`failed
 | Phase 4：推荐与广度 | 接入推荐页、关注账号和搜索来源，建立非 LLM 默认排序与反馈 |
 | Phase 5：摘要与推送 | 生成一致的网页/图片摘要，可靠投递到 Telegram、Email、QQ 等渠道 |
 
-下一工程工作是补齐已合入 Task 07 的完整 parity 与生产边界验证：固定 `cosmos.ingest@1` 的重复/修订/媒体/abort/takeover/Feed/Search/Story 矩阵、跨进程 recovery、双 Worker 长时 fencing、Worker Admin SIGTERM/活跃 Attempt deadline、Docker/browser 和真实 RSS/Bilibili/OpenCLI 来源。Node durable smoke 已通过，但不替代这些验收；Gateway、Redis、多主机和远程 Worker 继续后置。本轮根文档不执行远端 Git、发布或部署操作。
+各阶段的当前完成度、验证边界和下一工程切片只在 [`PROJECT-STATUS.md`](PROJECT-STATUS.md) 维护；本文件保留稳定路线，不缓存提交、测试数量、worktree 或远端操作状态。
 
 ## 脚手架开发
 

@@ -1,8 +1,8 @@
 # Cosmos 总体架构设计
 
-> 状态：Draft v0.23
+> 状态：Draft v0.24
 >
-> 最后更新：2026-08-16
+> 最后更新：2026-08-20
 >
 > 原始需求真相源：[`../requirements/0001-original-requirements.md`](../requirements/0001-original-requirements.md)
 >
@@ -282,6 +282,28 @@ Session。远程 output 经 schema/hash 校验后由 Cosmos Host 提交，远程
 直接写领域表、checkpoint 或 Outbox。
 
 Desktop Shell 的具体技术（Tauri、Electron 或其它实现）、安装生命周期、远端认证和公网暴露策略都保持在宿主层，不进入领域模型。
+
+### 3.8 Web 组件与开发工具边界
+
+Web 展示层按四层单向依赖组织：
+
+```text
+页面数据容器
+  → Cosmos 产品组件
+    → components/ui primitives
+      → 全局语义 token
+```
+
+- 页面数据容器负责 Product API、SSE、表单提交和页面级状态，不把 Transport 或远程数据访问下沉到展示组件；
+- Cosmos 产品组件表达 Feed、Source、Search、Story 和状态摘要等可复用产品语义，使用显式 props 与合成 fixture 即可独立渲染；
+- `components/ui` 继续维护 shadcn `base-nova` / Base UI primitive 源码，不为未来换肤增加只转发 props 的包装层；
+- 产品组件只消费 Cosmos/shadcn 语义 token，不依赖某套主题私有变量或字面主题颜色；颜色、圆角、密度、阴影和字体优先在 token 与 primitive 层调整。
+
+组件实验室是开发工具，不是 Product Service 能力。开发模式的 `/dev/components` 使用固定、脱敏的合成 fixture 展示真实 primitive 和产品组件；它不访问 Product API、SSE、Prisma、SQLite、Blob Root、Artifact Root 或用户数据。生产构建访问该路由必须返回 404，实验室不进入产品导航。
+
+实验室只允许调节组件 props、交互状态、已登记主题/配色和设计 token。URL 保存有界、可分享的会话选择；大量 token 草稿只保存在版本化 localStorage，并可经边界校验后原子导入/导出 JSON。浏览器不获得源码写入、任意 CSS、外部模块加载或代码执行能力。
+
+所有 `components/ui` 公共模块和无副作用的 Cosmos 产品组件都必须登记至少一个默认实验室场景；Route、Layout、Provider、数据请求容器、测试 helper 和一次性内部实现不在该登记合同内。注册表与公共组件模块的一致性由 CI 行为测试强制，不能只依赖评审记忆。具体方案与验收见已接受的 [`react-component-lab` Proposal](../proposals/react-component-lab.md)。
 
 ## 4. Source、Trigger、Workflow 与 Action
 

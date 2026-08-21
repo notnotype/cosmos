@@ -50,6 +50,7 @@
         "test:property": "vitest run --config vitest.property.config.ts",
         "test:e2e": "bun run build:api && bun run build:worker && vitest run --config vitest.e2e.config.ts",
         "test:browser": "bun run build && playwright test --config playwright.config.ts",
+        "test:browser:component-lab": "playwright test --config playwright.component-lab.config.ts",
         "test:docker": "bun run scripts/e2e/docker-flow.ts",
         "test:real:rss": "bun run scripts/e2e/real-source.ts rss",
         "test:real:aihot": "bun run scripts/e2e/real-source.ts aihot",

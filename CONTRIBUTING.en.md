@@ -14,14 +14,16 @@ Acceptance of an issue confirms a direction and scope for discussion; it does no
 
 ## Short Collaboration Path
 
-For implementation work, follow this sequence:
+Implementation work follows the [single repository development lifecycle](docs/standards/repository-workflow.md#开发生命周期) through the summary below. This guide does not duplicate phase completion criteria, Agent Skill routing, or the Definition of Done:
 
-1. **Confirm the entry point**: use the [admission table](docs/standards/repository-workflow.md#准入决策表) to determine the user request, Issue, Proposal, Task, and documentation scope, then read the relevant requirements, architecture, and tests. The goal, non-goals, and affected contracts must be clear.
-2. **Record the design**: when a Proposal is required, complete its review first; after acceptance, update requirements, architecture, or an ADR and create or reuse a Task. Route other changes through the table instead of maintaining a second set of exceptions here.
-3. **Isolate the work**: check the dirty worktree; when a remote exists, run `git fetch origin`, then create `.worktree/<slug>` and a topic branch from the latest target branch. Existing changes, branch, and task-file boundaries must be clear.
-4. **Complete a vertical slice**: finish one verifiable path from input to user result before extending the same layer. Code, contracts, persistence, and recovery paths must agree.
-5. **Run layered verification**: run focused tests, type checking, the full baseline, and browser/real-source/real-Agent acceptance when risk requires it. Each check needs its exact command, outcome, or a “not run” note.
-6. **Prepare the PR**: list scope, evidence, risks, documentation changes, and unverified items. Push and PR creation require user authorization; review, merge, issue closure, worktree cleanup, and release are separate actions.
+1. **Triage and assumptions**: use the [admission table](docs/standards/repository-workflow.md#准入决策表) to identify the change type, authoritative contract, record scope, and external authorization. State the goal, non-goals, and assumptions that still affect the result.
+2. **Definition and Proposal**: clarify ambiguous requirements first. When a Proposal is required, complete its review before updating requirements, architecture, or an ADR. A local bug decidable from the current contract proceeds directly to reproduction.
+3. **Task vertical slice**: create or reuse a Task for major work, then define one coherent goal, no more than three observable acceptance criteria, and acyclic dependencies. Do not create a second plan or todo tracker.
+4. **Context and worktree**: read only the status, contract, implementation, tests, and existing pattern relevant to the slice. Check the dirty worktree; when a remote exists, fetch first, then create `.worktree/<slug>` and a topic branch from the latest target branch.
+5. **Incremental implementation**: run each behavior slice through `RED → GREEN → REFACTOR → runtime VERIFY`. Code, contracts, persistence, and recovery paths must agree.
+6. **Five-axis review**: review tests and implementation for correctness, simplicity, architecture, security, and performance. Resolve blocking findings before delivery.
+7. **Layered verification and fact sync**: run focused, full, runtime-surface, and external acceptance checks according to risk. Update the current spec, Task, and project status, recording every exact command, result, or “not run” reason.
+8. **PR and external delivery**: use the template to report scope, evidence, risks, documentation, and unverified items. Push and PR creation require user authorization; review, merge, issue closure, worktree cleanup, migration, release, and deployment remain separate actions.
 
 Documentation-only changes may skip the code worktree and runtime checks, but must still check links, Markdown structure, file boundaries, and `git diff --check`.
 

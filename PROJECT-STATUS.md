@@ -1,48 +1,69 @@
 # Cosmos Project Status
 
-> 截至 2026-08-18；以下验证针对 `master=origin/master=3af886a0099bc778c32475513740b6562bb6e31f`，已提交、已 push、未部署。
+> 更新于 2026-08-21。最近一次由完整 runtime 门禁覆盖的实现基线是 `3af886a0099bc778c32475513740b6562bb6e31f`，已提交、已 push、未部署；后续治理提交未改变产品运行时。
 
 ## 一句话结论
 
-本轮完成 Worker 稳定化与分层测试体系：Worker 配置 fail-fast、四 lane 隔离、recovery priority、Attempt 生命周期、shutdown deadline/force path、WorkflowRun 来源与错误持久化、completion dead-letter → Run failed、HTTP 409 冲突映射均已实现。默认离线门禁已通过：数据库/类型、属性/单元、构建、Node 进程 E2E、Playwright 浏览器 E2E 和 Windows smoke。
+产品运行时能力仍以 `3af886a` 的分层验证为历史基线；本 worktree 另完成 Task 09 React 组件实验室及首页无副作用组件提取。实现提交 `c130be8fba412dfdb1f5e2272ba3a579d30e63a8` 已 commit 并 push 到 `origin/feat/t09-react-component-lab`；PR #10 已创建且保持 OPEN，PR URL 为 `https://github.com/notnotype/cosmos/pull/10`。已验证远端 CI run `32464307892` attempt 2（head `e3b75d132b086c57472035d0cd093a07594e05bc`）成功：Quality、Node process E2E、Browser E2E 和 Windows Node smoke 全部通过；merge、发布和部署未执行。
 
-实现规格入口为 [`docs/spec/README.md`](docs/spec/README.md)，测试入口为 [`docs/testing/README.md`](docs/testing/README.md)。本轮新增 `.github/workflows/ci.yml`，将质量、Node E2E、浏览器 E2E 和 Windows smoke 分为独立 job；Docker 与真实来源保持显式可选。
+实现规格入口为 [`docs/spec/README.md`](docs/spec/README.md)，测试入口为 [`docs/testing/README.md`](docs/testing/README.md)，仓库生命周期与唯一完成定义位于 [`docs/standards/repository-workflow.md`](docs/standards/repository-workflow.md)。
 
-当前实现提交基线：`master=origin/master=3af886a0099bc778c32475513740b6562bb6e31f`。本轮稳定化交付拆为 Worker 生产实现、分层测试/CI、稳定化规格和 E2E 竞态回归四个提交；四者均已推送。
+React 组件实验室 Proposal 已于 2026-08-20 接受；Task 09 在独立 `.worktree/react-component-lab` / `feat/t09-react-component-lab` 完成本地实现、P1 修复、本地最终门禁与修复后五轴审查。CI 配置现已加入隔离下游 job 的 `bun run db:generate` 和 `bun run test:browser:component-lab`；远端 CI run `32464307892` attempt 2 已验证四个 CI job 全部通过。
 
-## 已验证（2026-08-18）
+## Task 09 本地实现证据
+
+- 登记门禁覆盖 `components/ui/*.tsx` 与 `components/cosmos/*.tsx`：8 + 5 个模块；registry 聚焦测试通过；
+- `/dev/components` 开发路由、URL/history、props、Light/Dark、token 草稿/JSON 和五个产品 fixture 已实际浏览器验证；
+- token 覆盖只在预览根节点，实验室无 Product API/SSE 请求；生产 Web 对 `/dev/components` 返回 HTTP 404；
+- 既有 `bun run test:browser` ingest 流程通过：来源创建、录入、Feed、Story；
+实现提交 `c130be8fba412dfdb1f5e2272ba3a579d30e63a8` 已 commit 并 push；PR #10 已创建并保持 OPEN；merge、发布、部署和 worktree 清理未执行。
+
+## 本轮本地已验证（2026-08-21）
 
 ```text
-bun run db:validate
-  passed
-bun run db:generate
-  passed（首次因共享调试进程占用 Prisma query engine 得到 Windows EPERM，停止该进程后重试通过）
+bun run docs:check
+  passed；checkedFiles=283，failures=[]
 bun run typecheck
-  passed
-bun run test:property
-  2 property files / 3 tests passed
+  passed；packages 与 API/Worker/Web 全仓 TypeScript
 bun run test
-  28 test files / 185 tests passed
-bun run build && bun run lint:web
+  passed；30 个测试文件 / 217 个测试
+bun run test:property
+  passed；3 个 property 文件 / 4 个测试
+bun run lint:web
   passed
-bun run test:e2e
-  4 Node process E2E files / 4 tests passed
+bun run build
+  passed；packages、API、Worker 与 Next Web 生产构建完成
 bun run test:browser
-  1 Playwright browser test passed
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-node.ps1
-  passed：healthWorker=ready、durableRunStatus=succeeded、Feed=3、Search=1、SSE Run/Feed、requestId bridge、400/404、日志脱敏
+  passed；1 个 Playwright ingest 流程（来源创建、录入、Feed、Story）
+bun run test:browser:component-lab
+  passed；4 个开发态 Playwright 回归（SourceForm 双 props 同步、SourceForm 提交阻断、FeedBrowser 搜索提交阻断、token 无操作失焦保留）
+bun run test -- apps/web/src/component-lab/draft.test.ts apps/web/src/component-lab/registry.test.ts apps/web/src/component-lab/snapshot.test.ts
+  passed；3 个文件 / 24 个合同测试，覆盖 13 个公共模块登记、控件 schema、token 边界
 git diff --check
-  passed
+  passed；无输出
 ```
 
-`vitest.e2e.config.ts` 和 `vitest.property.config.ts` 独立声明 include，仅收集各自层级，不扫描 workspace 依赖测试。Node E2E 使用真实构建产物、隔离 SQLite、动态 API/Admin 端口和结构化日志；跨进程 recovery 使用受控 RSS 请求与 lease expiry。浏览器流程从真实页面完成来源创建、录入、Feed 和 Story 展开。
+组件实验室额外真实浏览器证据：开发路由 URL/history、props、Light/Dark、token 作用域/恢复/非法
+导入、五个产品 fixture、P1 修复回归、320/768/1024/1440 视口和无 Product API/SSE 请求均通过；生产
+`/dev/components` 通过 `curl` 返回 HTTP 404。测试数据使用隔离 `.agent/tmp`，本轮导入样本已清理。
+工具链保留的 `vitest.config.ts` / `vitest.property.config.ts` 分层收集合同未改变。
+修复后五轴审查结论：Correctness、Readability、Architecture、Security、Performance 均通过；SourceForm 与 FeedBrowser fixture 提交阻断均由专用浏览器回归覆盖；`fixturePath` 任意路径属于 HEAD 既有基线风险，未纳入本轮 patch findings。
 
-## 未运行的可选门禁
+## 远端 CI 与治理边界
 
-- `bun run test:docker` 已验证前置检查，但本机没有 Docker CLI，因此 Docker Compose build/health/fixture 流程未运行。
-- `bun run test:real:rss` 因缺少 `COSMOS_REAL_RSS_URL` 未运行。
-- `bun run test:real:aihot`、`bun run test:real:bilibili` 因缺少显式联网许可及对应 endpoint/OpenCLI/Browser Bridge 前置未运行。
-- 真实来源、Docker、长时双 Worker 压力、发布/部署和公网安全均不由默认门禁证明。
+- PR #10 的前一轮远端 run `32459370422`（head `7d8257b67f3c701f055cfd0b4c44f60ea7984fec`）曾失败：三个下游 job 在 `packages/storage-prisma` 构建链缺少生成后的 Prisma Client；该 run 仅作为历史失败证据保留。
+- 当前分支已为每个隔离下游 job 在构建前加入 `bun run db:generate`，并为 Browser E2E job 增加 `bun run test:browser:component-lab`。已验证远端 CI run `32464307892` attempt 2（head `e3b75d132b086c57472035d0cd093a07594e05bc`）已 completed/success：Quality、Node process E2E、Browser E2E 和 Windows Node smoke 全部通过，且 Browser E2E 已执行专用 component-lab 门禁；attempt 1 曾因 5 个 Vitest 测试超出 5 秒超时而失败，重跑后通过。
+- 远端 CI 检查已通过，但用户未授权 merge；PR #10 保持 OPEN。2026-08-20 通过 GitHub API 核验：`master` 没有 branch protection，仓库 rulesets 为空；本轮未创建或修改远端治理。
+- 实现、CI 修复和状态记录已 commit 并 push；Issue 关闭、worktree 清理、发布和部署未执行。
+
+## 最近一次完整 runtime 门禁（实现基线 `3af886a`）
+
+2026-08-18 已验证：数据库/类型、属性/单元、构建、4 个 Node process E2E、1 个 Playwright browser test 和 Windows smoke。该证据是历史产品运行时基线；本轮 Task 09 新增的本地浏览器证据见上方，未重新运行 Node process E2E 或 Windows smoke。
+
+## 本轮未运行
+
+- Task 09 的本地 Playwright 浏览器与实验室开发/生产 smoke 已运行并通过；本地未运行 Node process E2E、Windows smoke、Docker、真实 RSS/AI HOT/Bilibili、长时双 Worker 压力、真实 Agent、发布和部署。
+- 已验证远端 CI run `32464307892` attempt 2 已 completed/success：Quality、Node process E2E、Browser E2E 和 Windows Node smoke 全部通过；远端 Browser E2E 已覆盖 `bun run test:browser:component-lab`，隔离下游 job 已执行 `bun run db:generate`。
 
 ## 当前运维边界
 
@@ -51,16 +72,9 @@ git diff --check
 - WorkflowRun 的 `sourceInstanceId`、`errorMessage` 是 durable projection 字段；来源查询同时考虑 legacy Run 和 WorkflowRun，不从 Kernel stateJson 猜错误文本。
 - 旧 IngestionWorker 路径保留；显式 `COSMOS_WORKFLOW_HOST_ENABLED=false` 才回退旧路径。Gateway、Redis、多主机和远程 Worker 不属于当前实现。
 
-## 当前真相分层
-
-当前工作树已提交并 push 到 `master=origin/master=3af886a0099bc778c32475513740b6562bb6e31f`；未部署。
-- 已验证层级分别为数据库/类型、属性/单元、构建、Node 进程 E2E、Playwright 浏览器 E2E 和 Windows smoke；每层证据只覆盖自身合同。
-- Docker/真实来源保持显式可选。Docker CLI 缺失导致 Compose 流程未运行；真实 RSS、AI HOT、Bilibili/OpenCLI 因外部前置缺失未运行。
-- 完整 Ingest parity、长时间双 Worker 压力、生产部署、多主机、Gateway、Redis 和远程 Worker 不由当前门禁证明。
-
 ## 当前下一步
 
-可选后续是提供 Docker daemon、真实来源 endpoint/凭据和 OpenCLI/Browser Bridge 后分别运行对应显式命令；不应把缺少这些外部前置写成离线 Worker 回归。
+Task 09 已获授权完成 commit、push 和 PR 创建；已验证远端 CI run `32464307892` attempt 2 的 Quality、Node process E2E、Browser E2E 和 Windows Node smoke 全部通过。PR #10 保持 OPEN，merge、发布、部署和 worktree 清理未执行。
 
 ## 已完成
 

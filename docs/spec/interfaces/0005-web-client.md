@@ -2,13 +2,13 @@
 
 ## 状态
 
-当前实现规格；后续代码变化应同步更新本文。本文记录当前 Phase 1
-Next.js Web 页面和其 Product API 调用行为；不把尚未实现的浏览器/e2e 验收、认证、
-Gateway 或 Draft API 写成当前能力。
+当前实现规格；后续代码变化应同步更新本文。本文记录当前 Phase 1 Next.js Web 页面、
+开发态 React 组件实验室及其与 Product API 的边界。实验室浏览器/生产验收结果只在本轮 Task
+与 `PROJECT-STATUS.md` 记录，不把 Docker、真实来源或 Windows smoke 写成已验证能力。
 
 ## 最后更新
 
-2026-08-16。
+2026-08-20。
 
 ## 组件定位
 
@@ -237,6 +237,43 @@ Web server instrumentation 的副作用独立于 client page：在 Node runtime�
 - Web scripts/dependencies：[`apps/web/package.json`](../../../apps/web/package.json)。
 - HTTP URL/schema/error/SSE behavior：[`packages/transport-http/src/index.ts`](../../../packages/transport-http/src/index.ts)、[`packages/transport-http/src/index.test.ts`](../../../packages/transport-http/src/index.test.ts)。
 - Shared form/response contracts：[`packages/contracts/src/base.ts`](../../../packages/contracts/src/base.ts)、[`packages/contracts/src/index.ts`](../../../packages/contracts/src/index.ts)。
+## React 组件实验室
+
+组件实验室是 `/dev/components` 下的开发工具，不属于 Product API 或产品导航。Server Component
+先检查 `process.env.NODE_ENV`，非 development 调用 `notFound()`；开发态通过 Suspense 承载
+使用 `useSearchParams()` 的 client workbench。实验室不创建 `HttpCosmosClient`、EventSource，
+不读取 Prisma、SQLite、Data Root、Blob Root 或用户数据。
+
+受管公共模块位于 `apps/web/src/components/ui/*.tsx` 与
+`apps/web/src/components/cosmos/*.tsx`，每个模块在静态 registry 中有唯一 id、默认场景、
+控件 schema、合成 fixture、token 子集和 render 目标。`registry-integrity.ts` 比较两个目录与
+注册表，拒绝缺失、重复、无默认场景、缺控件值或未登记 token；当前登记 8 个 UI primitive 和
+5 个 Cosmos 展示组件。
+
+首页 `page.tsx` 是数据请求容器：它独占 `HttpCosmosClient`、SSE、React Hook Form 的
+`handleSubmit`、搜索/分页/Story 状态和错误处理。无副作用展示组件只接收共享 DTO、展示状态和
+回调：首页与实验室复用同一实现，实验室使用固定 synthetic fixture，不复制演示组件。
+
+当前产品展示组件边界：
+
+- `SourceForm`：接收来源表单 `UseFormReturn` 和页面提交事件，展示 Zod 字段错误与 submitting 状态；
+- `StatusSummary`：接收 health、source summary 和 connecting/connected/unavailable 状态；
+- `SourceActions`：接收 `SourceSnapshot[]` 与 run 回调，展示空、disabled 和 configured 状态；
+- `FeedBrowser`：接收 Feed、Source、搜索表单、loading、cursor 与 Story 回调；
+- `StoryPanel`：接收 `StoryDetail` 与关闭回调，展示 revision/observation 元数据。
+
+实验室 URL 只保存 `component`、`scene`、`viewport`、`theme`、`colorway`；非法值归一化并以
+`replace` 修正，用户操作以 `push` 保留浏览器前进/后退。已登记 token 的临时输入在失焦时校验，
+版本化快照写入 `localStorage`，JSON 导入整份原子校验；覆盖只写预览根节点的 inline custom
+properties，不写 `:root`，因此实验室 chrome 与产品页面不受污染。
+
+实现入口：[`apps/web/src/component-lab/registry.tsx`](../../../apps/web/src/component-lab/registry.tsx)、
+[`apps/web/src/component-lab/workbench.tsx`](../../../apps/web/src/component-lab/workbench.tsx)、
+[`apps/web/src/app/dev/components/page.tsx`](../../../apps/web/src/app/dev/components/page.tsx)。
+组件登记、URL/快照/草稿测试和实验室浏览器/生产验收边界见
+[`docs/testing/README.md`](../../testing/README.md) 与
+[`Task 09`](../../../.agents/tasks/09-react-component-lab/README.md)。
+
 ## 非目标/边界
 
 - 当前页面只有 fixture-rss 创建表单；不宣称浏览器端可配置 RSS/Bilibili/OpenCLI、Secret、

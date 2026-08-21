@@ -22,6 +22,8 @@ const requiredIndexes = [
 const retiredPaths = ["docs/tasks/", "docs/testing.md"] as const;
 
 const windowsAbsolutePathPattern = /^[a-z]:[\\/]/iu;
+const rootReadmeGitShaPattern = /\b[0-9a-f]{7,40}\b/iu;
+
 
 export function checkDocumentation(
     repoRoot: string,
@@ -48,9 +50,11 @@ export function checkDocumentation(
     }
 
     if (fileSet.has("README.md")) {
-        const rootNavigation = collectRelativeLinkTargets(
-            readFileSync(resolve(normalizedRoot, "README.md"), "utf8"),
+        const rootReadme = readFileSync(
+            resolve(normalizedRoot, "README.md"),
+            "utf8",
         );
+        const rootNavigation = collectRelativeLinkTargets(rootReadme);
         const hasAgentGovernanceLink = rootNavigation.some((url) => {
             const encodedPath = url.split("#", 1)[0].split("?", 1)[0];
             try {
@@ -63,6 +67,11 @@ export function checkDocumentation(
         if (!hasAgentGovernanceLink) {
             failures.push(
                 "根文档入口缺少 Agent 治理链接：README.md -> .agents/README.md",
+            );
+        }
+        if (rootReadmeGitShaPattern.test(rootReadme)) {
+            failures.push(
+                "根 README 不得缓存 Git 提交 SHA；当前基线与验证结果只写入 PROJECT-STATUS.md",
             );
         }
     }

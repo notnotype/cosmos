@@ -473,6 +473,8 @@ stateDiagram-v2
 
 Parser 升级创建新的 ContentRepresentation，不创建新的 EntryRevision。当前指针的晋升/回退由 Application Policy 生成命令，Storage 用同一事务约束执行。旧表示和旧 Agent 证据在清理前继续可审计。
 
+候选的来源新鲜度是只读投影，不改写其 inputSources 或块证据；Storage 按精确历史可用性、来源当前修订和当前表示计算 current/superseded/unavailable，经候选 Query 暴露给 Web。非当前提示“基于旧版内容表示”，不可用提示待重新验证；接受事务重新检查并拒绝非 current，人工拒绝仍可执行。历史接受结果不自动撤销，也不因提示而自动调用 Agent。
+
 ### 9.3 内容块演进
 
 Contracts 维护内容块 schema 版本。新增块类型必须：

@@ -10,7 +10,7 @@
 
 ## 当前状态与本轮切片
 
-编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品已覆盖表示版本管理，以及音视频元数据、受限图片和空正文。真实 Agent、其他读取降级、解析器/质量/旧证据演进及独立审查仍未闭合，不整体标完成。
+编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取。本轮补齐合成解析升级/质量保护，并修复旧证据提示与过期接受门禁。真实 Agent 与独立审查仍未闭合，不整体标完成。
 
 当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；普通子 Agent 工具不能指定批准模型，未委派或冒称独立审查。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
 
@@ -118,6 +118,7 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 - [图片修复与旧 goal 恢复](walkthrough/history-image-repair-and-goal-recovery.md)：图片修复及旧 goal 的历史记录，不代表本轮授权。
 - [内部 @2 前置接线](walkthrough/history-internal-agent-v2.md)：产品接线完成前的计划和验证原文；5,325 字节原样归档。
 - [完整 Story 产品接线](walkthrough/history-product-agent-wiring.md)：已完成的接线计划、红绿过程与分层验证，6,618 字节历史正文移入本册。
+- [媒体与异常读取验收](walkthrough/history-media-and-reading-degradation.md)：已完成的媒体降级、旧文本、损坏表示与缺 Asset 验收原文。
 - 以下保留后续验收计划与证据；历史目标授权不代表当前自动续跑已启用。
 
 ### 2026-10-26：表示版本产品验收计划
@@ -146,46 +147,31 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 - Leader 按正确性、简单性、架构、安全、性能五轴核对候选持久化/正式决定、既有队列复用、API/Worker 装配、连接与版本权限、终态/fence、同键恢复及有界轮询；未识别新增 Critical/Required blocker。不把此次自查当独立审查：普通子 Agent 工具无法指定 `jijiapi/gpt-6-luna`，未使用默认路由，独立审查继续未完成。
 - 仅 Task40 相关 32 个既有改动及其新文件进入候选范围，当前 master 基于 `31d9577`；公共导出为显式增量冻结，未改旧路由历史。旧内部计划/结果 5,325 字节原文移入历史分册，当前决定和有效结果不移走。文档链接 1185 文件、大小治理及 diff 门禁通过（pwsh-1536d396c5d548da，exit 0），保留 5 项既存增长 warning。首次 staged diff 发现 3 个新归档的末尾分隔空行，仅规范最后换行、不改历史正文；提交前复查。
 
-### 2026-10-26：媒体降级产品验收计划
+### 2026-10-26：解析器、质量与旧证据演进验收计划
 
-既有基线已本地提交 `22f0f9a`，提交后工作区干净；本步只新增 `e2e/browser/story-media-degradation.spec.ts` 和本记录/状态同步，不改业务合同或 UI。测试自己启动临时 loopback RSS，走真实采集/API/Worker/生产 Web；不伪造 API 响应或直写数据库，不访问外部来源、真实数据或模型。Leader 为唯一写入者，无子 Agent/goal；完成后依维护者授权单独中文本地提交，不 push。
+维护者要求继续上述三项验收并本地中文提交。基线 `193d752`，工作区干净；不发布真实解析器版本、不运行真实模型/来源、旧库升级或自动 goal。Leader 唯一写入者，复用现有 Task40，不新增设计讨论或公共写口。
 
-1. 音视频只有媒体、没有正文：真实 Asset 为 metadata_only，正文按块顺序显示类型/状态/原因和安全原文链接，无播放器或本地已保存宣称；不下载音视频。
-2. 图片地址使用非白名单 loopback：真实 Worker 得到 skipped/security_blocked，仍显示图片前后正文、原因与安全外链；不发送媒体请求，不绕过主机门禁。
-3. 空 HTML 正文：读取投影块为空、给出无正文说明并保留文章原文入口；刷新后上述状态一致。1024/1440 都检查正文可读、真实键盘焦点、无横向溢出和非预期浏览器错误。
+1. 同一来源修订经存储 owner 提交带合成升级 parserVersion 的合法解析结果：新增表示并保留旧版本，EntryRevision/Observation/Story 不因解析升级而改变；这证明升级结果持久化边界，不冒称已经发布另一解析器。
+2. 真实隔离 SQLite 验证 complete > partial > failed：较差或失败结果只存历史、不晋升；同质量受推荐才晋升，人工锁覆盖推荐，历史质量/正文保持不变。用共同 ContentQuery 验证精确历史，而不只测纯策略函数。
+3. 合成 Invocation 经真实 StoryAgent 与候选仓储产生带块证据的候选；解析升级及来源新 Revision 后，原候选/块证据不迁移、不删除。核对旧证据提示及接受限制与已批准设计；若不满足，先给出实际失败证据并明确缺口，不用“保留了版本号”代替演进验收，也不为绿灯冻结错误行为。
 
-先运行验收观察实际结果；发现业务缺陷先报告行为/预期/证据，不为测试绿灯改合同。复验完整产品本步用例、已有媒体/内容聚焦回归及文档/staged diff/大小门禁。独立审查、legacy/失效表示与更多异常媒体、解析器/证据演进和真实 Agent 仍分别未完成。
+核心新增 `packages/storage-prisma/src/content-evolution.test.ts`；运行 owner 级集成验收和相关 Normalizer/选择/Query/候选/Worker 回归。当前代码推断：候选读合同只有 candidate/status，Web 仅展示输入版本，可能缺少动态旧证据提示；接受只检查 Story Revision 和历史表示存在/非 failed，未检查来源/current 表示变化。先实测后决定最小修复或报告冲突；任何公共投影变更先冻结合同，独立审查仍不由自查替代。
 
-### 2026-10-26：媒体降级产品验收结果
+### 2026-10-26：解析器、质量与旧证据演进结果
 
-- 三条计划均通过：audio/video 块正文为空、Asset metadata_only；图片 skipped/security_blocked、前后段有序；空 HTML 的 blocks=[]、正文为空且不是 unavailable。说明、安全原文及播放器/离线宣称按计划检查。
-- 1024/1440 刷新投影一致；真实 Tab/Shift+Tab 焦点、safe href/target/rel、无横溢及全程 pageerror/console error/requestfailed=0。127.0.0.1/127.0.0.2 两个受控接收端确认媒体零请求，不放宽主机门禁。
-- 首轮媒体用例停在键盘脚本：`Locator.press` 在发键前重聚焦，破坏 Tab/Shift+Tab 往返。改用当前页面 keyboard 发键，保留原焦点断言后通过，不改产品代码。随后增加非白名单接收端作为零请求见证并再跑最终版本。
-- `bunx playwright test --config playwright.config.ts e2e/browser/story-media-degradation.spec.ts e2e/browser/source-media-interactions.spec.ts`：3 项通过、31.1s（新增双宽度 2 项、原切换/保存图片失败恢复 1 项），pwsh-d6aa27272bf9481a，exit 0；包括生产 Web 构建/start及真实 API/Worker。原有恢复用例只在故障注入前检查错误，不把它冒称全程零错误；新增两项为全程检查。
-- `bun run vitest run packages/application/src/content-normalizer.test.ts packages/application/src/content-ingest.test.ts packages/application/src/media-acquisition.test.ts packages/storage-prisma/src/content-query.test.ts apps/web/src/components/cosmos/content-block-reader.test.ts`：5 文件 / 57 测试通过、5.09s（pwsh-541801486dc34528，exit 0）。
-- `bunx tsc --noEmit --strict --module esnext --moduleResolution bundler --target es2022 --esModuleInterop --skipLibCheck --types node e2e/browser/story-media-degradation.spec.ts`：最终用例类型检查通过，与最终浏览器串行（pwsh-d6aa27272bf9481a，exit 0）；不把 Playwright 转译当类型检查。
-- 五轴自查未见 blocker：仅有界测试/记录，无业务变更；非独立审查。本步未跑全套单元/全仓类型（基线 1148 项/类型已过）、浏览器整套、真实来源/Agent、旧库升级。信心 B，本切片完成、Task40 active；余项按计划继续。
-- `bun run docs:check`（1186 文件零错误）、`git diff --cached --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 全通过（pwsh-88d1cbfa52a04ec1，exit 0），5 项既存 warning。首次主记录约 9.1k token 触警，去掉本次重复说明后通过，未调阈值/基线/豁免。仅四个本步文件暂存，复查后本地提交。
+- 三项验收已有实证：同一 EntryRevision 新增合成 parser@2 表示，原 Observation/Story 与精确 v1 不变，仅允许当前指针变化；partial/failed 不覆盖 complete，同质量非推荐不晋升，较高质量受锁保护、解锁后可晋升。合成草稿直接交给真实重建/选择 owner，不发布另一生产解析器，也不把合成内容当真实来源。
+- 真实 RED：首次修正测试误用未公开 Normalizer 导出后，2 通过/1 失败（pwsh-6921432654654719）；v1 被 v2 替代仍能接受旧候选。扩展读端断言也证实无新鲜度投影（pwsh-e5e3730a9bf24aa4）。先冻结 API/架构，再在 Storage 单一 owner 增加 current/superseded/unavailable，只读计算、不写 candidate JSON。接受事务重新检查，非 current 409；查看/拒绝仍可用，不迁移证据、不自动调用模型或撤销历史决定。
+- owner 验收还覆盖来源新 Revision、缺失证据引用、损坏/failed 历史表示、回退恢复 current；候选 JSON、旧块引用与历史读取不变。过期接受不写 StoryRevision/决定审计，拒绝可完成。共享 Query 与新鲜度 owner 复用同一白名单表示映射，不因版本变化放出 raw payload/Blob key。聚焦 `bun run vitest run packages/storage-prisma/src/content-evolution.test.ts packages/storage-prisma/src/content-query.test.ts packages/storage-prisma/src/story-agent-candidates.test.ts`：3 文件/6 项通过，19.14s（pwsh-22e763114b4b4a30）；随后类型报跨包私有 Normalizer 的 rootDir 错误，改为显式合法合成草稿，不扩公共导出/配置，最终全仓复验如下。
 
-### 2026-10-26：旧文本与损坏读取产品验收计划
+| 命令 | 本轮实际结果 |
+| --- | --- |
+| `bun run test` | 203 文件 / 1153 项通过，193.81s，pwsh-713fc0e43a604345，exit 0。 |
+| `bun run typecheck` | 与上述串行，全仓通过，同 job，exit 0。 |
+| `bunx playwright test --config playwright.config.ts e2e/browser/story-agent-generation.spec.ts e2e/browser/story-representation-versions.spec.ts` | 3 项通过，43.8s，pwsh-18e8965519964f81，exit 0；真实 API/Worker/SDK/生产 Web，模型仅合成传输。 |
+| `bun run test:browser:component-lab e2e/component-lab/story-agent-candidates.spec.ts` | 15 项通过，43.0s，pwsh-c308a0e839ef40c3，exit 0；320/768/1024/1440 旧版/不可用提示、禁接受/可键盘拒绝及原恢复流程。 |
 
-媒体步骤已提交 `4181141`。本步只补测试/隔离启动夹具与状态记录，无产品 API、schema 或行为改动。API 启动前在本轮新建且空的 browser-stack 库中，用合成 Connector 经 IngestionService 建样，再定点构造旧文本/坏表示/缺 Asset；不读取或升级用户旧库。显式开关 `COSMOS_E2E_READING_DEGRADATION=1` 才播种，校验临时根和空库，不使用外部 DATABASE_URL；不新增产品写入口、网络来源或模型请求。Leader 唯一写入，不开 goal/子 Agent；完成后独立中文本地提交，不 push。
-
-1. 无表示旧文本经真实 Query 清洗后可读；脚本/HTML/媒体不执行、不外发，不伪造表示版本。显式历史缺失读 unavailable，不悄悄回退旧文本。
-2. 损坏 JSON 的当前表示明确 unavailable，不显示旧 contentText；失败表示显示不可用说明，Story 详情与原文入口仍可读，不导致整页失败。
-3. 合法块引用缺失的图片/音视频 Asset：保留前后段落与块顺序，显示缺失说明；只有安全 URL 才提供外链，不渲染媒体或请求 Blob。1024/1440 阅读/刷新结果一致，检查原文链接真实键盘焦点、无横溢、浏览器错误及无意外外发；读取不改写源修订/表示。
-
-新增 `scripts/e2e/reading-degradation-seed.ts` 与 `e2e/browser/story-reading-degradation.spec.ts`，仅在既有 `scripts/e2e/web-stack.ts` 空库迁移之后、启动 API/Worker 之前接入。先跑用例观察行为；若暴露业务缺陷先报告证据，不放宽合同。运行 API/Worker 构建后本步完整产品用例，相关 Query/Normalizer/reader 回归、测试文件类型与文档/staged diff/大小门禁；独立审查、真实 Agent、用户旧库升级及其他演进场景仍未完成。
-
-### 2026-10-26：旧文本与损坏读取产品验收结果
-
-- 三条计划均通过真实 API/生产阅读页：无表示的旧 HTML 安全文本可读，不执行脚本/请求追踪图；不伪造表示，显式 v1 缺失为 unavailable。损坏当前 JSON 返回 unavailable，不退为旧文本；有效但 failed 的表示不在 Web 渲染失败正文。缺失 image/audio/video Asset 保留五块顺序、前后正文、缺失说明；只在有安全 URL 时给原文，不发 Blob/外部媒体请求。
-- 1024/1440 各一项均检查首次阅读/刷新、原文与媒体链接真实 Tab/Shift+Tab 焦点、无横向溢出及 pageerror/console error/requestfailed=0，Story API 快照及内容投影读取前后相等。仅 API 启动前的合成隔离库定点构造特殊状态，不是历史 schema 升级或真实旧库验收；无业务代码/合同改动。
-- `bun run build:api`、`bun run build:worker` 以及 `$env:COSMOS_E2E_READING_DEGRADATION='1'; bunx playwright test --config playwright.config.ts e2e/browser/story-reading-degradation.spec.ts` 均 exit 0（pwsh-93b23e08faa04344）：共享包/API/Worker 构建、生产 Web 构建/start，2 项通过、35.9s。先运行新增文件 tsc 再构建；生产进程使用合成行但不替换 API 响应。
-- `bun run vitest run scripts/e2e/reading-degradation-seed.test.ts packages/application/src/content-query.test.ts packages/application/src/content-normalizer.test.ts packages/storage-prisma/src/content-query.test.ts apps/web/src/components/cosmos/content-block-reader.test.ts`：5 文件 / 31 项通过、7.71s（pwsh-12d3bf25be674b2a，exit 0）。新增两项证明非 browser 根与非空库拒绝、继承 DATABASE_URL 不生效；Query 读取前后 EntryRevision/ContentRepresentation/Observation 整行快照不变。
-- `bunx tsc --noEmit --strict --module esnext --moduleResolution bundler --target es2022 --esModuleInterop --skipLibCheck --types node e2e/browser/story-reading-degradation.spec.ts scripts/e2e/reading-degradation-seed.ts scripts/e2e/reading-degradation-seed.test.ts` 同上述聚焦回归串行 exit 0。首轮播种器写错 Prisma Source delegate（实际为 SourceInstance），类型与启动均定位在测试代码；另有 Node 无法解析裸 bun 的测试迁移问题，改用现有 Node/Prisma fixture。没有据此放宽校验或改产品，修正后复验通过。
-- 完整接线已完成过程 6,618 字节移入历史分册，保留原文（仅规范末尾换行）；当前状态和有效合同仍在本册/架构。五轴自查：仅可选测试夹具与有界读取验收，门禁拒绝非空/错根；默认启动不开播种，未引入产品权限/写口或运行负担。未识别本步 blocker，非独立审查。
-- 关闭播种开关后复验默认栈：`Remove-Item Env:COSMOS_E2E_READING_DEGRADATION -ErrorAction SilentlyContinue; bunx playwright test --config playwright.config.ts e2e/browser/story-media-degradation.spec.ts`，2 项通过、26.6s（pwsh-9366c430d5474969，exit 0）。默认正常采集、媒体拦截与空正文不受可选夹具影响。自查修正默认未播种时的专用用例门禁：明确 skip 并说明所需开关，不因缺测试行让默认整套失败。最终 pwsh-dc3d7901be95497a：开启开关重跑旧行 2 项通过、20.5s；关闭后同时跑旧行+媒体为 2 passed / 2 skipped、20.6s，随后上述 tsc exit 0。skipped 不计通过，完整断言只在显式启用时运行。
-- `bun run docs:check; git diff --check; python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 通过：1190 文档无失败，394 文件大小门禁 PASS、5 项既有基线增长 warning（pwsh-d034992ffc9f4934）；首次只因本次主记录末尾多余空行失败，已清除后复验。暂存后再查 cached diff 与文档门禁。
-- 本步不跑默认单元整套/单独全仓 typecheck、浏览器整套、真实来源/Agent、旧库升级；构建与聚焦类型不冒称全仓。信心 B：本切片完成、Task40 active；余项是独立审查、解析器/不同质量与 Agent 旧证据演进、另获授权的真实 Agent。本地按步骤中文提交，不 push/部署/goal。
+- 产品生成测试经公开 rebuild 使来源表示过期：精确旧历史及候选不变、直接接受 409、正式修订不变；刷新显示旧版提示，接受禁用，键盘拒绝后决定保留，无非预期浏览器错误。质量/来源新修订/损坏状态是隔离仓储层证据，不冒称所有组合都跑过浏览器。
+- 五轴自查未见新增 blocker：规则在源 owner，事务防陈旧页面绕过；无新表/平台/外呼/自动写入；最多 100 候选，来源按候选批量读取；仅多一次只读状态投影。非独立审查，指定模型路由不可由普通工具指定，未启动默认路由 Agent。
+- 文档门禁：`bun run docs:check` 检查 1193 文件、0 失败，`git diff --check` 与 `python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 通过（pwsh-0b12a13b93e74294，exit 0），395 文件、保留 5 项既存基线增长 warning；提交前另查 staged diff，防止新文件空白遗漏。
+- 已完成的媒体与异常读取过程 10,217 字节原文归档，仅规范末尾分隔换行；保留当前状态、有效决定与本轮证据。未运行浏览器整套、真实来源/Agent、用户旧库升级、部署与独立审查。信心 B，本演进切片完成，Task40 active；下一步独立审查及另获费用/凭据/网络授权的真实 Agent 验收。按授权仅本地中文提交，无 goal/push/新分支/worktree。
 

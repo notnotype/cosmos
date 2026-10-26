@@ -1,6 +1,35 @@
 import { expect, test } from "@playwright/test";
 import { expectSinglePreview } from "../support/lab";
 
+for (const sourceStatus of ["superseded", "unavailable"] as const) {
+    for (const width of [320, 768, 1024, 1440]) {
+        test(`${sourceStatus} evidence remains inspectable and rejectable at ${width}px`, async ({ page }) => {
+            const errors: string[] = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+            page.on("requestfailed", (request) => errors.push(request.url()));
+            await page.setViewportSize({ width, height: 1000 });
+            await page.goto(`/dev/components?component=story-agent-candidates&scene=interactive&viewport=${width}`);
+            const preview = await expectSinglePreview(page);
+            await preview.getByLabel("模拟来源证据", { exact: true }).selectOption(sourceStatus);
+            await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
+            await preview.getByRole("button", { name: "生成建议", exact: true }).click();
+            await expect(preview).toContainText(sourceStatus === "superseded" ? "基于旧版内容表示" : "原输入证据暂不可用");
+            await expect(preview.getByRole("button", { name: "接受建议", exact: true })).toBeDisabled();
+            await preview.getByText("查看输入版本", { exact: true }).click();
+            await expect(preview).toContainText("lab-old-source · 表示版本 1");
+            const reject = preview.getByRole("button", { name: "拒绝建议", exact: true });
+            await reject.focus();
+            await expect(reject).toBeFocused();
+            await page.keyboard.press("Enter");
+            await expect(preview.getByText("已拒绝", { exact: true })).toBeVisible();
+            await expect(preview.getByLabel("生成任务数")).toHaveText("1");
+            expect(await preview.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+            expect(errors).toEqual([]);
+        });
+    }
+}
+
 for (const width of [320, 768, 1024, 1440]) {
     test(`candidate preview and human decision at ${width}px`, async ({ page }) => {
         const errors: string[] = [];

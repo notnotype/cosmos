@@ -1,8 +1,18 @@
 import type { ContentQueryRepository, ContentReadSource, ContentReadTarget } from "@cosmos/application";
-import type { PrismaClient } from "@prisma/client";
+import type { ContentRepresentation, PrismaClient } from "@prisma/client";
 
 function parseStoredJson(value: string): unknown {
     try { return JSON.parse(value); } catch { return null; }
+}
+
+export function storedRepresentation(record: ContentRepresentation | null): unknown {
+    return record === null ? null : {
+        id: record.id, entryRevisionId: record.entryRevisionId,
+        representationVersion: record.representationVersion, parserVersion: record.parserVersion,
+        status: record.status, blocks: parseStoredJson(record.blocksJson), contentText: record.contentText,
+        qualitySignals: parseStoredJson(record.qualitySignalsJson),
+        supersedesRepresentationId: record.supersedesRepresentationId, createdAt: record.createdAt.toISOString(),
+    };
 }
 
 // This adapter returns only the requested projection, never raw payload or Blob keys.
@@ -28,13 +38,7 @@ export class PrismaContentQueryRepository implements ContentQueryRepository {
                 contentText: revision.contentText,
                 currentRepresentationId: revision.currentRepresentationId,
                 evidenceStatus: revision.evidenceObservationId === null ? "representation-unavailable" : "available",
-                representation: record === null ? null : {
-                    id: record.id, entryRevisionId: record.entryRevisionId,
-                    representationVersion: record.representationVersion, parserVersion: record.parserVersion,
-                    status: record.status, blocks: parseStoredJson(record.blocksJson), contentText: record.contentText,
-                    qualitySignals: parseStoredJson(record.qualitySignalsJson),
-                    supersedesRepresentationId: record.supersedesRepresentationId, createdAt: record.createdAt.toISOString(),
-                },
+                representation: storedRepresentation(record),
             };
         });
     }

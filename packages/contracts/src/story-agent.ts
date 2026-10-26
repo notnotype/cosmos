@@ -76,6 +76,7 @@ export const storyAgentCandidateSchema = z.object({
 export const storyAgentCandidateRecordSchema = z.object({
     candidate: storyAgentCandidateSchema,
     status: z.enum(["pending", "accepted", "rejected"]),
+    sourceStatus: z.enum(["current", "superseded", "unavailable"]).optional(),
 }).strict();
 
 export const storyAgentCandidateDecisionSchema = z.object({

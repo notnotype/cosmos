@@ -1,4 +1,4 @@
-import { storyAgentCandidateSchema, type StoryAgentCandidate } from "@cosmos/contracts";
+import { storyAgentCandidateSchema, type StoryAgentCandidate, type StoryAgentCandidateRecordContract } from "@cosmos/contracts";
 import { requireContentProfile, type ContentReadAuthority } from "./content-access-policy.js";
 
 export type StoryAgentCandidateStatus = "pending" | "accepted" | "rejected";
@@ -6,6 +6,7 @@ export type StoryAgentCandidateStatus = "pending" | "accepted" | "rejected";
 export interface StoryAgentCandidateRecord {
     candidate: StoryAgentCandidate;
     status: StoryAgentCandidateStatus;
+    sourceStatus?: StoryAgentCandidateRecordContract["sourceStatus"];
 }
 
 /** The repository commits the decision, formal command and audit atomically. */

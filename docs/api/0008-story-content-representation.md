@@ -47,7 +47,7 @@ Contracts 唯一拥有跨边界 JSON schema；Application ContentQuery 统一提
 | `GET stories/:storyId/agent-generations/:runId` | 仅返回 runId/storyId/task/connectionId、`queued/running/completed/failed/cancelled`、candidateId、errorCode。仅 completed 有 candidateId，失败只给 `generation_failed`；无模型响应正文、凭证或内部错误。不同 Story 或未知 Run 返回 404。 |
 | `POST story-agent-candidates/:candidateId/decision` | 仅 `decision: accept/reject`。主机提供操作者；接受摘要或 Entry 关系与候选状态、审计在同一事务提交。重复决定和过期输入返回 409。 |
 
-所有请求对象严格校验，不能携带自定义 actor、profile、provider 或授权字段。模型/地址/凭证由所选连接在 Worker 调用时解析，权限与预算由主机授予。浏览器发送前保留同键意图，响应丢失只恢复原请求；已知 Run 刷新仅查询，不自动重新生成。失败/取消可能晚于候选提交，因此任务投影没有 candidateId 不等于候选列表为空；所有终态重新读取候选列表，外呼结果不确定时禁止自动重发。质量检查候选可查看、拒绝；接受返回 unsupported/409，因为当前没有对应正式写入命令。摘要接受保留候选未拥有的既有时间范围。精确来源证据和候选 JSON 保留原输入版本，不随当前表示切换而改写。
+所有请求对象严格校验，不能携带自定义 actor、profile、provider 或授权字段。模型/地址/凭证由所选连接在 Worker 调用时解析，权限与预算由主机授予。浏览器发送前保留同键意图，响应丢失只恢复原请求；已知 Run 刷新仅查询，不自动重新生成。失败/取消可能晚于候选提交，因此任务投影没有 candidateId 不等于候选列表为空；所有终态重新读取候选列表，外呼结果不确定时禁止自动重发。质量检查候选可查看、拒绝；接受返回 unsupported/409，因为当前没有对应正式写入命令。摘要接受保留候选未拥有的既有时间范围。精确来源证据和候选 JSON 保留原输入版本，不随当前表示切换而改写。候选记录增加可选只读 `sourceStatus: current/superseded/unavailable`；当前服务始终计算并返回，旧记录/测试消费者缺字段不伪造已验证状态。该投影不进入 candidate JSON、不写回审计：无来源输入为 current；所有历史输入仍可用且为来源当前修订/当前表示时为 current；任一输入已非当前为 superseded；任一精确表示缺失、损坏、failed 或原始证据引用缺失为 unavailable（优先于 superseded）。Web 对后两者提示旧版/待重新验证，保留原版本详情及人工拒绝；接受在同一事务重新验证，只允许 current，过期返回 409，无正式写入或决定审计。已经 accepted/rejected 的历史记录不被撤销或改写。
 
 `story.summarize`、`story.extract-relations`、`story.review-content-quality` 生成候选；用户接受由正式命令处理并记录审计。候选绑定实际输入版本，重复接受不重复正式写入，基线变化必须拒绝或明确要求重新验证，不自动套用。Agent 不可直接改写 Observation、EntryRevision、权限或已接受事实。
 

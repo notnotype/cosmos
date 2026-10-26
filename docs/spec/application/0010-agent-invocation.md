@@ -48,6 +48,8 @@
 
 默认只读取 Story 摘要，正文必须显式申请权限并指定来源修订及表示版本；输出须为无工具调用的完整 JSON 提案，且证据只能引用实际读取的版本/块。候选保存与人工接受/拒绝边界不变。
 
+来源表示或修订变化不迁移已有候选证据。候选读取返回实时 `sourceStatus`，旧版/不可用仍可查看和拒绝；正式接受在同一事务重验当前来源，非 current 返回冲突且不写正式版本或决定审计。合成升级结果、质量排序及旧证据演进的隔离存储验收见 [content-evolution.test.ts](../../../packages/storage-prisma/src/content-evolution.test.ts)，不代表真实解析器发布或真实模型调用。
+
 产品 POST 显式提交 `connectionId`、task、可选精确 sources 与 `Idempotency-Key`，返回 202 任务投影；详见 [内容表示 API](../../api/0008-story-content-representation.md)。API 冻结 Query 允许的输入，按键去重复用既有 Host 的 `cosmos.story-agent@1`，不加载 SDK、不静默选第一条连接。相同键不同意图拒绝；已入队请求重放不重读变化后的输入。固定预算 60s、2048 输出 token、0 工具调用，@2 仍按连接上限夹取。
 
 Worker 注册生成与 `story.agent-candidate.save@1`，候选按 Run 派生固定 ID；保存事务检查 live Run/Job 双租约、Kernel revision 与 Activity 身份，拒绝取消后的旧执行。同一候选幂等，正式接受仍另经原子命令。外呼结果不确定不得自动重发模型；失败/取消可发生在候选提交之后，终态页面查询实际候选列表，不能保证“没有保存”。浏览器在发送前保存同键意图；未知响应只人工恢复同一请求，已知 Run 刷新只 GET 查询。

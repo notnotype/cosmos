@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { configuredModelSnapshotSchema, connectionInstanceSchema, modelProviderSnapshotSchema,
+    storyAgentCandidateRecordSchema, contentRebuildResultSchema, structuredContentViewSchema,
     storyAgentGenerationRequestSchema, storyAgentGenerationSchema, storyDetailSchema } from "@cosmos/contracts";
 import { ingestFeed, openStory, waitForStoryId } from "../support/story-flow";
 
@@ -64,7 +65,28 @@ test("Story generation uses the product queue and Worker before a human accepts 
     await panel.getByLabel("允许读取此 Story 的来源正文", { exact: true }).check();
     await generate.click();
     await expect(panel.getByRole("heading", { name: "Synthetic generated title 2", exact: true })).toBeVisible();
-    await panel.getByRole("button", { name: "拒绝建议", exact: true }).click();
+    const records = async () => storyAgentCandidateRecordSchema.array().parse(await (await page.request.get(endpoint)).json());
+    const oldCandidate = (await records()).find((record) => record.status === "pending")!;
+    const binding = oldCandidate.candidate.inputSources[0]!;
+    const contentEndpoint = `/api/v1/revisions/${encodeURIComponent(binding.entryRevisionId)}/content`;
+    const history = async () => structuredContentViewSchema.parse(await (await page.request.get(`${contentEndpoint}?representationVersion=${binding.representationVersion}`)).json());
+    const oldView = await history();
+    const rebuild = await page.request.post(`${contentEndpoint}/rebuild`, { data: {} });
+    expect(rebuild.status()).toBe(201);
+    expect(contentRebuildResultSchema.parse(await rebuild.json()).promoted).toBe(true);
+    expect(await history()).toEqual(oldView);
+    expect((await records()).find((item) => item.candidate.id === oldCandidate.candidate.id)).toMatchObject({
+        candidate: oldCandidate.candidate, status: "pending", sourceStatus: "superseded",
+    });
+    const staleDecision = await page.request.post(`/api/v1/story-agent-candidates/${encodeURIComponent(oldCandidate.candidate.id)}/decision`, { data: { decision: "accept" } });
+    expect(staleDecision.status()).toBe(409);
+    expect((await detail()).story.revisionId).toBe(accepted.story.revisionId);
+    await page.reload();
+    await expect(panel.getByText("基于旧版内容表示；请重新验证后再接受。", { exact: true })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "接受建议", exact: true })).toBeDisabled();
+    await panel.getByRole("button", { name: "拒绝建议", exact: true }).focus();
+    await expect(panel.getByRole("button", { name: "拒绝建议", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(panel.getByText("已拒绝", { exact: true })).toBeVisible();
     expect((await detail()).story.revisionId).toBe(accepted.story.revisionId);
     await page.reload();

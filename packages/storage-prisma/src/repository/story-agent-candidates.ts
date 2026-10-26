@@ -6,6 +6,7 @@ import {
     type StoryAgentCandidateStatus,
 } from "@cosmos/application";
 import { type StoryAgentCandidate, storyAgentCandidateSchema, storySuccessorSchema, storyTimeRangeSchema } from "@cosmos/contracts";
+import { candidateSourceStatus } from "./story-agent-source-status.js";
 import { writeEntryRelation } from "./entry-relation-command.js";
 import { writeStoryRevision } from "./story-revision-command.js";
 import { appendDomainEvent, assertWorkflowActionFence } from "./repository-internals.js";
@@ -65,14 +66,15 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
     }
 
     async list(storyId: string): Promise<readonly StoryAgentCandidateRecord[]> {
-        const rows = await this.prisma.storyAgentCandidate.findMany({
-            where: { storyId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 100,
-        });
-        return rows.map((row) => {
-            if (row.status !== "pending" && row.status !== "accepted" && row.status !== "rejected") {
-                throw new Error("Invalid Story candidate status");
-            }
-            return record(parseCandidate(row.candidateJson), row.status);
+        return this.prisma.$transaction(async (tx) => {
+            const rows = await tx.storyAgentCandidate.findMany({
+                where: { storyId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 100,
+            });
+            return Promise.all(rows.map(async (row) => {
+                if (row.status !== "pending" && row.status !== "accepted" && row.status !== "rejected") throw new Error("Invalid Story candidate status");
+                const candidate = parseCandidate(row.candidateJson);
+                return { ...record(candidate, row.status), sourceStatus: await candidateSourceStatus(tx, candidate) };
+            }));
         });
     }
 
@@ -90,11 +92,8 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
             if (input.decision === "accept") {
                 const story = await tx.story.findUnique({ where: { id: candidate.storyId } });
                 if (!story || story.currentRevisionId !== candidate.storyRevisionId) throw new StoryAgentCandidateError("conflict", "Story candidate input changed");
-                for (const binding of candidate.inputSources) {
-                    const representation = await tx.contentRepresentation.findUnique({
-                        where: { entryRevisionId_representationVersion: binding },
-                    });
-                    if (!representation || representation.status === "failed") throw new StoryAgentCandidateError("conflict", "Story candidate source unavailable");
+                if (await candidateSourceStatus(tx, candidate) !== "current") {
+                    throw new StoryAgentCandidateError("conflict", "Story candidate sources changed or are unavailable");
                 }
                 await this.applyCandidate(tx, candidate, input.actorId);
             }
@@ -111,7 +110,7 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
                 aggregateId: candidate.storyId,
                 payload: { candidateId: candidate.id, decision: input.decision, actorId: input.actorId },
             });
-            return record(candidate, input.decision === "accept" ? "accepted" : "rejected");
+            return { ...record(candidate, input.decision === "accept" ? "accepted" : "rejected"), sourceStatus: await candidateSourceStatus(tx, candidate) };
         });
     }
 

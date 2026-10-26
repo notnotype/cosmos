@@ -120,10 +120,12 @@ function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: Pa
         {records?.map((record) => <article key={record.candidate.id} className="space-y-3 border-t border-border pt-4 text-sm [overflow-wrap:anywhere]">
             <div className="flex flex-wrap gap-2"><h3 className="font-medium">{taskLabels[record.candidate.proposal.task]}</h3><span className="text-muted-foreground">{copy.statuses[record.status]}</span></div>
             <ProposalPreview record={record} />
+            {record.sourceStatus === "superseded" && <p role="status">{copy.sourceSuperseded}</p>}
+            {record.sourceStatus === "unavailable" && <p role="status">{copy.sourceUnavailableEvidence}</p>}
             <p className="text-xs text-muted-foreground">{record.candidate.provider} · {record.candidate.model} · {record.candidate.createdAt}</p>
             <details><summary className="cursor-pointer text-xs">{copy.versions}</summary><p className="text-xs">{copy.storyVersion(record.candidate.storyRevisionId)}</p>{record.candidate.inputSources.map((source) => <p className="text-xs" key={`${source.entryRevisionId}:${source.representationVersion}`}>{copy.sourceVersion(source.entryRevisionId, source.representationVersion)}</p>)}</details>
             {record.status === "pending" && <div className="flex flex-wrap gap-2">
-                {record.candidate.proposal.task !== "story.review-content-quality" && <Button size="sm" disabled={busy || unsavedEdit} onClick={() => void decide(record.candidate.id, "accept")}>{copy.accept}</Button>}
+                {record.candidate.proposal.task !== "story.review-content-quality" && <Button size="sm" disabled={busy || unsavedEdit || record.sourceStatus === "superseded" || record.sourceStatus === "unavailable"} onClick={() => void decide(record.candidate.id, "accept")}>{copy.accept}</Button>}
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => void decide(record.candidate.id, "reject")}>{copy.reject}</Button>
                 {record.candidate.proposal.task === "story.review-content-quality" && <p className="text-xs text-muted-foreground">{copy.quality}</p>}
             </div>}

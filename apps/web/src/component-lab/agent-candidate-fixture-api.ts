@@ -20,7 +20,7 @@ function candidate(story: StoryDetail, id: string): StoryAgentCandidateRecordCon
     } };
 }
 export function createAgentCandidateFixtureApi(story: StoryDetail,
-    behavior: { loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean }, onCount: (count: number) => void) {
+    behavior: { loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean; sourceStatus: "current" | "superseded" | "unavailable" }, onCount: (count: number) => void) {
     return {
         async listConnections() { return [{ id: "lab-model", name: "Synthetic model", connectorId: MODEL_CONNECTION_CONNECTOR_ID,
             account: null, scopeJson: null, configJson: null, status: "active" as const, secretRef: null, lastError: null,
@@ -52,7 +52,10 @@ export function createAgentCandidateFixtureApi(story: StoryDetail,
                 if (job.generation.status === "completed" || behavior.saveThenFail) {
                     const candidateId = `candidate-${runId}`;
                     if (job.generation.status === "completed") job.generation.candidateId = candidateId;
-                    data.records.unshift(candidate(story, candidateId));
+                    const record = candidate(story, candidateId);
+                    record.sourceStatus = behavior.sourceStatus;
+                    if (behavior.sourceStatus !== "current") record.candidate.inputSources = [{ entryRevisionId: "lab-old-source", representationVersion: 1 }];
+                    data.records.unshift(record);
                 }
                 writeStore(data);
             }

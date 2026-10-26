@@ -53,6 +53,8 @@ export const reading = {
         empty: "暂无建议。",
         statuses: { pending: "待决定", accepted: "已接受", rejected: "已拒绝" },
         versions: "查看输入版本",
+        sourceSuperseded: "基于旧版内容表示；请重新验证后再接受。",
+        sourceUnavailableEvidence: "原输入证据暂不可用，待重新验证；仍可查看或拒绝建议。",
         storyVersion: (id: string) => `Story 版本：${id}`,
         sourceVersion: (id: string, version: number) => `${id} · 表示版本 ${version}`,
         accept: "接受建议",

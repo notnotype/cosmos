@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generated": "2026-09-11",
-  "note": "存量超标登记：条目只允许移除、登记值只允许下调（治理目标）；基线内文件增长只报 warning，不阻塞 CI。2026-09-16 维护者裁定增补三条：docs/spec/domain/0001-normalized-content.md 与 docs/testing/README.md（只在 token 轨道触线，因未登记文件进警戒区而阻塞 CI，登记后允许 ORG-017 的规格按实际行为完整书写）；docs/proposals/ui-copy-review-v1.md（reviewing 中的提案，26.1 KB / 9.1k token，先登记以解除 CI 阻塞，定稿搬入 standards 后应缩回并移除本条）。登记值为登记当天的实际字节。2026-10-01 Task 35 切片 3e/4 维护者裁定再增补两条：Phase-2-UNDO.md（9.7k token，历史回滚记录，本轮未改动）与 docs/proposals/ui-surface-ownership-v1.md（HEAD 已是 9.2k token，本轮加一句交叉引用后 9.3k）——两份都在本轮之前就已越过 token 警戒线、阻塞 CI；后者随 ADR-0029 定稿与信息架构收口后应缩回并移除本条。同日后者的文档搬入 docs/ 下，键名随之更新。2026-10-08 移除 docs/Phase-2-UNDO.md 一条：该文件当日封口（sealed_at 2026-10-08，停止维护），封口横幅替换掉已被取代的重复段落，压回健康区（26.9 KB / 8.95k token），不再需要登记。",
+  "note": "存量超标登记：条目只允许移除、登记值只允许下调（治理目标）；基线内文件增长只报 warning，不阻塞 CI。2026-09-16 维护者裁定增补三条：docs/spec/domain/0001-normalized-content.md 与 docs/testing/README.md（只在 token 轨道触线，因未登记文件进警戒区而阻塞 CI，登记后允许 ORG-017 的规格按实际行为完整书写）；docs/proposals/ui-copy-review-v1.md（reviewing 中的提案，26.1 KB / 9.1k token，先登记以解除 CI 阻塞，定稿搬入 standards 后应缩回并移除本条）。登记值为登记当天的实际字节。2026-10-01 Task 35 切片 3e/4 维护者裁定再增补两条：Phase-2-UNDO.md（9.7k token，历史回滚记录，本轮未改动）与 docs/proposals/ui-surface-ownership-v1.md（HEAD 已是 9.2k token，本轮加一句交叉引用后 9.3k）——两份都在本轮之前就已越过 token 警戒线、阻塞 CI；后者随 ADR-0029 定稿与信息架构收口后应缩回并移除本条。同日后者的文档搬入 docs/ 下，键名随之更新。2026-10-08 移除 docs/Phase-2-UNDO.md 一条：该文件当日封口（sealed_at 2026-10-08，停止维护），封口横幅替换掉已被取代的重复段落，压回健康区（26.9 KB / 8.95k token），不再需要登记。2026-10-26 移除四份 docs/spec 文档：G17 按 oversized-doc-splitting-v1 把它们拆成主文档 + 同级分册，四份主文档分别压到 7.85 / 4.23 / 4.57 / 4.59 KB，全部回到健康区且分册各自 ≤30 KB，故条目整体移除而非下调登记值。",
   "files": {
     ".agents/tasks/07-deferred-workflow-host/walkthrough.md": 41123,
     "CONTEXT.md": 38133,
@@ -9,11 +9,7 @@
     "docs/api/0005-worker-gateway-api.md": 30732,
     "docs/proposals/ui-copy-review-v1.md": 26729,
     "docs/proposals/ui-surface-ownership-v1.md": 27533,
-    "docs/spec/contracts/0001-public-contracts.md": 40427,
     "docs/spec/domain/0001-normalized-content.md": 29246,
-    "docs/spec/interfaces/0002-product-api-http.md": 42765,
-    "docs/spec/interfaces/0005-web-client.md": 41785,
-    "docs/spec/storage/0001-prisma-repository.md": 45279,
     "docs/testing/README.md": 28294
   }
 }

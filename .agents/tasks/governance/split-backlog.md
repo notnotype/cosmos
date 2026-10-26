@@ -49,5 +49,5 @@
 
 ## 5. 不在本台账范围
 
-- `.worktrees/fix-t39-provider-feedback/` 下的同名副本：该目录被 `.gitignore` 忽略，CI 克隆里不存在，本地跑门禁会报但不需要处理。
-- `docs/spec/interfaces/0005-web-client.md`（68.50 KB）、`docs/spec/storage/0001-prisma-repository.md`（58.11 KB）、`docs/spec/interfaces/0002-product-api-http.md`（57.24 KB）、`docs/spec/contracts/0001-public-contracts.md`（52.50 KB）：都在基线内，本轮因补规格而增长，属文档治理队列，不在代码拆分台账。
+- `.worktrees/fix-t39-provider-feedback/` 下的同名副本：该目录被 `.gitignore` 忽略，CI 克隆里不存在。**2026-10-26 已修掉导致它反复报警的脚本缺陷**：`scripts/size-governance.py` 的 `git ls-files --others --ignored` 对整目录被忽略的情况只返回目录条目（带尾斜杠），原实现用 `rel in skip` 按文件路径精确比对、永不命中，`SKIP_DIRS` 里也只有 `.worktree`（单数）；现改为 `is_ignored()` 同时支持等值与前缀匹配，并把 `.worktrees` 加入 `SKIP_DIRS`。修后本地门禁不再出现这批幻影 FAIL。
+- `docs/spec/interfaces/0005-web-client.md`（68.50 KB）、`docs/spec/storage/0001-prisma-repository.md`（58.11 KB）、`docs/spec/interfaces/0002-product-api-http.md`（57.24 KB）、`docs/spec/contracts/0001-public-contracts.md`（52.50 KB）：都在基线内，原为「属文档治理队列，不在代码拆分台账」。**2026-10-26 起已由文档治理任务 [`G17-doc-splitting-batch3/`](G17-doc-splitting-batch3/) 承接，且当日已收口**：四份各拆成主文档 + 同级分册，主文档 7.85 / 4.23 / 4.57 / 4.59 KB，19 个分册全部 ≤30 KB，四条的基线登记已移除（`docs-baseline.json` 12 → 8 条）。本台账不再跟这四个文件的状态。

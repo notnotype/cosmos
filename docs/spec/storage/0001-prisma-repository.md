@@ -26,211 +26,23 @@ API、`IngestionService` 和 legacy `IngestionWorker` 只调用 application port
 ### 典型情景
 保存一次 legacy ingest 结果、读取 Feed/Search/Story，或提供 Worker heartbeat/存储健康投影时，选择本 Repository。
 
+## 分册索引
 
-## 概念与定义
+本文件是当前实现规格的参考型清单,按章节拆分为分册(每册 ≤30 KB 且 ≤9k token,封口后只读);主文档只保留状态、组件定位、非目标/边界与下方索引,行为细节按章节查阅分册。
 
-- **Source（来源实例）**：`SourceInstance` 行，保存名称、Connector kind、JSON 配置和启用状态；公共 Source snapshot/config 的唯一 DTO 定义由 contracts owner 持有。
-- **Checkpoint（来源游标）**：每个 Source 至多一行的 cursor 记录。`revision`、`workflowRunId` 是 Workflow ingest 路径增加的 CAS/provenance 字段；旧 `setCheckpoint` 不使用 CAS。
-- **Legacy Run、Step、Job**：旧采集 lane 的 durable 账本。Run 属于 Source，Step 按 `(runId, position)` 唯一，Job 可关联 Run/Step，也可独立作为 probe；`kind = workflow-activity` 的 Job 不应被本仓储的 legacy worker claim。
-- **Observation（观察）**：一次来源捕获的不可变证据，带来源定位、内容、external key、raw payload Blob key 和 provenance；其领域字段/身份规则由 domain owner 定义。
-- **Entry、Entry Revision**：Entry 是由 Source 与稳定 canonical external key 归并的本地内容身份；修订按 `(entryId, revision)` 追加，Entry 的 `currentRevisionId` 指向当前修订。
-- **Asset、Story**：Asset 从属于 EntryRevision，保存媒体元数据和可选 Blob key；Story 是稳定、可编排的规范内容单元（ADR-0006），一个 Story 承载多个 Entry 的主归属，StoryRevision 按 `(storyId, revision)` 版本化并保存展示字段 fingerprint（title/summary/kind/subtype）与可选 actor/理由，由 current revision 指针选中；`producer` 记录写入者身份（`human`/`system`/`agent`，服务端按写入方赋值，调用方不可传），`producer = "human"` 的当前 Revision 对自动写入方冻结（ADR-0028）。`StoryAlias` 把已 merge（obsolete）的 Story id 指向 canonical Story id；obsolete Story 及其历史 Revision 保留。
-- **Domain Event**：`DomainEvent` 是 append-only 事件账本；SQLite 自增 `sequence` 是 replay 游标，`eventId` 唯一，payload 以 JSON 字符串保存。Workflow event 的 idempotency/lease 细节由 EventSink spec 拥有。
-- **FTS、Feed、Search、SSE replay**：仓储在初始化时创建 `entry_search` FTS5 表；Feed/Search 从当前 Entry/Revision/Story 关系读取，SSE 只消费按 DomainEvent sequence 查询出的事件，连接、keepalive 和 snapshot_required 由接口组件负责。
+| 分册 | 范围 | 大小 |
+|---|---|---|
+| [part-01](0001-prisma-repository/part-01-domain-model.md) | 概念与定义、存储根与连接、Source/legacy Run/Step/Job、Observation/Entry/Revision/Asset/Story | 9.1 KB |
+| [part-02](0001-prisma-repository/part-02-checkpoint-and-queries.md) | Checkpoint、领域查询、事件 replay | 23.2 KB |
+| [part-03](0001-prisma-repository/part-03-persistence.md) | 输入、输出、状态与持久化 | 12.2 KB |
+| [part-04](0001-prisma-repository/part-04-lifecycle.md) | 状态转换、副作用、错误与降级、依赖、配置 | 4.6 KB |
+| [part-05](0001-prisma-repository/part-05-acceptance.md) | 重建验收、实现与测试锚点 | 7.4 KB |
 
-## 外部行为
-
-### 存储根和连接
-
-`resolveStorageRoots(dataRoot = COSMOS_DATA_ROOT 或 `.cosmos`, workspaceRoot = COSMOS_WORKSPACE_ROOT 或 `process.cwd()`)` 将相对 data root 锚定到 workspace，并派生 `cosmos.sqlite`、`blobs`、`artifacts`、`cache`、`logs`、`secrets`。`createPrismaClient` 使用 `DATABASE_URL` 覆盖派生的 SQLite URL，否则使用该 database path。`initialize()` 连接 Prisma 并执行：
-
-```sql
-CREATE VIRTUAL TABLE IF NOT EXISTS entry_search USING fts5(
-    entry_id UNINDEXED, title, content_text, tokenize = 'unicode61'
-)
-```
-
-初始化或 `$connect` 失败会抛出原异常；`close()` 断开 Prisma，失败也向上抛出。
-
-### Source、legacy Run/Step/Job
-
-- `createSource` 将 config JSON 化后创建 Source，`enabled` 缺省为 `true`；`listSources` 按 `createdAt ASC` 且**排除墓碑**（`deletedAt` 非空）；`getSource` 对缺失或墓碑返回 `null`；`setSourceEnabled` 只更新 enabled。
-- **删除来源是墓碑（AUT-001）**：`deleteSource` 在同一事务里把 `deletedAt` 置为当前时间、`enabled` 置 false、revision 加一，删除该来源的 `TriggerBinding`，并写 `source.deleted.v1` 事件（含 actor/reason）。**不删除** Entry/Observation/EntryRevision/Asset——`Entry.sourceInstanceId` 是必填级联外键，硬删会连带删掉全部历史。命令幂等：已删除的来源再次调用直接返回墓碑快照，不重复写事件；过期 `baseRevisionId` 抛 revision 冲突；墓碑来源对 `updateSource`/`activateSource` 等同不存在；`listScheduleTriggers` 也跳过墓碑来源。
-- Source snapshot 会解析 `kind/config`，并额外查询最新 Run：`lastRunAt` 优先取 `finishedAt`，否则取该 Run 的 `createdAt`；`lastError` 取最新 Run 的 `errorMessage`。
-- `createRun` 在同一事务内创建 `running` Run、position 0 的 `running` Step 和 `leased` 的 `source-ingest` Job；Job owner 为 `synchronous-ingest`、attempts 为 1、lease 为当前时间后五分钟，并写 `run.queued.v1`。
-- `createQueuedRun` 在同一事务内创建 `queued` Run、`queued` Step 和 `queued` 的 `source-ingest` Job，并写 `run.queued.v1`。有 idempotency key 时，若同 key 已存在且关联 Run，则直接返回原 Run；新 Job 的 payload 至少包含 `sourceId`。
-- `createProbeJob` 按 idempotency key 查已有 Job，否则创建独立的 `source-probe`/`queued` Job 并写 `job.queued.v1`。Probe 的成功结果只写 Job，不持久化 Entry 或 Checkpoint。
-- `claimNextJob` 只在调用者提供的 `acceptedKinds` 集合内选择，候选为到期可执行的 `queued`/`retry_wait` 或 lease 已过期的 `leased`，按 `createdAt ASC` 取一条。更新谓词包含候选原 status；对已 leased 候选还包含旧 lease owner/token/expiry。成功后 attempts 加一、生成新的随机 lease token、保存 owner/expiry、清空 nextAttemptAt。
-- `renewJobLease` 只按 Job id、token、status=`leased` 更新 expiry，并以受影响行数是否为 1 返回 boolean。`completeJob` 只接受当前 token/status，并在事务中写状态、result/error、清空 lease；`retry_wait` 的 nextAttemptAt 默认是当前时间后 30 秒，也可使用调用方给的 retryDelayMs。
-- Legacy Job 的实现状态值为 `queued`、`leased`、`retry_wait`、`succeeded`、`failed_terminal`、`cancelled`；claim 发现 attempts 已达到 maxAttempts 时，会在事务内把 Job 置为 `failed_terminal`、清租约、若有关联 Run 则将 Run 置为 `failed` 并写 `job.failed_terminal.v1`，然后返回 `null`。
-- `startRun`、`completeRun`、`resetRunForRetry` 在事务内同步更新 Run 和关联 Step 并写事件。传入 legacy `JobLease` 时，先用 Job id、Run id、token、status=`leased` 校验；stale token 会拒绝写入。`completeRun` 无 lease 时还会把该 Run 的 Job 清除租约并映射为 succeeded/cancelled/failed_terminal；带 lease 时不主动清除其它 Job。
-
-### Observation、Entry、Revision、Asset、Story
-
-`persistIngestItem` 和 `persistWorkflowIngestItem` 先使用 domain 规则计算 external key、Entry revision fingerprint、时间/Publisher/Metrics JSON；raw payload 先在数据库事务外写入 Blob Store，状态为 `saved` 且带内容的 Asset 也在事务外写入 Blob。随后一个 Prisma transaction 完成领域写入：
-
-1. Workflow 路径先校验 Run lease、Activity Job lease、attempt 和 kernel revision fence；`ingestCommandId` 已存在时返回已有 `ingestResultJson`，不重复领域写入。legacy Run 内若已有同 `(sourceInstanceId, runId, externalKey)` Observation，也返回 duplicate。
-2. 创建 Observation，记录 source/run/workflow provenance、`ingestCommandId`、external id/key/revision、eventKind、source locator/discovery JSON、正文、标题、URL、内容 fingerprint、content kind、Publisher/Metrics/Temporal JSON、exact sourcePublishedAt 和 raw payload Blob key。discovery JSON 至少含触发类型（`kind`，`manual`/`schedule`/`webhook`，缺省 `manual`）与发现渠道（`channel`，ING-004，取连接器声明的受管值；未声明时写 `unknown`）。
-3. 找不到 Entry 时创建 Entry。若已有 current revision 的 fingerprint 相同，不追加 EntryRevision，只允许刷新 metrics 和发生变化的 published/updated 时间，并将此次 Observation/Run 结果标为 duplicate；fingerprint 改变时按 current revision 加一追加 EntryRevision。
-4. 新修订会 upsert Story（id 沿用既有 `Entry.storyId`，否则用 `story:<entryId>` projection），更新 kind；StoryRevision 以当前 revision 加 1 追加并携带展示字段 fingerprint。**若 Story 的当前 Revision 由人工写入（`producer = "human"`），投影整条跳过**：不改 `Story.kind`、不追加 Revision，且只在本该写入时写 `story.representation_projection_skipped.v1`（ADR-0028）。**若 title/summary/kind/subtype 无实质变化则不追加 StoryRevision**（no-op，ADR-0006 决策 3；扩展两项为空时指纹与升级前相同，该路径不写这两列，ADR-0021 决定 4）；投影写出的 Revision 记 `producer = "system"`；随后更新 Entry/Story current revision、写 Asset 行并重建该 Entry 的 FTS5 行。
-5. 写 `entry.created.v1` 或 `entry.revised.v1`，并写 `feed.updated.v1`。legacy Run 递增 item/created/revised/duplicate 计数；Workflow 路径不使用 legacy Run 计数。返回 `createdEntry`、`revisedEntry`、`duplicateObservation` 三个 boolean。
-
-Raw payload/Asset Blob 写入发生在数据库事务前；数据库事务失败时没有跨系统补偿删除这些已写入 Blob 的实现。FileBlobStore 对同一内容 key 使用不覆盖写入，但本仓储不会为已存在的 Blob 再次做完整性验证。
-
-### Checkpoint、领域查询、事件 replay
-
-- `getCheckpoint` 返回 cursor；`getCheckpointSnapshot` 返回 cursor 与 revision；缺失行投影为 `null` 与 `0`。
-- legacy `setCheckpoint` 使用 upsert，只替换 cursor，不检查 revision。
-- `setWorkflowIngestCheckpoint` 在一个 transaction 中先校验 Workflow Action fence，再检查 Workflow domain event 的 `(workflowRunId, idempotencyKey)`。同 key 已存在时读取并返回其结果；当前 revision 不等于 expectedRevision 时保留当前 cursor/revision，写 `source.checkpoint.superseded.v1`，返回 `committed=false`；匹配时把 revision 加一、写 cursor/workflowRunId 和 `source.checkpoint.committed.v1`，返回 `committed=true`。
-- `feed` 按 Entry `updatedAt DESC` 使用非负 offset cursor，查询 `limit + 1` 行判断是否有 nextCursor；只投影有 current EntryRevision 与 Story current revision 的 Entry。`entries` 同样按 `updatedAt DESC`，可按 Source 过滤，并返回修订/观察计数与当前 Asset。
-- `search` 的文本条件使用 `entry_search MATCH ?` 和 `bm25(entry_search)`，按 rank 升序再按 Entry updatedAt 倒序；无文本时按 Entry updatedAt 倒序。**文本按字面处理，不当作 FTS5 查询语言**：输入按空白切成词、每段作为字面短语（内部引号双写转义），多词之间是 AND；语法字符（`-`、`"`、`*`、括号）因此都是普通字符，`OR`/`NEAR`/前缀通配不再是运算符。输入里没有可搜索的词（只有 `-`、`()` 之类）时按「无文本条件」处理，不构造空查询——把用户输入直接交给 `MATCH` 会让含语法字符的词触发 SQLite 语法错误并让请求 500（`search-query.test.ts` 固定该语义）。可按 Source、publishedAfter、publishedBefore 过滤，日期必须能解析为合法 ISO 时间。Search/Feed/Entries 都返回 offset 形式 nextCursor。
-- `story`、`entry`、`revision` 返回 contracts 规定的白名单投影；`story` 先按 `StoryAlias` 把旧 id 解析到 canonical Story（split 不写 alias，所以历史壳的 id 解析到它自己），再返回可空 `entry`（最近成员，兼容位；历史壳可能没有成员）、`entries`（全部成员，updatedAt 倒序，可为空）、`entities`（该 Story 已关联 Entity 的当前快照列表，取自 `StoryEntity` + Entity 当前 Revision）、用户组织投影 `labels`（`LabelAssignment` + Label name，ADR-0009）和 `favorited`（Story 级 `Favorite` 是否存在）、证据关系投影 `evidence`（`EntryStoryLink` + 条目来源与当前标题，ADR-0011）、Topic 成员投影 `topics`（当前未 tombstone 的 `TopicMembership` + Topic 当前标题 + role，ADR-0012），以及 split 投影 `story.status`（存在 `StoryReplacement` 行为 `split`，否则 `active`）与 `story.replacedBy`（后继 id/当前标题/kind），以及当前表示的 `story.timeRange`/`keyFacts`（直接解析 Revision 的两列，`keyFactsJson` 缺失时投影为空数组；出处条目是否仍存在不在读取侧校验）与 `story.producer`（当前 Revision 的写入者身份，客户端据此说明表示已被人工冻结，ADR-0028）。`entries[].relatedStories` 由同一张表按成员 id 一次查询后在内存分组得到。**条目↔条目重复/转载关系存在后**，`entries[].relations`（成员行标注）与 `entry.relations` 由 `EntryRelation` 按成员/条目 id 双边查询后在内存按「读到的这一侧」分组得到：对称关系两侧都是 `symmetric`，`syndicated_from` 在读 `fromEntryId` 侧是 `outgoing`、在读 `toEntryId` 侧是 `incoming`，对端条目的标题/来源在同一查询里 join（对端可以不属于本 Story）。不存在、或 Story 没有 current revision 时返回 `null`（历史壳只要有当前 Revision 就仍可读）。
-- `moveEntryToStory` 单事务内把 Entry 主归属改到目标 Story 并写 `story.entry_moved.v1`；Entry 已在目标 Story 时为幂等 no-op，Entry 缺失返回 `null`，目标缺失抛 `StoryNotFoundError`。**Entry↔Story 证据关系存在后**，同一事务内删除该 Entry 指向新主 Story 的冗余关联（有删除时写 `entry.story_unlinked.v1`，payload 带 `cause: primary_story_changed`），保持“不指向自己主 Story”的不变量（ADR-0011 决策 4）。指向历史壳的移动被允许，作为补偿手段（ADR-0012 决策 6）。
-- `updateStoryRevision` 以 `baseRevisionId` CAS：base 不是当前 Revision 时抛 `StoryRevisionConflictError`；历史壳拒绝改 Revision，抛 `StoryRevisionConflictError`（ADR-0012 决策 6）。**Story subtype 注册表存在后**（ADR-0013），subtype 写入先过 `checkStorySubtype`：`kind` 或 `subtype` 与 Story 当前值不同（即本次是新赋值）而 subtype 非空且不是该 kind 的 `active` 注册项时抛 `StorySubtypeInvalidError`（`code: validation`）；两者都未变时允许保留 Story 上既有的未注册旧值。展示字段 fingerprint 与当前相同则 no-op，否则按当前 revision 加 1 追加 Revision、移动 current、**把 `kind`/`subtype` 一并写回 Story 行**（此前只进指纹未持久化，读取投影一直取 Story 行），并写 `story.revision_created.v1`；该 Revision 记 `producer = "human"`（ADR-0028）。**Story 表示扩展存在后**（ADR-0021），`timeRange`/`keyFacts` 先过 domain 的 `normalizeStoryRepresentation`，同一份归一化结果同时进指纹与落库：空扩展序列化成 NULL，与扩展前 Revision 的列形状一致，所以既有 Story 不带扩展的编辑仍是 no-op，也不需要回填指纹；两列由 migration `20260916120000_story_representation_v1` 新增（forward-only，只加两个可空 TEXT 列、不回填）。写入不校验 `keyFacts[].entryId` 指向的条目是否存在。
-- `mergeStories` 单事务内把每个 obsolete Story 的 Entry 主归属移到 canonical、为 obsolete id 创建 `StoryAlias` 并写 `story.merged.v1`；obsolete Story 行与其 Revision 历史保留。obsolete 已是别名或等于 canonical 自身时抛 `StoryMergeConflictError`，缺失 Story 抛 `StoryNotFoundError`。**Topic 存在后**，同一事务内还会把指向 obsolete Story 的 `TopicMembership` 迁移到 canonical Story：`(topic, canonical)` 尚无成员时把该成员 `storyId` 改指 canonical（保留其 revision 链），否则删除该 duplicate 成员并写 `topic.membership_merged.v1`（ADR-0007 决策 4）。**Entity 关联存在后**，同一事务内还会把指向 obsolete Story 的 `StoryEntity` 迁移到 canonical Story：`(canonical, entity)` 尚无关联时把该行 `storyId` 改指 canonical（保留 provenance），否则删除该 duplicate 关联并写 `story_entity.merged.v1`（ADR-0008 决策 3）。**用户组织存在后**，同一事务内同样迁移 `CollectionItem`（collision 时删除 duplicate 并写 `collection.item_merged.v1`）、Story 级 `Favorite`（写 `favorite.merged.v1`）与 `LabelAssignment`（写 `label.assignment_merged.v1`），使各自唯一约束在 canonical Story 上继续成立（ADR-0009）。**Entry↔Story 证据关系存在后**，同一事务内把指向 obsolete Story 的 `EntryStoryLink` 重定向到 canonical：`(entryId, canonical)` 尚无关联时改指 canonical，否则删除 duplicate 并写 `entry_story.merged.v1`；随后删除因主归属变更而指向自己主 Story 的冗余关联（ADR-0011 决策 4）。canonical 或任一 obsolete 是历史壳时抛 `StoryMergeConflictError`（ADR-0012 决策 6）。
-- `splitStory`（ADR-0012）单事务把一条 Story 拆成 2–20 个后继：先用一次读取校验每个后继至少 1 个主成员、四组 id（`entryIds`/`evidenceEntryIds`/`entityIds`/`topicIds`）分别属于该 Story 的当前关系且跨后继不重叠、同一后继不得把某 Entry 既作为主成员又作为指向自己的证据链接迁入（ADR-0011 决策 3），任一不满足抛 `StorySplitConflictError`；Story 已是历史壳或没有当前成员同样抛 `StorySplitConflictError`，缺失抛 `StoryNotFoundError`。**Story subtype 注册表存在后**（ADR-0013），每个后继的 subtype 必须是对应 kind 的 `active` 注册项（后继是新对象，不接受未注册的继承值），否则抛 `StorySubtypeInvalidError`。事务内为每个后继创建 Story（`story:<uuid>`）与 revision 1（fingerprint/actor/reason，并写入后继自己归一化后的 `timeRangeJson`/`keyFactsJson`；壳上的两项不复制，ADR-0021 决定 6）、把列出的 Entry 主归属与三张关系表的行改指后继、写入 `StoryReplacement`（壳 → 后继，带 actor/reason）、为每个后继写 `story.revision_created.v1`（payload 带 `cause: split`），最后写一条 `story.split.v1`（壳聚合，payload 含每个后继与四组映射 id）。未列出的关系留在壳；用户状态（Favorite/LabelAssignment/CollectionItem/Annotation/SpotlightPlacement）不迁移。命令返回历史壳的 `StoryDetail`；重复提交同一条命令因 id 不再是壳的当前关系而抛 `StorySplitConflictError`。
-- `migrateStoryUserState(sourceStoryId, targetStoryId, favorite, labelIds, collectionIds, annotationIds, spotlightPlacementIds, actor?, reason?, basis?)`（ADR-0020）在同一个 split 家族内移动**以 Story 为 target** 的用户状态。两端先按 `StoryAlias` 解析 canonical；同一 Story、或任一端不属于同一个 `StoryReplacement` 壳（既不是壳也不是它的后继）时抛 `StoryUserStateMigrationConflictError`（`code: conflict`）。`labelIds`/`collectionIds` 按 Label/Collection 自身 id 定位（`(label, story)` 与 `(collection, story)` 唯一），并逐项校验命名的行确实在当前来源 Story 上：要求迁移来源没有的收藏，或标签/收藏夹/批注/固定中有任一项不在来源 Story 上，同样抛该错误——命名不属于来源的行是冲突而不是静默 no-op。事务内按唯一键碰撞去重（目标侧已有等价行则删除来源侧；`Annotation` 无唯一约束，整体改 `targetId` 且不改 `targetRevisionId`），返回每类 `{ moved, deduped }`。没有任何行被动到时返回全零且**不写领域事件**，否则写一条 `story.user_state_migrated.v1`（壳聚合，payload 含两端 id、五类计数与 actor/reason/basis）。作用域限定同一家族；Entry/Topic 级用户状态不参与迁移（它们随对象自身走）；迁移是历史壳上唯一允许的写操作（ADR-0020 决定 7）。
-- `listStorySubtypes({kind?})` 是纯投影，直接把 domain 的 `storySubtypeRegistry` 过滤后返回 `StorySubtypeRegistration[]`（`active` + `deprecated`，`retired` 不出现），不读数据库、不写任何状态（ADR-0013）。
-- **Entity 命令**：`createEntity`（name/type + 可选 `alias`）事务内创建 Entity、revision 1（name+type 的 fingerprint 版本）并可选写入首个别名，写 `entity.created.v1`。`updateEntity` 以 `baseRevisionId` CAS：base 不是当前 Revision 时抛 `EntityRevisionConflictError`，name+type 的 fingerprint 与当前相同则 no-op，否则追加 `EntityRevision` 并写 `entity.revision_created.v1`。`addEntityAlias`/`removeEntityAlias` 对 `(entityId, name)` 做离散增删（重复/缺失 no-op），写 `entity.alias_added.v1`/`entity.alias_removed.v1`。`linkStoryEntity`/`unlinkStoryEntity` 对 `(storyId, entityId)` 唯一关联做幂等增删并保存 provenance（producer 缺省 `human`、confidence 缺省 1），写 `entity.story_linked.v1`/`entity.story_unlinked.v1`；Story/Entity 缺失分别抛 `StoryNotFoundError`/`EntityNotFoundError`。`createEntityRelation`/`removeEntityRelation` 对带方向的 `(fromEntityId, toEntityId, relationType)` 唯一关系做幂等增删并保存 provenance，写 `entity.relation_created.v1`/`entity.relation_removed.v1`；未知关系类型或自环抛 `EntityRelationConflictError`，端点缺失抛 `EntityNotFoundError`。`entity`/`listEntities` 读取详情（current name/type、aliases、关联 Story 列表、双向关系列表）与列表投影（storyCount/relationCount）。
-- **Topic 命令**：`createTopic`（title/purpose/scope + 可选 `seedStoryId`）事务内创建 Topic 与 revision 1（fingerprint 判 no-op 的不可变版本），seed Story 存在时以 `core` 角色加入成员。`updateTopic` 以 `baseRevisionId` CAS，展示字段无实质变化则 no-op，否则追加 `TopicRevision` 并写 `topic.revision_created.v1`。`topic`/`listTopics` 读取成员列表（含 tombstone 的 `removed` 标记与 role/reason/actor）与列表投影（active 成员计数）；`topic` 先按 `TopicAlias` 解析旧 id。`mergeTopics` 把 obsolete Topic 的成员迁到 canonical（`(canonical, story)` 已有时保留 canonical 角色、删除 obsolete 侧重复并写 `topic.membership_merged.v1`）、创建 `TopicAlias` 并写 `topic.merged.v1`。成员命令 `addTopicMember`/`updateTopicMemberRole`/`removeTopicMember`/`restoreTopicMember` 对每个 `(topic, story)` 追加不可变 `TopicMembershipRevision`（role/reason/actor/tombstone），移除是 tombstone revision、可恢复；add 对 active 成员幂等，对 removed 成员等价 restore，role 未变化 no-op，作用于 removed/缺失成员时抛 `TopicMembershipNotFoundError`。
-- **用户组织命令（ADR-0009）**：`createLabel` 事务内创建 `Label`（name 全局唯一，冲突抛 `LabelConflictError`）并写 `label.created.v1`；`deleteLabel` 删除标签（级联其附加）并写 `label.deleted.v1`，缺失抛 `LabelNotFoundError`；`listLabels` 返回按 name 升序的列表投影（含非负 `assignedCount`），`label` 返回详情（按 targetType 分组并解析 Story/Entry/Topic 当前标题，缺失目标标题为空串）。`attachLabel`/`detachLabel` 对 `(labelId, targetType, targetId)` 做幂等增删并写 `label.assigned.v1`/`label.unassigned.v1`；写入前用 `resolveTargetTargetId` 把 Story 解析到 canonical 并校验目标存在（缺失抛 `StoryNotFoundError`/`EntryNotFoundError`/`TopicNotFoundError`），label 缺失抛 `LabelNotFoundError`。`createCollection`/`updateCollection`/`deleteCollection` 管理命名收藏夹并写 `collection.created.v1`/`collection.updated.v1`/`collection.deleted.v1`，缺失抛 `CollectionNotFoundError`。`addCollectionItem`/`removeCollectionItem` 对 `(collectionId, canonicalStoryId)` 做幂等增删并写 `collection.item_added.v1`/`collection.item_removed.v1`；`listCollections({storyId?})` 在给出 storyId 时附带 `containsStory` 成员投影，`collection` 返回成员 Story 列表（含当前标题与加入时间）。`setFavorite`/`unsetFavorite` 对 `(targetType, targetId)` 唯一行做幂等增删并写 `favorite.set.v1`/`favorite.unset.v1`，目标解析与存在性校验同上；`listFavorites` 按加入时间倒序返回。`story()` 额外投影 `labels`（已附加标签 id/name）与 `favorited`。
-- **Entry↔Story 证据关系命令（ADR-0011）**：`linkEntryStory` 先把 Story 解析到 canonical、校验 Entry 存在（缺失抛 `EntryNotFoundError`）与 Story 存在（缺失抛 `StoryNotFoundError`），指向 Entry 自己主 Story 时抛 `EntryStoryLinkConflictError`；`(entryId, storyId)` 已存在时按语义/来源逐字段比较，完全一致为 no-op，否则覆盖 `relationType` 与 provenance，新建或覆盖都写 `entry.story_linked.v1`。`unlinkEntryStory` 物理删除并写 `entry.story_unlinked.v1`，关系不存在时幂等 no-op。两者都返回刷新后的 canonical `StoryDetail`。`story`/`entry` 分别投影 `evidence` 与 `relatedStories`。
-- **条目↔条目重复/转载关系命令（ADR-0022）**：`linkEntryRelation` 先校验两个 Entry 都存在（缺失抛 `EntryNotFoundError`），自关联抛 `EntryRelationConflictError`；随后用 domain 的 `normalizeEntryRelationEndpoints` 归一化，并按**无序对**（`(from,to)` 或 `(to,from)`）查找已有行 —— 所以对称类型的反向提交命中同一行、只是覆盖，不报错。已有行与新写入都是**有向**类型却方向相反时抛 `EntryRelationConflictError`（否则同一对会并存两个互相矛盾的当前断言）；否则覆盖 `relationType`（含把行整体翻向）与 provenance，逐字段完全一致为 no-op。新建或覆盖都写 `entry.relation_linked.v1`。`unlinkEntryRelation` 同样按无序对查找、物理删除并写 `entry.relation_unlinked.v1`，不存在时幂等 no-op。两者都返回 `fromEntryId` 那一侧刷新后的 `EntryDetail`。`mergeStories`/`splitStory` 不读写本表（关系挂条目内容身份），条目被删除时按 `onDelete: Cascade` 级联删除。
-- **Annotation 命令**：`createAnnotation` 先把 Story 目标解析到 canonical 并固定当时的 `currentRevisionId`（Entry/Topic 目标无 revision 指针），再写入 `Annotation` 并写 `annotation.created.v1`；目标缺失按类型抛 `StoryNotFoundError`/`EntryNotFoundError`/`TopicNotFoundError`。`updateAnnotation` 覆盖 body/quote/evidence 与 actor 并写 `annotation.updated.v1`，缺失抛 `AnnotationNotFoundError`。`deleteAnnotation` 物理删除并写 `annotation.deleted.v1`，缺失抛 `AnnotationNotFoundError`。`listAnnotations({targetType, targetId})` 解析 canonical 目标后按 `createdAt` 升序返回。
-- **Saved View 命令**：`createSavedView`/`updateSavedView`（`name` + 白名单 conditions）把条件写为列与 `labelIdsJson`/`topicIdsJson`，写 `saved_view.created.v1`/`saved_view.updated.v1`；`deleteSavedView` 写 `saved_view.deleted.v1`，缺失均抛 `SavedViewNotFoundError`；`listSavedViews` 按 `createdAt` 升序。`search` 新增 `labelIds`/`topicIds` 过滤：label 用 Story 级 `LabelAssignment` 的 EXISTS 子查询、topic 用 `TopicMembership` + 当前 `TopicMembershipRevision`（`tombstone = 0`）的 EXISTS 子查询，多 id 为 any-of 语义；无过滤时行为不变。
-- **看板命令（ADR-0010）**：`listBoards` 按 `createdAt` 升序返回 `sectionCount` 投影；`getBoard` 单次读取 sections + blocks 树（各按 `position` 升序），缺失返回 `null`。`createBoard`/`updateBoard` 在唯一 name 冲突时抛 `BoardNameConflictError`（P2002 映射）、缺失抛 `BoardNotFoundError`，分别写 `board.created.v1`/`board.updated.v1`；`deleteBoard` 级联删除 Section/Block 并写 `board.deleted.v1`（不触碰任何内容对象）。`createSection` 缺省 position 追加末尾、显式 position 时把 `>= position` 的 section 后移，写 `board.section.created.v1`；`updateSection`/`deleteSection` 写 `board.section.updated.v1`/`board.section.deleted.v1`，缺失抛 `BoardSectionNotFoundError`。`createBlock` 先用 `blockConfigSchemaFor(type)` 做按类型 strict 白名单校验（未知 type 抛普通 Error，非法 config 抛 ZodError）并序列化，再按 section 内 position 插入，写 `board.block.created.v1`；`updateBlockConfig` 读取已存 `type` 后重新校验，写 `board.block.config_updated.v1`；`moveBlock` 可跨 section，事务内对目标 section 内存重排（只写变化行）并紧凑化原 section，写 `board.block.moved.v1`；`setBlockVisibility` 只改 `visible`（隐藏 ≠ 删除），写 `board.block.visibility_updated.v1`；`duplicateBlock` 把 `>= position + 1` 后移后在原块之后插入同 type/config 副本，写 `board.block.duplicated.v1`；`deleteBlock` 写 `board.block.deleted.v1`，缺失抛 `BoardBlockNotFoundError`。上述树写入命令统一返回刷新后的 `BoardDetail`。`ensureDefaultBoard` 幂等 seed：已有任意 Board 时返回最早创建的一个；否则在同一事务内创建「默认看板」（热点/精华/信息流三 Section，分别含 `spotlight`/`topic-list`/`feed` + `source-health` 初始 Block，config 为 `{}`）并写 `board.seeded.v1`，并发 seed 的 name 冲突回退到已存在 Board。
-- **Spotlight 命令（ADR-0010 决策 3）**：`listSpotlightPlacements({boardId?})` 按 `createdAt` 升序返回并批量解析 `targetTitle`（Story/Topic 当前 Revision 标题，缺失为 null）。`createSpotlightPlacement` 先把 Story 解析到 canonical、校验目标与 Board 存在（缺失抛 `StoryNotFoundError`/`TopicNotFoundError`/`BoardNotFoundError`），对 `(boardId, targetType, targetId)` 幂等（已存在返回原行），新建写 `spotlight.placement_created.v1`；v1 固定写入 `source=manual`、`expiresAt=null`。`deleteSpotlightPlacement` 物理解除并写 `spotlight.placement_deleted.v1`，缺失抛 `SpotlightPlacementNotFoundError`。`mergeStories`/`mergeTopics` 在同一事务内把指向 obsolete 目标的 placement 重定向到 canonical，同 Board 冲突时丢弃 obsolete 侧重复项并写 `spotlight.placement_merged.v1`。
-- `readAsset` 查 Asset 的 storageKey，再从 Blob Store 读取 bytes 并返回 mimeType；Asset 缺失或没有 storageKey 返回 `null`，Blob read 错误向上抛出。
-- **媒体重试端口（ADR-0015 决策 2–5）**：`listRetryableMediaAssets({ sourceId, maxAttempts, limit })` 返回该来源**当前 Revision** 上状态为 `failed`/`skipped`、`errorCode ∈ {timeout, network, http_error, budget_run}`、`attemptCount < maxAttempts` 且 `sourceUrl` 非空的图片候选（`kind = image` 或 `kind = enclosure` 且 `mimeType` 以 `image/` 开头）；`maxAttempts <= 0` 返回空。`applyMediaRetryOutcome({ workflowRunId, fence, outcome, expectedAttemptCount })` 在同一事务内先校验 host fence，再用 `(id, attemptCount = expectedAttemptCount)` CAS 原地更新该 Asset：saved 写 storageKey/byteSize/mimeType 并清空 `errorMessage`/`errorCode`；降级只写 `errorCode`/`errorMessage`，两种情况都递增 `attemptCount` 并写 `lastAttemptAt`。CAS 未命中返回 `false`，不写事件；命中写 `media.retry.attempted.v1`（`aggregateType: Asset`）。不写 EntryRevision、不改 `contentFingerprint`。
-- **保留期清理端口（ADR-0015 决策 6–9）**：`listRetentionCleanupCandidates({ sourceId?, now?, limit? })` 先解析来源 `configJson.media.retentionDays`（`<= 0` 跳过），再按 `createdAt < now - retentionDays` 收集 `status: saved` 且 `storageKey` 非空的 Asset，返回 assetId/storageKey/byteSize/sourceId/sourceName/entry 标题/createdAt/expiredAt/retentionDays。`runMediaCleanup({ workflowRunId, fence, sourceId, dryRun })` 复用同一候选查询；`dryRun` 只汇总并写 `media.cleanup.completed.v1` 事件，不改变任何行或 Blob；非 dryRun 对每个候选在一个事务里（先校验 host fence）把 Asset 更新为 `metadata_only`、`storageKey: null`、`byteSize: null`、`errorCode: retention_expired` 并保留 `sourceUrl`，随后统计同一 `storageKey` 的其它引用，只有最后一个引用者才调用 `FileBlobStore.delete`（删除失败只记日志，行已是终态）。`getMediaCleanupReport(runId)` 读取该 Run 最新一条 `media.cleanup.completed.v1` 并解析为报告；不存在或不可解析返回 `null`。
-- `events({afterSequence, limit})` 读取 `sequence > afterSequence`、按 sequence 升序的 DomainEvent，事件 id 投影为 sequence 字符串；`latestEventSequence` 返回最大 sequence 或 0。这是 SSE replay 的持久查询，不负责 SSE 连接或 snapshot_required。
-- `touchWorkerHeartbeat` 按 instanceId upsert status/version/lastSeenAt，status=`stopped` 时写 stoppedAt。`health()` 先执行 `SELECT 1`，再读最新 heartbeat；没有 heartbeat 为 unknown，lastSeenAt 超过 90 秒为 stopped，存储查询失败为 storage/migration failed。
-
-## 输入
-
-- Source、Run、Job、Feed、Search、Story、Entry、Revision、Asset、Event、Health 的公共输入/输出由 [`../contracts/0001-public-contracts.md`](../contracts/0001-public-contracts.md) 与 application 的 `CosmosRepository` 端口拥有；仓储不复制 DTO。
-- `NormalizedIngestItem`、`NormalizedAssetInput`、Publisher、TemporalValue、ContentMetrics、`deriveExternalKey` 与 fingerprint 规则由 [`../domain/0001-normalized-content.md`](../domain/0001-normalized-content.md) 拥有。仓储将已规范化对象 JSON 化后写入列。
-- `claimNextJob` 的 `acceptedKinds` 为空时立即返回 `null`；legacy worker 通过 `source-ingest`、`source-probe` 白名单隔离 `workflow-activity`。Job lease 必须为正整数；本仓储不声明默认 lease 配置。
-- Feed/Search/Entries 的非法、负数或非数值 cursor 由 `parseCursor` 按 offset 0 处理；Search 日期解析失败抛出明确错误。
-- Source/Run/Job/Checkpoint/Asset id 为字符串。查询缺失通常返回 `null`，Prisma `update` 找不到目标时保留底层异常，不统一包装为公共 NotFound DTO。
-
-## 输出
-
-成功输出是 contracts/application 端口定义的快照、页和事件白名单；内部 Prisma row、数据库 URL、绝对路径、secret 不作为公开 API 输出。仓储内部的 Asset snapshot 携带 storageKey，Product API 的公开投影另行剥离（`toPublicAsset` + `publicAssetSnapshotSchema`，见 [`interfaces/0002-product-api-http.md`](../interfaces/0002-product-api-http.md)）。Feed/Search/Entries 使用 `nextCursor = offset + limit` 或 `null`；DomainEvent replay 的 id 为 sequence 字符串。
-
-## 状态与持久化
-
-SQLite Prisma schema 是权威 durable truth。当前模型/关系的重建要点如下：
-
-| 模型 | 代码可证的关键字段/约束 | 关系/删除边界 |
-| --- | --- | --- |
-| `SourceInstance` | id、name、kind、configJson、enabled、可空 deletedAt（墓碑，AUT-001）、createdAt、updatedAt | 拥有 observations、runs、checkpoint、entries；Observation/Entry/Checkpoint 级联，Run 外键为 RESTRICT |
-| `Checkpoint` | sourceInstanceId 唯一、planId 唯一（可空）、cursor、revision、workflowRunId、updatedAt | 按**采集计划**寻址（ADR-0023 决策 2）；sourceInstanceId 保留到第 4 步 contract 删列；WorkflowRun 删除时 workflowRunId SET NULL |
-| `CollectionPlan` | name、sourceId 唯一、可空 connectionId、可空 mediaPolicyJson、overlapPolicy、enabled、revision、时间戳 | 拥有 triggerBindings/checkpoint/runs/workflowRuns；来源删除级联，连接删除 SET NULL；读投影派生 `scheduleIntervalMs`（schedule 行）与 `webhook` 入口（webhook 行），**不暴露触发器 id**（ADR-0025） |
-| `TriggerBinding` | sourceId、可空 planId、kind（`schedule`/`manual`/`webhook`）、configJson、enabled、revision、可空 webhookToken（唯一）、可空 secretRef | `(sourceId, kind)` 与 `(planId, kind)` 唯一：一个计划每种类型最多一行，schedule 与 webhook 可共存（ADR-0025）；来源删除级联，计划删除 SET NULL；只有 webhook 行写 webhookToken/secretRef，凭证字节在 SecretStore |
-| `ModelProvider` | id、name、api（`openai-completions`/`openai-responses`）、baseUrl、可空 secretRef（唯一）、version、state（默认 `active`）、可空 pendingOperationId（唯一）、时间戳 | 拥有 models；`secretRef` 只指向 SecretStore 里的字节，key 不进本表；`pendingOperationId` 是「同一 Provider 同时只有一个写操作」的占用标记；`state` 的 `deleting` 只存在于 DTO schema，当前没有写入点 |
-| `ConfiguredModel` | providerId、modelId（上游标识）、name、contextWindow、maxOutputTokens、version、时间戳 | `(providerId, modelId)` 唯一；`provider` 外键 RESTRICT，删 Provider 必须在同一事务里先删模型；`ConnectionInstance.modelId` 也以 RESTRICT 引用它，删被引用的模型会撞外键并被翻译成 409 `in_use` |
-| `ModelConfigurationOperation` | 全局唯一 idempotencyKey、kind（`create`/`update`）、providerId、state（`pending`/`completed`/`failed`/`cleanup_pending`）、phase、generation、可空 expectedVersion/resourceVersion、可空 newSecretRef（唯一）/oldSecretRef、可空 errorCode、时间戳 | 对 Provider 没有外键，所以收据可以活过 Provider 删除；只存非秘密的重放判定与清理线索，key 与可重放的命令 payload 不落本表 |
-| `ConnectionInstance` | id、name、connectorId、可空 account、可空 scopeJson（授权范围）、可空 configJson（适配器**非秘密**配置，JSON 文本）、status（`active`/`revoked`/`expired`/`error`）、可空 secretRef、可空 lastError、可空 lastCheckedAt（最近一次登录探测的时间）、可空 modelId、version、时间戳 | 可复用连接身份（ADR-0017）；`secretRef` 只指向 SecretStore 里的字节，凭证不进本表；`configJson` 装适配器自己的非秘密配置（Bilibili 的 OpenCLI profile，Proposal connection-login-lifecycle-v1），连接器从入队冻结的连接投影读它；`lastCheckedAt` 由登录探测回写（仓库方法 `recordConnectionProbe`，ADR-0027 决定 2），**不走公开的更新命令**；模型型连接（`connectorId = cosmos.agent`）用 `modelId` 指向本地模型配置、Provider 由模型归属推导（[Provider/model 配置合同](../../api/0009-provider-model-configuration.md)），`version` 是选择与撤销的 CAS 令牌；计划删除 SET NULL、来源的 `connectionId` 由仓库事务显式置空 |
-| `ConnectorState` | `(namespace, key)` 唯一、valueJson、单调 version（CAS 令牌）、updatedAt | 命名空间化 + 版本化的非秘密运行状态（ADR-0017）；**不写 Secret**，也没有指向计划／来源的外键——命名空间是宿主按 manifest 模板算出来的字符串 |
-| `ConnectorStateNamespace` | namespace 主键、planId、时间戳 | 抽屉归属（ADR-0026）：让「这个抽屉属于哪个计划」成为数据，`sourceId`／`connectionId` 靠 join `CollectionPlan` 取得；计划删除级联；**刻意没有从 `ConnectorState.namespace` 指向本表的外键**——登记是尽力而为的元数据，不能成为状态写入的前置条件 |
-| `Run` | source、triggerKind、status、created/started/finishedAt、item/created/revised/duplicate 计数、errorCode/errorMessage | 拥有 Step/Job/Observation/DomainEvent；子记录按 schema 级联或 SET NULL |
-| `Step` | runId、position 唯一、kind/status/attempts、input/output/error/时间 | 属于 Run，删除级联；Job 可关联 Step |
-| `Job` | 可选 runId/stepId/workflowRunId、可选 workflowKernelRevision、kind/status、payload/result、全局唯一 idempotencyKey、attempts/maxAttempts、lease owner/token/expires、nextAttemptAt/error | 同时承载 legacy 与 Activity Job；WorkflowCompletion 以 jobId 唯一关联 |
-| `WorkerHeartbeat` | instanceId 唯一、status/version、startedAt/lastSeenAt/stoppedAt | 独立心跳行 |
-| `DomainEvent` | 自增 sequence、eventId 唯一、type/version/payload/occurredAt、aggregate、runId、workflowRunId、idempotencyKey | Run/WorkflowRun 关联可 SET NULL；Workflow `(workflowRunId,idempotencyKey)` 唯一 |
-| `Observation` | Source/run/workflow、ingestCommandId 唯一、entry、external key/revision、locator、内容/时间/Blob/metrics | Source 删除级联；Run/Workflow/Entry 关联 SET NULL；`(sourceInstanceId,runId,externalKey)` 唯一 |
-| `Entry` | `(sourceInstanceId,canonicalExternalId)` 唯一、currentRevisionId 唯一、storyId、metricsJson | 拥有 revisions/observations；Source 删除级联，Story 删除 SET NULL |
-| `EntryRevision` | `(entryId,revision)` 唯一、title/summary/content/fingerprint/url/contentKind/Publisher/Temporal/createdAt | Entry 删除级联；Asset 从属于修订 |
-| `Asset` | revision、kind/status、sourceUrl/storageKey/mimeType/byteSize/errorMessage/errorCode、attemptCount、lastAttemptAt | EntryRevision 删除级联 |
-| `Story`/`StoryRevision`/`StoryAlias` | Story id/kind/subtype/currentRevisionId；Revision `(storyId, revision)` 唯一、fingerprint/producer/actorJson/reason/title/summary、可空 timeRangeJson/keyFactsJson；Alias id→canonicalStoryId | Story 拥有 revisions/entries；Revision 删除级联；Alias 级联到 canonical Story；`producer` 缺省 `system`，由 migration `20260924100000_story_revision_producer` 加列并按 `story.revision_created.v1` 事件回填 `human`（ADR-0028） |
-| `StoryReplacement` | `(storyId, successorStoryId)` 唯一、actorJson/reason；`(successorStoryId)` 索引 | 两列都级联到 Story；存在行即历史壳（ADR-0012 决策 1） |
-| `Topic`/`TopicRevision`/`TopicAlias` | Topic currentRevisionId；Revision `(topicId, revision)` 唯一、fingerprint/actorJson/reason/title/purpose/scope；Alias id→canonicalTopicId | Topic 拥有 revisions/memberships；Revision/Alias 级联到 Topic |
-| `TopicMembership`/`TopicMembershipRevision` | Membership `(topicId, storyId)` 唯一、currentRevisionId；Revision `(membershipId, revision)` 唯一、role/reason/actorJson/tombstone | Membership 级联到 Topic/Story；Revision 级联到 Membership |
-| `Entity`/`EntityRevision`/`EntityAlias` | Entity currentRevisionId/type；Revision `(entityId, revision)` 唯一、name/type、fingerprint/actorJson/reason；Alias `(entityId, name)` 唯一 | Entity 拥有 revisions/aliases/links/relations；Revision/Alias 级联到 Entity |
-| `StoryEntity` | `(storyId, entityId)` 唯一、producer/producerVersion/confidence/evidence/actorJson/reason | 级联到 Story 与 Entity |
-| `EntityRelation` | `(fromEntityId, toEntityId, relationType)` 唯一、producer/producerVersion/confidence/evidence/actorJson/reason | from/to 都级联到 Entity |
-| `EntryStoryLink` | `(entryId, storyId)` 唯一、relationType、producer/producerVersion/confidence/evidence/actorJson/reason、`(storyId)` 索引 | 级联到 Entry 与 Story；主归属仍由 `Entry.storyId` 唯一表达 |
-| `EntryRelation` | `(fromEntryId, toEntryId)` 唯一、relationType、producer/producerVersion/confidence/evidence/actorJson/reason、`(toEntryId)` 索引 | from/to 都级联到 Entry；对称类型写入前按 id 归一化，所以唯一键等价于无序对；与 Story 归属解耦 |
-| `Label` | name 全局唯一、createdAt/updatedAt | 拥有 assignments；Assignment 级联到 Label |
-| `LabelAssignment` | `(labelId, targetType, targetId)` 唯一、`(targetType, targetId)` 索引；无 target 外键（多态） | 只级联到 Label；目标行删除不自动清理附加 |
-| `Collection`/`CollectionItem` | Collection name/可空 description；Item `(collectionId, storyId)` 唯一、`(storyId)` 索引 | Item 级联到 Collection 与 Story |
-| `Favorite` | `(targetType, targetId)` 唯一、createdAt/updatedAt | 无目标外键（多态） |
-| `Annotation` | `(targetType, targetId)` 索引、可空 targetRevisionId/quote/evidence/actorJson、body | 无目标外键（多态）；Story merge 时 targetId 重定向到 canonical |
-| `SavedView` | name、可空 text/sourceId/publishedAfter/publishedBefore、labelIdsJson/topicIdsJson | 无外键（只存条件，不存结果） |
-| `Board` | name 全局唯一、可空 description、时间戳 | 拥有 sections；Section/Block 级联删除；不持有内容对象外键 |
-| `BoardSection` | boardId、title、position、`(boardId)` 索引 | 级联到 Board；拥有 blocks |
-| `BoardBlock` | sectionId、type、configJson、position、visible、`(sectionId)` 索引 | 级联到 Section；config 只引用内容对象 id，不建外键（悬空降级） |
-| `SpotlightPlacement` | `(boardId, targetType, targetId)` 唯一、`(boardId)`/`(targetType, targetId)` 索引、source 默认 `manual`、可空 reason/actorJson/expiresAt | 级联到 Board；目标行不建外键（Story/Topic merge 时显式重定向） |
-| `WorkflowRun`/`WorkflowCompletion` | 同库存在，但 kernel state、Run lease、Activity Completion 字段由后续 Host specs 拥有 | 本组件不定义其状态机 |
-
-`entry_search` 不是 Prisma model，而是在 `initialize()` 中创建的 FTS5 virtual table，当前写入列为 `entry_id`、`title`、`content_text`。
-
-## 状态转换
-
-- Source：创建时 enabled 缺省 true；只通过 `setSourceEnabled` 改变 enabled。
-- Legacy Run：`createRun` 直接进入 running；`createQueuedRun` 进入 queued；`startRun` 进入 running；`completeRun` 进入 succeeded/failed/cancelled 终态并写 finishedAt；`resetRunForRetry` 回到 queued 并清空 startedAt/finishedAt。仓储不实现新的 cancel request 状态。
-- Step：随 Run 的 queued/running/终态同步，startRun 增加 attempts。
-- Legacy Job：queued 或到期 retry_wait → leased；当前 lease 可转 succeeded、retry_wait、failed_terminal；过期或旧 token 不可覆盖。达到 maxAttempts 时由 claim 直接转 failed_terminal。
-- Observation：创建后作为证据保留；同一 legacy Run/external key 重放返回 duplicate。相同 Entry fingerprint 不追加修订，指标准确时间可刷新；不同 fingerprint 追加修订。
-- Checkpoint：legacy upsert 可直接替换 cursor；Workflow checkpoint 只有 expected revision 匹配才递增，失配只产生 superseded 结果。
-- DomainEvent：append-only，sequence 不复用；Workflow key 的同 type/version/payload 可幂等重放，不同 payload 由 Workflow event helper 冲突拒绝。
-- ModelProvider/ConfiguredModel：写入走 `expectedVersion` 的 CAS（`updateMany where { id, version }`，`count !== 1` 即 `version_conflict`）；Provider 的 `pendingOperationId` 在写操作期间占用，`state` 当前只会是 `active`。删除 Provider 在同一事务里连删模型，被 Connection 引用时整个事务拒绝。
-- ModelConfigurationOperation：`pending` → `completed` 或 `failed`（清理未完成时 `cleanup_pending`）；phase 与 generation 由恢复流程推进，代次递增后旧执行者失去发布资格。收据不对 Provider 建外键，所以 Provider 删除后仍可读取。
-
-## 副作用
-
-- Prisma transaction：Run/Step/Job 与 queued/leased/completion event；Observation/Entry/EntryRevision/Story/StoryRevision/Asset/FTS 与 ingest events；Workflow checkpoint 与 checkpoint event。
-- 文件系统：raw payload 和 saved Asset 先写 Blob Root；`readAsset` 从 Blob Root 读取。
-- FTS：初始化确保表存在；每次新 Entry 修订删除旧 entry_search 行再插入新标题/正文。
-- 事件/日志：DomainEvent 是持久账本；结构化 logger 记录初始化、claim 竞争、terminal Job、存储错误和 health 阶段。日志不替代事件。
-- 没有跨 Blob/SQLite 的事务补偿，也没有外部 outbox、消息发送或 exactly-once 发布。
-
-## 错误与降级
-
-- JSON/config/DTO 解析失败、日期过滤非法、FTS/Prisma/Blob I/O 失败一般按原异常向上抛出。
-- 两个例外按约束翻成业务码，而不是交给统一兜底：同一 Provider 下重复的 `modelId`（P2002）翻成 `already_exists`，删除仍被 Connection 引用的模型或 Provider（P2003 / 引用计数非零）翻成 `in_use`。两者重试都不会成功，退化成 `dependency_unavailable` 会让界面提示「稍后重试」并永远失败。
-- stale legacy Job 的 renew/complete 返回 `false`；空 acceptedKinds 返回 `null`；竞争导致条件更新为 0 时 claim 返回 `null` 并记录 debug。
-- maxAttempts 到达后 legacy Job terminalize，关联 Run 失败；具体 connector 错误是否可重试由 application worker 决定，本仓储只保存结果与 errorCode。
-- `health()` 对数据库查询失败或 heartbeat 查询失败返回失败状态而不是抛出；其它健康查询成功时 worker heartbeat 超时只投影为 stopped。
-- FTS virtual table 缺失会在初始化时创建；没有后台修复损坏 FTS 行的独立能力。
-
-## 依赖
-
-依赖 Prisma Client/SQLite、`@cosmos/contracts`、`@cosmos/domain`、`@cosmos/application` 的 `CosmosRepository`/日志/Host fence 类型以及 `@cosmos/blob-store`。Application 拥有端口和 legacy worker 合同，Domain 拥有规范化身份/内容规则，Blob Store 拥有文件路径和内容完整性；本组件拥有 SQL 领域表、事务和查询。
-
-## 配置
-
-- `COSMOS_DATA_ROOT`：默认 `.cosmos`；相对路径以 `COSMOS_WORKSPACE_ROOT` 或当前工作目录为基准。
-- `COSMOS_WORKSPACE_ROOT`：只控制相对 Data Root 锚定。
-- `DATABASE_URL`：覆盖派生 SQLite URL；当前实现基于 SQLite Prisma schema，不声明 PostgreSQL/MySQL 行为。
-- Data Root 派生 `databasePath/blobRoot/artifactRoot/cacheRoot/logRoot/secretRoot`；`resolveContainedPath` 拒绝相对路径逃出受控根。
-
-## 重建验收
-
-1. 在隔离空 Data Root 应用六条 migration，构造仓储并调用 `initialize()`；查询 `sqlite_master` 能看到 `entry_search`，`health()` 的 storage/migration 为 `ready`，`close()` 能断开客户端。
-2. 创建 Source，连续两次以同一 idempotency key 调用 `createQueuedRun`；两次返回同一 Run，Job 表只有一个关联 Job，DomainEvent 中只有一个对应 `run.queued.v1`。
-3. 让 owner A claim 一个 legacy Job 后使其 expiry 过去，再由 owner B claim；A 用旧 token 完成返回 `false`，B 的 lease 才能写入终态。
-4. 持久化同 external key 且 fingerprint 不变的两项；第二项返回 duplicate、EntryRevision 数仍为 1，但 metrics/精确时间可更新；改变正文 fingerprint 后 revision 数为 2，Feed/Search 读到最新投影。
-5. 持久化含 `saved` Asset 的 item；Asset 有 Blob storageKey 且 `readAsset` 读回原 bytes。执行 Probe Job 后，Entry 数和 Checkpoint cursor 保持不变。
-6. 用错误 expected revision 写 Workflow checkpoint；返回 `committed=false`、不覆盖当前 cursor/revision 并生成 superseded event；用当前 revision 写入时 revision 恰加一并生成 committed event。
-7. 对新 Entry 执行 Feed、FTS Search 和 DomainEvent replay；Feed/Search 返回正确 page/nextCursor，events 严格按 sequence 升序，latest sequence 等于最大 event sequence。
-8. 用隔离 fake 让 `SELECT 1` 或 heartbeat 查询失败；`health()` 返回 `storageStatus = failed`，并记录对应阶段而不是返回 ready。
-9. 在空库调用 `ensureDefaultBoard()` 两次：两次返回同一 Board（热点/精华/信息流三 Section 与各自初始 Block），`listBoards` 只有一条；删除该 Board 后再调用，观察创建了新的默认 Board。创建重名 Board 观察 `BoardNameConflictError`。
-10. 给 `feed` Block 提交白名单外键或给 `collection` Block 缺 `collectionId`，观察 ZodError 且树未变化；提交未知 type 观察拒绝；`duplicateBlock` 后观察同 config 副本插在原块之后；`setBlockVisibility(false)` 后树中该块 `visible=false` 仍存在；`deleteBlock` 后观察其绑定的 SavedView 仍可读取。
-11. 在隔离库里 seed 一条扩展前形状的既有 Story（Revision 的两列为 NULL、fingerprint 按升级前的四字段算法算出），不改任何字段调用 `updateStoryRevision`，观察不追加 Revision、current 指针不动且读回的两项为空；给同一 Story 设值、原样重复提交、再省略两项提交，观察每次实质变化只加一条 Revision、清空那条的两列为 NULL、原样重复提交是 no-op。
-
-## 实现与测试锚点
-
-- `packages/storage-prisma/src/index.ts:53-110`：StorageRoots、Prisma client、Data Root containment；`:113-166`：仓储构造、initialize、close。
-- `packages/storage-prisma/src/index.ts:168-757`：Source、Run、Step、legacy Job、claim/renew/complete/reset；`:760-1268`：raw/asset Blob、Observation/Entry/Revision/Story/FTS、Workflow ingest item 与 checkpoint CAS；`:1288-1847`：Run completion、Feed/Search/Entries/Story/Entry/Revision/Event/Asset/heartbeat/health；`:1849-2252`：快照投影、attempt projection、Job/Workflow fence、DomainEvent helper。
-- `packages/storage-prisma/prisma/schema.prisma`：所有模型、字段、索引、唯一约束和关系；migration 按时间戳前缀顺序应用，Phase 1 从 `20260808003247_phase1_foundation` 起，Phase 2 依次为 `20260907120000_story_revision_versioning`、`20260907130000_story_merge_alias`、`20260908000000_topic_domain_v1`、`20260908120000_entity_relation_v1`、`20260908140000_user_organization_v1`、`20260909100000_board_section_block_v1`、`20260909120000_spotlight_placement_v1`、`20261015000000_provider_model_configuration`、`20261018160000_workflow_activity_dispatch_fence`（forward-only，只增不改）。
-- `packages/storage-prisma/src/index.test.ts:58-219`：Data Root、Observation/Revision/Asset/Story/FTS；`:221-332`：metrics 不新建修订；`:334-409`：legacy Job 幂等、租约、事件；`:411-462`：Activity Job 与 legacy claim 隔离；`:464-566`：claim 竞争、max attempts、health 日志；`:568-822`：worker/probe/connector failure/schedule；`:823-912`：Workflow checkpoint 双 fence/CAS。
-- `packages/storage-prisma/src/user-organization-domain.test.ts`：Label 唯一命名/指派计数/详情标题解析、`(labelId, targetType, targetId)` 幂等附加与目标存在性、Collection 成员幂等与 `containsStory` 投影、Favorite 幂等与 Story 详情投影，以及 Story merge 的 move/collision 迁移（`collection.item_merged.v1`/`label.assignment_merged.v1`）。`entity-relation-domain.test.ts` 同形覆盖 Entity 命令与 `story_entity.merged.v1`。`entry-story-evidence.test.ts` 覆盖 Entry↔Story 关联的幂等/覆盖写、自关联与缺失目标错误、双向投影、merge 重定向与 self-link 清理、move 后的冗余删除，以及旧库 upgrade 后新表可用。`board-domain.test.ts` 覆盖默认 Board 幂等 seed、Board 唯一名与缺失错误、按类型 config 白名单（含未知 type 与非法 config）、跨 Section move 重排与 visible 切换、duplicate 原位副本、删除 Block 不删除被绑定的 SavedView，以及 Spotlight 的幂等 pin/解除、目标标题解析、缺失目标/看板错误与 Story merge 的 placement 重定向（含同 Board 冲突丢弃）。
-
-- `packages/storage-prisma/src/story-human-protection.test.ts`：PRD §12 第 4 条 / LIB-003 的回归锚点——人工编辑过表示的 Story 在来源重发布该 Entry 后标题/kind/时间范围/关键事实逐项不变、人工 merge 出的多 Entry Story 在成员被重发布后同样不变、未编辑的 Story 仍跟随来源、`producer` 按写入方取值（人工命令 `human`、投影 `system`）且冻结只在本该写入时记 `story.representation_projection_skipped.v1`（ADR-0028）。`story-revision-producer-migration.test.ts` 单独钉住回填判据：只把有匹配 `story.revision_created.v1` 事件（按 `storyId` + `revision` 配对）的 Revision 标为 `human`，同 Story 其它 revision 的事件不误伤。
-
-- Provider/model 配置的仓储在独立文件里，不挂在 `index.ts` 的巨型类上：`packages/storage-prisma/src/model-provider-query-repository.ts`（读投影与 operation 收据查询）、`model-provider-credential-repository.ts`（凭证发布与垃圾清理，`canDelete` 在事务内断言没有 Provider 还指向该 ref）、`model-provider-removal-repository.ts`（单事务删除，引用检查与删除同事务，见上表）、`configured-model-repository.ts`（模型 CRUD 与 CAS，`create` 把 P2002 翻成 `already_exists`、`delete` 把 P2003 翻成 `in_use`）、`model-configuration-lock.ts`（跨进程排他锁，`fs-native-extensions`）、`provider-discovery-reader.ts`。对应的隔离测试：`model-provider-query-integration.test.ts`、`model-provider-credential-repository.test.ts`、`model-provider-removal-integration.test.ts`（真实 sqlite + 42 迁移，覆盖被引用拒绝、版本过期、删除后 `PRAGMA foreign_key_check` 干净）、`configured-model-repository.test.ts`、`model-configuration-lock.test.ts`、`provider-model-migration.test.ts`。这些测试都在隔离数据根下生成自己的 Prisma client，不读写用户数据。
+→ 概念与定义、存储根与连接、Source/legacy Run/Step/Job、Observation/Entry/Revision/Asset/Story 已归档:[part-01-domain-model.md](0001-prisma-repository/part-01-domain-model.md)
+→ Checkpoint、领域查询、事件 replay 已归档:[part-02-checkpoint-and-queries.md](0001-prisma-repository/part-02-checkpoint-and-queries.md)
+→ 输入、输出、状态与持久化 已归档:[part-03-persistence.md](0001-prisma-repository/part-03-persistence.md)
+→ 状态转换、副作用、错误与降级、依赖、配置 已归档:[part-04-lifecycle.md](0001-prisma-repository/part-04-lifecycle.md)
+→ 重建验收、实现与测试锚点 已归档:[part-05-acceptance.md](0001-prisma-repository/part-05-acceptance.md)
 
 ## 非目标/边界
 

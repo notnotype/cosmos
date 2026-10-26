@@ -28,184 +28,19 @@
 ### 典型情景
 新增或重建 API、SSE、Action 或 Workflow payload 时，先在这里确认 wire shape，再由拥有行为的组件实现解析后的流程。
 
-## 概念与定义
+## 分册索引
 
-### 协议和内容基础类型
+本文件是当前实现规格的参考型清单,按章节拆分为分册(每册 ≤30 KB 且 ≤9k token,封口后只读);主文档只保留状态、组件定位、非目标/边界与下方索引,行为细节按章节查阅分册。
 
-- **协议版本**：`protocolVersion` 固定为 `"v1"`。
-- **ContentKind**：wire enum 为 `post`、`article`、`video`、`audio`、`image`、`comment`、`listing`。本包只负责枚举解析；值的领域含义和 Story 映射由[规范化内容](../domain/0001-normalized-content.md)负责。
-- **PublisherKind**：wire enum 为 `user`、`channel`、`subreddit`、`official-account`、`org`、`unknown`。它是 Publisher 的传输字段，不由本包生成身份或执行领域归一化。
-- **Publisher**：`platformId`、`name`、`handle`、`profileUrl`、`kind`、`metrics`。`platformId`、`handle`、`profileUrl` 接受可空字符串，字符串先 trim，空白转为 `null`；`name` trim 后至少一个字符。缺少平台 ID 不会由本合同生成新的身份。
-- **PublisherMetrics**：`followers`、`following`、`statuses`、`voteup` 是可选、可空且必须为有限数值；`reliable` 可为 `high`、`low`、`unknown`。这是 wire shape，不包含 domain 的来源清洗策略。
-- **TemporalPrecision**：`second`、`minute`、`hour`、`day`、`week`、`month`、`year`、`unknown`。
-- **TemporalFallback**：保留原始 `raw`、带 offset 的 `lowerBound`、`precision`、可空 `timezone` 和 `confidence`（`high`、`inferred`、`uncertain`）。
-- **TemporalValue**：`exact` 是带 offset 的 datetime 或 `null`；`exactPrecision` 只能是 `second` 或 `null`；`fallback` 是 `TemporalFallback` 或 `null`。至少必须有 `exact` 或 `fallback` 之一。exact/fallback 的推导和投影算法由 domain 负责。
-- **ContentMetrics**：`values` 中的 `likes`、`views`、`reposts`、`comments`、`collects`、`score` 是可选、可空有限数值；`raw` 是 `Record<string, string>`；另有 `reliability`（`high`/`low`/`unknown`）和带 offset 的 `capturedAt`。本包只校验该 wire shape，不负责 Connector 的数值转换。
+| 分册 | 范围 | 大小 |
+|---|---|---|
+| [part-01](0001-public-contracts/part-01-base-types.md) | 概念与定义、协议和内容基础类型、Source 与采集命令、状态和查询 DTO | 14.3 KB |
+| [part-02](0001-public-contracts/part-02-content-dtos.md) | Feed、Entry、Story 与事件 DTO、Action、重试与可序列化引用 | 22.4 KB |
+| [part-03](0001-public-contracts/part-03-behaviour-and-acceptance.md) | 外部行为、输入、输出、状态与持久化、状态转换、副作用、错误与降级、依赖、配置、重建验收、实现与测试锚点 | 13.5 KB |
 
-### Source 与采集命令
-
-- **sourceDefinitionRef**（trim 后的版本化 ref，如 `source.rss@1`）是 SourceInstance 的唯一业务身份；**operationId** 必须出现在该定义 manifest 的 operationIds 中。旧 **SourceKind** 只作为迁移期运行时投影保留，新 Product API 命令不接受 `kind`。
-- **SourceConfig** 的通用字段是可选 `feedUrl`、`fixturePath`、`media`（来源级媒体策略）与 `scheduleIntervalMs`（coerce 整数，范围 1,000 至 31 天毫秒）；该 passthrough schema 仅作历史投影。
-- **SourceMediaPolicy**（ADR-0014/0015）是来源级媒体策略：可选 `images`（`download`/`metadata_only`，缺省 `download`）、可选 `maxFileBytes`（64KiB–10MB）与 `maxRunBytes`（1MiB–50MB）。上界即全局默认，来源只能收紧；`mediaPolicyCeilings` 是同一组数字的单一来源，媒体获取组件的运行时默认值取自它。另有两个可选字段：`retry.maxAttempts`（0–10，缺省 3，含首次尝试，0 = 关闭重试）与 `retentionDays`（0–3650，缺省或 0 = 永久保留）。
-- 各 Source definition 的 canonical 配置校验由 `getSourceConfigurationSchema(ref, operationId?)` 返回的 strict Zod schema 负责：RSS 要求 http(s) 的 `feedUrl` 并接受可选 `media`；fixture RSS 仅接受调度字段；Bilibili 的 `fetch` 要求 `mode`（`profile` 已不在来源配置里——它归连接，见下）；AI HOT 接受调度字段。带 `operationId` 时先查该 operation 的覆盖 schema（`sourceOperationConfigurationSchemas`，目前只有 Bilibili 的 `search`：要求 `query`、可选 `limit`），未登记就回退定义级那份——所以 `bilibili.fetch` 与 `source.rss@1` 的校验结果不变。manifest 的 JSON Schema 只是发布投影（`source.rss@1` 的描述里同步声明了 `media`）。
-- **revisionId** 形如 `<sourceId>:<revision>`；创建默认停用并从 revision 1 开始。**SourceActivationCommand** 为 `{ enabled, baseRevisionId }`，配合唯一 `Idempotency-Key` 使用：同 key 同请求重放返回首次记录的结果快照，同 key 不同请求或过期 baseRevision 返回冲突，无状态变化的 no-op 记录命令但不递增 revision。
-- **CreateSourceCommand**：strict 的 `name`（trim 后 1–200 字符）、`sourceDefinitionRef`、`operationId` 和 `config`，不接受 `enabled`。**UpdateSourceCommand**：必填 `baseRevisionId` 加可选 `name` 与完整替换的 `config`。
-- **SourceExecutionSnapshot** 冻结 `id`、`name`、`sourceDefinitionRef`、`operationId`、`connectorId`、迁移投影 `kind`、`config`、`enabled`、`revisionId`、`createdAt`、`updatedAt`，以及可选可空的 `connection`。`connection` 是连接的**非秘密投影**（`{id, connectorId, configJson}`）：入队时冻结，因此排队后修改连接配置不改变已创建 Run 的输入（AUT-016）；它只带身份与非秘密配置，`status`/`lastError` 这类活诊断不进。未保存配置的探测与 legacy 路径没有连接，故该字段可选。**SourceSnapshot** 在同一字段上增加可变诊断 `lastRunAt`、`lastError`、可选 `connectionId`（ADR-0017）与可选 `scheduleIntervalMs`（ADR-0018，来自 TriggerBinding）。
-- **TriggerBinding（ADR-0018）**：`id`、`sourceId`、`kind`（`schedule`/`manual`/`webhook`，ADR-0024 加入 webhook）、`config`（`{ intervalMs? }`）、`enabled`、`revisionId`、`createdAt`/`updatedAt`。一个计划每种类型最多一行，schedule 与 webhook 可共存（ADR-0025）；入口标识与凭证引用不在这个投影里，产品面从计划快照的 `webhook` 块读（ADR-0024）。`CreateSourceCommand`/`UpdateSourceCommand` 用顶层可选 `scheduleIntervalMs`（update 可 null 移除）。`SourceDefinitionManifest` 新增 `auth`（`none|oauth|cookie|secret_ref|external` + `secretRefRequired` + `probeSupported`：第三个布尔声明这个 Adapter 能不能对连接的登录态给出结论，宿主据此决定要不要允许发起连接探测，不硬编码 connectorId，ADR [`0027`](../../adr/0027-connection-login-lifecycle-v1.md)）与 `operations`（operationId、input/output schema、可空 `configurationSchema`（这个 operation 的用户可填配置；`null` = 沿用定义级那份，ADR 0027 决定 3）、external key、discovery context、media、stateStore 命名空间）。
-- **SourceProbeResult**：`sourceId`、`connectorId`、非负整数 `itemCount`、`nextCursorAvailable` 和 `checkedAt`。
-- **IngestCommand**：非空 `sourceId`、`triggerKind`（`manual`/`schedule`/`webhook`，默认 `manual`）和可选幂等键；幂等键 trim 后 1 至 300 个字符。**TriggerEvidence**（ADR-0024）：`bindingId`、`externalEventId`、`receivedAt` 三个非空字符串，strict；`triggerKind = "webhook"` 的 Run 必须带它，`manual`/`schedule` 不带。
-
-### 状态和查询 DTO
-
-- **RunStatus**：`queued`、`running`、`succeeded`、`failed`、`cancelled`。
-- **StepStatus**：`queued`、`running`、`succeeded`、`failed`、`cancelled`。
-- **JobStatus**：`queued`、`leased`、`retry_wait`、`succeeded`、`failed_terminal`、`cancelled`。
-- **JobKind**：`source-ingest`、`source-probe`、`workflow-activity`。
-- **AssetStatus**：`saved`、`metadata_only`、`skipped`、`failed`。
-- **JobSnapshot**：`id`、`kind`、可空 `sourceId`/`runId`、`status`、非负整数 `attempts`、正整数 `maxAttempts`、可空 `errorCode`/`error`、`createdAt`、`updatedAt` 和可空的 `result: unknown`。
-- **AssetSnapshot**：`id`、`kind`、`status`、可空 `sourceUrl`、可空 `storageKey`、可空 `mimeType` 、可空数值 `byteSize`、可选可空 `errorMessage`（有界 500 字符，降级原因说明；saved 可为空，见 ADR-0005）、可选可空 `errorCode`（机器可读降级原因，读取侧放宽，见 ADR-0015）与可选非负整数 `attemptCount`（已完成的下载尝试次数，含首次）。这是 contracts 的共享/内部资产元数据投影，不是领域层带 `Uint8Array` 的 Asset input。`PrismaCosmosRepository.toAssetSnapshot` 会填充 `storageKey`；公开读 DTO 不使用这一份，而是 `publicAssetSnapshotSchema`（由本 schema 省略 `storageKey`），并由 Product API 的 feed、search、entries、story、entry、revision 路由在返回前经 `toPublicAsset` 逐个挑字段，因此这六条路由的 HTTP JSON 不含 `storageKey`。`GET /assets/:assetId` 另行读取 bytes。
-- **MediaCleanupCommand**（ADR-0015）：strict 的可选 `sourceId` 与可选布尔 `dryRun`（缺省 true）。**MediaCleanupReport**：`dryRun`、可空 `sourceId`、`candidateCount`、`candidateBytes`、`cleanedCount`、`cleanedBytes`、`sharedKeyCount`、最多 20 条 `samples`（assetId/sourceId/sourceName/title/byteSize/createdAt/expiredAt）与 `startedAt`/`finishedAt`。**MediaCleanupRunSnapshot**：`runId`、`status`、可空 `report` 与可空 `error`。
-- **RunSnapshot**：`id`、可空 `sourceId`、`triggerKind`、可选可空 `triggerEvidence`（触发原因，ADR-0024；manual/schedule 的 Run 由投影写 `null`）、`status`、`createdAt`、可空 `startedAt`/`finishedAt`、`itemCount`、`createdEntryCount`、`revisedEntryCount` 和可空 `error`。
-- **Run 控制（ADR-0016）**：`CancelRunCommand`/`RecoverRunCommand` 为 strict 的可选 `reason`（trim ≤500）；`RerunRunCommand` 为 strict 空对象。**RunControlResult**：`action`（`cancelled`/`recovered`/`rerun`）、复用 `RunSnapshot` 的 `run`、面向用户的 `reuse` 与 `sideEffects` 字符串。公共 `RunStatus` 五态不变。
-- **Connection（ADR-0017）**：`ConnectionInstance` 快照含 `id`/`name`/`connectorId`/可空 `account`/可空 `scopeJson`/可空 `configJson`（适配器的**非秘密**配置，JSON 文本；Bilibili 的 OpenCLI profile 住在这里，凭证永远不在这里）/`status`（`active|revoked|expired|error`）/可空 `secretRef`/可空 `lastError`/可空 `lastCheckedAt`（最近一次登录探测的时间，由探测回写、**不走公开更新命令**）/`createdAt`/`updatedAt`。`CreateConnectionCommand` 要求非空 `name`+`connectorId`，其余可选（含 `configJson`）；`UpdateConnectionCommand` 全可选（`name`/`status`/`configJson`/`secretRef`/`lastError`）。`SourceSnapshot` 增加可选可空 `connectionId`（无认证来源 null），`UpdateSourceCommand` 增加可选可空 `connectionId`。**SourceConfigProbeCommand** 增加可选可空 `connectionId`：未保存配置的探测没有来源与计划，需要登录态的操作靠它拿到连接。
-- **连接登录探测（ADR-0027 决定 2）**：**ConnectionProbeResult**：`connectionId`、`outcome`（`active|expired|error`，`expired` = 需要用户重新登录，`error` = 这次没得出结论）、可空 `account`（探测到的账号标签）、可空 `reason`（面向用户的原因）与 `checkedAt`。**ConnectionProbeJobPayload**：只带 `connectionId`（strict）。**ConnectionProbeJobSnapshot** 是 `JobSnapshot` 的 `kind: "connection-probe"` 特化 + 可空 `result`；`JobKind` 相应新增 `connection-probe`。探测**不产生 Run、不产生条目**：它是连接的事实，不是采集。
-- **StorageStats（ADR-0019）**：`databaseBytes`/`blobBytes`/`blobFileCount`/`artifactBytes`/`cacheBytes`/`logBytes`/`secretBytes` 加 `categories`（`raw`/`user`/`rebuildable`/`cleanable`，非负整数）与 `snapshotAt`。**BackupSnapshot**：`id`/`name`/`byteSize`/`createdAt`。
-- **UserDataExport（ADR-0019 决策 5）**：strict 的 `schemaVersion`（当前固定 `1`）、`exportedAt`、`counts`（八个非负整数：`labels`/`collections`/`favorites`/`annotations`/`savedViews`/`boards`/`spotlightPlacements`/`targets`）与 `data`。`data` 的八个分区分别是 `labelDetailSchema[]`、`collectionDetailSchema[]`、`favoriteItemSchema[]`、`annotationSchema[]`、`savedViewSchema[]`、`boardDetailSchema[]`、`spotlightPlacementSchema[]` 与 `userDataExportTargetSchema[]`——导出直接复用各对象的公开读投影，不新造第二套对象定义。**UserDataExportTarget**：`targetType`（读取侧宽松字符串）、`targetId`、可空 `title`、可空 `webUrl`；目标已被删除时 `title` 为 null 而引用仍保留，导出不因悬空引用失败。`schemaVersion` 是唯一版本位，新增分区或改变字段含义时升版本。
-- **连接器状态导出／导入（ADR-0026）**：**ConnectorStateNamespaceSummary** 是清单项——`namespace`、`keyCount`、可空 `planId`／`sourceId`／`connectionId` 与 `unattributed`（未归属时三个归属字段都是 null）。**ConnectorStateExport** 是 strict 导出信封——`schemaVersion`（当前固定 `1`）、`exportedAt`、`scope`（`kind` ∈ `namespace|plan|connection|source|attributed` + 可空 `value`）、`counts`（`namespaces`/`keys`）与 `namespaces[]`；每个抽屉是 `namespace` + 可空 `owner`（`planId`/`sourceId`/可空 `connectionId`，未归属为 null）+ `entries[]`（`key`、`value`、正整数 `version`、`updatedAt`）。**ConnectorStateImportCommand**：`mode`（`skip-existing` 默认／`overwrite`）、可选 `targetNamespace`、`export`（整份导出信封，导入边界因此只有一个被校验的输入）。**ConnectorStateImportResult**：`mode`、`namespaces`、`created`、`overwritten`、`skipped`。**ConnectorStateExportQuery**：`namespace`／`planId`／`connectionId`／`sourceId` 四选一（最多给一个，否则校验失败）。导出件不含 Secret、连接配置、`Checkpoint` 或其它表字段。
-- **HealthResponse**：`status` 固定为 `ok`；包含 `service`、`version`、`protocolVersion`、`timestamp`，以及 `workerStatus`（`unknown`/`starting`/`ready`/`stopped`）、`storageStatus`（`unknown`/`starting`/`ready`/`failed`）和 `migrationStatus`（`unknown`/`pending`/`ready`/`failed`）。
-- **ServiceError**：`code` 为 `validation_failed`、`not_found`、`conflict`、`service_unavailable`、`protocol_mismatch` 或 `uncertain`；并有 `message`、可选 `requestId`/`commandId`、可选 `details: Record<string, unknown>` 和 `retryable`。
-- **SearchQuery**：可选 trim 后最多 500 个字符的 `text`、`sourceId`、带 offset 的 `publishedAfter`/`publishedBefore`、`cursor`；`limit` coerce 为 1 至 100 的整数，默认 `20`。`EntryListQuery` 的 `sourceId`/`cursor` 可选，`limit` coerce 为 1 至 100 的整数，默认 `50`。
-
-### Feed、Entry、Story 与事件 DTO
-
-- **ConnectorDescriptor**：`id`、`description`、`capabilities` 字符串数组和 `configVersion`。
-- **FeedItem**：`storyId`、`storyKind`（`event`/`document`/`media`/`thread`）、`title`、可空 `summary`、`entryId`、`sourceId`、`sourceName`、`sourceKind`、`revisionId`、可空 `publishedAt` 和 `assets: AssetSnapshot[]`。`FeedPage` 为 `items` 与可空 `nextCursor`。`SearchResult` 是 FeedItem 加可空数值 `rank`，`SearchPage` 是其分页。
-- **EntryRevisionSnapshot**：`id`、整数 `revision`、`title`、可空 `summary`、`contentText`、可空 `webUrl`、`contentKind`、可空 `publisher`、可空 `publishedAt: TemporalValue`、可空 `updatedAt: TemporalValue`、可空 `sourcePublishedAt`、`createdAt` 和资产快照数组。
-- **ObservationSnapshot**：`id`、可空 `externalId`、`externalKey`、`eventKind`（`create`/`update`/`delete`/`snapshot`）、可空 `webUrl`、`capturedAt`、可空 `sourcePublishedAt` 与可选 `discoveryChannel`（受管发现渠道，ING-004：`account`/`recommendation`/`search`/`announcement`/`email`/`manual`/`related`/`agent`/`unknown`；升级前写入的 Observation 没有该值，读取侧按 `unknown` 处理）。这些字段的领域含义见[规范化内容](../domain/0001-normalized-content.md)。
-- **EntryDetail**：`id`、`sourceId`、`sourceName`、`sourceKind`、`currentRevisionId`、可空 `metrics`、修订数组、观察数组与 `relatedStories: EntryRelatedStory[]`（本条目作为证据/提及关联到的其它 Story：`storyId`、读取侧宽松 `relationType`、`title`、可空 `reason`；ADR-0011），以及跨来源重复/转载关系 v1 追加的 `relations: EntryRelation[]`（ADR-0022 决策 7）：`entryId`（对端条目）、读取侧宽松 `relationType`、`direction`（`outgoing`/`incoming`/`symmetric`，相对于**正在读取的这个条目**）、可空 `title`、`sourceId`/`sourceName`（对端来源）与同一套 provenance 字段。Story 成员本身就是 EntryDetail，所以成员行的「转载自 / 重复于」标注与条目详情共用这一个字段，没有第二份投影。
-- **EntryListItem**：`id`、`sourceId`、`sourceName`、`sourceKind`、可空 `storyId`、`currentRevisionId`、`title`、可空 `summary`/`webUrl`、`contentKind`、可空 `publisher`/`metrics`/`publishedAt`、`updatedAt`、非负整数 `revisionCount`/`observationCount` 和资产数组；`EntryPage` 为 items 与可空 nextCursor。
-- **StoryDetail**：`story`（`id`、`kind`、可空 `subtype`、`revisionId`、`title`、可空 `summary`、Story 当前表示的扩展两项（`timeRange: { start: TemporalValue, end: TemporalValue | null } | null` 与 `keyFacts: { text, entryId | null }[]`，读取侧两项都可选以兼容扩展前写入的 payload，仓储总是给出二者）、`producer`（当前 Revision 的写入者身份：`human` 表示这份表示已被人工冻结、自动写入方不再覆盖它，ADR-0028）、`status`（`active`/`split`）、`replacedBy: StorySuccessor[]`——`storyId`/`title`/`kind`，历史壳的全部后继）、可空 `entry: EntryDetail`（最近更新成员，兼容位；历史壳可以没有成员）以及 `entries: EntryDetail[]`（Story 全部成员，按 Entry `updatedAt` 倒序；历史壳可以为空），并新增 `entities: StoryEntitySummary[]`——每个已关联 Entity 的当前快照（`entityId`、`name`、`type`、producer、可空 `producerVersion`、`confidence`、可空 `evidence`/`actor`/`reason`），用于 Story 侧渲染“涉及哪些实体”而不二次查询。用户组织 v1 追加 `labels: LabelRef[]`（已附加到本 Story 的标签 `id`/`name`）与 `favorited: boolean`（本 Story 的轻量收藏标记，ADR-0009）。Entry↔Story 证据关系 v1 追加 `evidence: StoryEvidence[]`（把本 Story 当作证据/提及目标的其它条目：`entryId`、`sourceId`、`sourceName`、读取侧宽松 `relationType`、可空 `title`、producer、可空 `producerVersion`、`confidence`、可空 `evidence`/`actor`/`reason`，按 createdAt 倒序）。Story split v1 追加 `topics: StoryTopic[]`（本 Story 的当前 Topic 成员：`topicId`/`title`/`role`，ADR-0012）。**RevisionDetail** 是 EntryRevisionSnapshot 加上 `entryId`、`sourceId`、`sourceName`、`sourceKind`。
-- **Story 编排命令**：`MoveEntryToStoryCommand`（`entryId` + 目标 `storyId`）、`UpdateStoryRevisionCommand`（`baseRevisionId`、`title`、可空 `summary`、核心 `kind` 枚举、可空 `subtype`、可选 `timeRange` 与可选 `keyFacts`——最多 20 条、单条 `text` 最多 500 字符）、`MergeStoriesCommand`（`canonicalStoryId` + 1–50 个 `obsoleteStoryIds`）、`SplitStoryCommand`（2–20 个 `successors`，每个含 `title`/可空 `summary`/核心 `kind`/可空 `subtype`、可选 `timeRange`/`keyFacts`、1–500 个 `entryIds` 与非空默认的 `evidenceEntryIds`/`entityIds`/`topicIds`）、`MigrateStoryUserStateCommand`（`targetStoryId`、布尔 `favorite`、以及每个上限 500 且默认空的 `labelIds`/`collectionIds`/`annotationIds`/`spotlightPlacementIds`，另有可选 `actor`/`reason`/`basis`）。前四个命令都接受可选 `actor`（1–100 字符）与可选 `reason`（1–1000 字符）；更新与归并的幂等/CAS 语义、split 的显式映射校验由 application/storage 拥有（ADR-0012）。`timeRange`/`keyFacts` 采取**全量提交**语义：命令省略它们就是清空当前表示的这两项，没有字段级部分更新（ADR-0021 决定 5）；split 的每个后继各自带自己的值，壳上的两项不复制给后继（ADR-0021 决定 6）。
-- **Story 用户状态迁移结果（ADR-0020）**：`StoryUserStateMigrationCounts` 为 `{ moved, deduped }` 两个非负整数；`StoryUserStateMigrationResult` 为 `sourceStoryId`、`targetStoryId` 与五个按类计数字段（`favorite`、`labelAssignments`、`collectionItems`、`annotations`、`spotlightPlacements`）。标签与收藏夹按自身 id 命名而不是内部分配行 id，因此 `StoryDetail` 等读投影无需新增字段。
-- **Story subtype 目录（ADR-0013）**：`StorySubtypeStatus` 为受管枚举 `active`/`deprecated`/`retired`。`StorySubtype` 为注册项读取投影：`id`、核心 `kind`、正整数 `version`、`label`、可空 `description`、`status`、可空 `identityPolicy`、`owner`。`StorySubtypePage` 为 `items` + 可空 `nextCursor` + `snapshotAt`；`StorySubtypeQuery` 只接受可选核心 `kind`。目录是只读投影，写入侧校验由 domain/storage 拥有。
-- **Topic DTO**：`TopicMemberRole` 为受管枚举 `core`/`update`/`background`/`analysis`/`counterpoint`/`tutorial`。`TopicMember` 是成员读取投影（`storyId`、`role`（读取侧放宽为任意字符串以支持未知值降级）、可空 `reason`/`actor`、正整数 `revision`、`removed`）。`TopicDetail` 为 `topic`（`id`、`revisionId`、`title`、`purpose`、可空 `scope`）+ `members: TopicMember[]`；`TopicSummary`（列表投影）额外含非负 `memberCount` 与 `updatedAt`，`TopicPage` 为 `items` 与可空 `nextCursor`。
-- **Topic 编排命令**：`CreateTopicCommand`（`title`、`purpose`、可空 `scope`、可空 `seedStoryId`）、`UpdateTopicCommand`（`baseRevisionId`、`title`、`purpose`、可空 `scope`）、`MergeTopicsCommand`（`canonicalTopicId` + 1–50 个 `obsoleteTopicIds`）；成员命令 `AddTopicMemberCommand`/`UpdateTopicMemberRoleCommand`/`RestoreTopicMemberCommand`（`storyId` + `role`）、`RemoveTopicMemberCommand`（`storyId`）。所有命令都接受可选 `actor` 与可选 `reason`；role 在写入侧用受管枚举校验。
-- **Entity DTO**：`EntityType` 为受管枚举 `person`/`organization`/`product`/`project`/`model`/`location`，`EntityRelationType` 为受管枚举 `founded`/`works_at`/`located_in`/`produced`/`part_of`/`related_to`（ADR-0008）。`EntityDetail` 为 `entity`（`id`、`revisionId`、读取侧放宽的 `type`、`name`）+ `aliases: string[]` + `stories: EntityStoryLink[]`（关联 Story 与 producer/version/confidence/evidence/actor/reason）+ `relations: EntityRelation[]`（`fromEntityId`、读取侧放宽的 `relationType`、`toEntityId` 与同一套 provenance 字段）。`EntitySummary`（列表投影）额外含非负 `storyCount`/`relationCount` 与 `updatedAt`，`EntityPage` 为 `items` 与可空 `nextCursor`。
-- **Entity 编排命令**：`CreateEntityCommand`（`name` + 写入侧 `type` + 可选 `alias`）、`UpdateEntityCommand`（`baseRevisionId`、`name`、写入侧 `type`）、`AddEntityAliasCommand`/`RemoveEntityAliasCommand`（`name`）；关联命令 `LinkStoryEntityCommand`/`UnlinkStoryEntityCommand`（`storyId` + `entityId`）、关系命令 `CreateEntityRelationCommand`（`fromEntityId` + `toEntityId` + 写入侧 `relationType`）/`RemoveEntityRelationCommand`（`fromEntityId`/`toEntityId`/读取侧宽松 `relationType`）。所有命令都接受可选 `actor` 与可选 `reason`；provenance（producer/producerVersion/confidence/evidence）在写入侧全部可选、缺省由 storage 兜底为 `human`/1，读取侧给出实际值。
-- **Entry↔Story 证据关系命令（ADR-0011）**：`EntryStoryRelationType` 为受管枚举 `evidence_for`/`mentions`（写入侧校验、读取侧放宽）。`LinkEntryStoryCommand`（`entryId` + `storyId` + 写入侧 `relationType` + 可选 provenance/`actor`/`reason`）与 `UnlinkEntryStoryCommand`（`entryId` + `storyId` + 可选 `actor`/`reason`）。`(entryId, storyId)` 唯一：重复写入同一对是覆盖（一关系一语义），指向 Entry 自己主 Story 的写入由 storage 拒绝为 conflict。
-- **条目↔条目重复/转载关系命令（ADR-0022）**：`EntryRelationType` 为受管枚举 `duplicate_of`/`syndicated_from`/`near_duplicate_of`（写入侧校验、读取侧放宽）。`LinkEntryRelationCommand`（`fromEntryId` + `toEntryId` + 写入侧 `relationType` + 可选 provenance/`actor`/`reason`）与 `UnlinkEntryRelationCommand`（`fromEntryId` + `toEntryId` + 可选 `actor`/`reason`）。合同只表达调用方的断言；**一对条目唯一**由 storage 按无序对归一化执行，自关联与有向反向提交由 storage 拒绝为 conflict。
-- **用户组织 DTO（ADR-0009）**：`TargetType` 为受管枚举 `story`/`entry`/`topic`（Label 附加与后续 Annotation 目标共用），`FavoriteTargetType` 为其子集 `story`/`entry`。`LabelRef` 为 `id`/`name`；`LabelItem`（列表投影）含非负 `assignedCount` 与 `createdAt`/`updatedAt`，`LabelList` 为 `items`；`LabelDetail` 在 LabelItem 字段外给出按类型分组的 `assignedStories`/`assignedEntries`/`assignedTopics`（每项 `id` + 解析后的 `title`）。`CollectionSummary` 含 `id`/`name`/可空 `description`/非负 `itemCount`，可选 `containsStory`（仅 `listCollections` 带 `storyId` 时出现）；`CollectionDetail` 含 `stories: { storyId, title, addedAt }[]`。`FavoriteList` 为 `{ targetType, targetId, createdAt }[]`。`UserOrganizationAck` 为 `{ ok: true, id, action }`，用于删除/附加/成员/收藏这类无单一读模型的写命令回执。
-- **用户组织编排命令**：`CreateLabelCommand`（`name`）、`LabelAssignmentCommand`（`labelId` + 写入侧 `targetType` + `targetId`）；`CreateCollectionCommand`/`UpdateCollectionCommand`（`name` + 可空 `description`）、`CollectionItemCommand`（`storyId`）；`FavoriteCommand`（写入侧 `FavoriteTargetType` + `targetId`）。这些命令是用户显式操作，不带 `actor`/`reason`（单用户本地真相，区别于 Story/Topic/Entity 的协作者审计命令）。
-- **Annotation DTO 与命令**：`Annotation` 含 `id`、读取侧放宽的 `targetType`、`targetId`、可空 `targetRevisionId`（写入时目标为 Story 则固定指向其当前 `StoryRevision`）、可空 `quote`/`evidence`/`actor`、`body`、可空 `targetTitle`（目标显示标题的读取侧投影，目标已被删除时为 `null`；跨目标列表据此不必显示裸 ID，与 `SpotlightPlacement.targetTitle` 同一条约定）与 `createdAt`/`updatedAt`；`AnnotationList` 为 `items`。`CreateAnnotationCommand`（写入侧 `targetType` + `targetId` + `body` + 可空 `quote`/`evidence`/`actor`）、`UpdateAnnotationCommand`（`body` + 可空 `quote`/`evidence`/`actor`）、`AnnotationTargetQuery`（`targetType` + `targetId`）。批注是**可编辑笔记**而非不可变 revision 链（ADR-0009 决策 4）；更新覆盖正文并刷新 `updatedAt`。
-- **Saved View DTO 与命令**：`SavedView` 含 `id`/`name`、可空 `text`/`sourceId`/`publishedAfter`/`publishedBefore`、`labelIds: string[]`/`topicIds: string[]` 与 `createdAt`/`updatedAt`；`SavedViewList` 为 `items`。`CreateSavedViewCommand`/`UpdateSavedViewCommand`（`name` + `conditions`），`conditions` 为白名单对象（可空 `text`/`sourceId`/带 offset 的 `publishedAfter`/`publishedBefore`、最多 50 个 id 的 `labelIds`/`topicIds`）。Saved View 只持久化查询条件、不存结果快照（ADR-0009 决策 5）。`SearchQuery` 相应新增可选 `labelIds`/`topicIds`（逗号分隔 id 串）。
-- **看板 DTO 与命令（ADR-0010）**：`BlockType` 为写入侧受管枚举 `feed`/`spotlight`/`source-health`/`topic-list`/`collection`；`BoardBlock.type` 读取侧为普通字符串，未知类型由客户端降级为占位。`blockConfigSchemas` 是按类型判别的白名单 strict 对象（`feed` 可选 `savedViewId` + 可选 `limit`；`collection` 可选 `collectionId` + 可选 `limit`；`spotlight`/`source-health`/`topic-list` 仅可选 `limit`）——`feed`/`collection` 的绑定都可省略：区块先创建为未绑定态，之后在编辑器中配置，未绑定或悬空引用渲染占位（ADR-0010 决定 5）。`blockConfigSchemaFor(type)` 返回对应 schema 或 null（未知类型）。`BoardSummary`（`id`/`name`/可空 `description`/非负 `sectionCount`/时间戳）与 `BoardList`；`BoardBlock`（`id`/`sectionId`/读取侧 `type`/`config: Record<string, unknown>`/非负 `position`/`visible`/时间戳）；`BoardSection`（`id`/`boardId`/`title`/`position`/按 position 排序的 `blocks`/时间戳）；`BoardDetail`（`id`/`name`/可空 `description`/按 position 排序的 `sections`/时间戳）。命令：`CreateBoardCommand`/`UpdateBoardCommand`（`name` + 可空 `description`）、`CreateSectionCommand`（`boardId` + `title` + 可选 `position`）、`UpdateSectionCommand`（`title`）、`CreateBlockCommand`（`sectionId` + 写入侧 `type` + `config` record + 可选 `position`）、`UpdateBlockConfigCommand`（`config`）、`MoveBlockCommand`（可选 `sectionId` + `position`）、`SetBlockVisibilityCommand`（`visible`）；`BoardCommandAck` 为 `{ ok: true, id, action }` 用于无单一读模型的写回执。区块 config 的按类型白名单校验发生在 storage 边界，失败以 ZodError 冒泡并由 API 映射为 400。`UpdateSectionCommand` 的 `position` 可选：提供时把分区移动到该位置并顺延其它分区。
-- **Spotlight DTO 与命令（ADR-0010 决策 3）**：`SpotlightTargetType` 为写入侧受管枚举 `story`/`topic`；`SpotlightPlacement` 含 `id`/`boardId`、读取侧放宽的 `targetType`、`targetId`、`source`（v1 恒为 `manual`）、可空 `reason`/`actor`/`expiresAt`、解析后的 `targetTitle` 与时间戳；`SpotlightPlacementList` 为 `items`。`PinSpotlightCommand`（`boardId` + 写入侧 `targetType` + `targetId` + 可空 `reason`/`actor`）。解除固定按 placement id 走 removals 端点（物理解除，返回 `BoardCommandAck`）。
-- **Provider/model 配置 DTO 与命令**：`api` 是受管枚举 `openai-completions`/`openai-responses`；`baseUrl` 只做离线语法校验（必须 https、无 userinfo/端口/query/fragment、主机名含点且不是 `localhost` 或 IP 字面量），DNS 与实际对端校验属于传输层。`CreateModelProviderCommand` 为 `name`/`api`/`baseUrl`/`apiKey`（strict，`apiKey` 1–8192 字符且不含换行）；`UpdateModelProviderCommand` 为 `expectedVersion` + 至少一个可改字段（`name`/`api`/`baseUrl`/`apiKey`）。`ModelProviderSnapshot` 为 `id`/`name`/`api`/`baseUrl`/`version`/`state`（`active`/`deleting`）/`credentialState`（`configured`/`cleanup_pending`）/时间戳，**不返回 `secretRef` 或 key**；`ModelProviderPage` 为 `items` + 可空 `nextCursor`。`ModelProviderOperationSnapshot` 为 `id`/`kind`（`create`/`update`）/`providerId`/`state`（`pending`/`completed`/`failed`/`cleanup_pending`）/可空 `resourceVersion`/可选可空 `errorCode`。`CreateConfiguredModelCommand` 为 `modelId`/`name`/`contextWindow`/`maxOutputTokens`，`modelId` 不得是 URL（拒绝 `scheme://` 与 `//` 前缀），并 refine `maxOutputTokens ≤ contextWindow`；`UpdateConfiguredModelCommand` 为 `expectedVersion` + 至少一个可改字段，同样带跨字段 refine，部分预算要与持久化值比对由 Application 负责。`ConfiguredModelSnapshot` 为四个模型字段 + `id`/`providerId`/`version`/`createdAt`/`updatedAt`；`ConfiguredModelPage` 为 `items` + 可空 `nextCursor`。发现侧：`CreateProviderModelDiscoveryCommand` 只有 `providerId` 与 `expectedProviderVersion`（不接受凭证或 URL）；`ProviderModelDiscoveryCandidate` 只有 `modelId`/`name`；`ProviderModelDiscoverySnapshot` 为 `id`/`providerId`/`providerVersion`/`status`（`succeeded`/`failed`）/最多 1000 个 `candidates`/可空 `errorCode`/时间戳，并由 `superRefine` 钉住三条不变式：成功不得带 `errorCode`、非成功不得带 `candidates`、失败必须带 `errorCode`。发现错误码是独立枚举 `authentication_failed`/`unsupported`/`timeout`/`response_too_large`/`malformed_response`/`empty_result`/`dependency_unavailable`，与写操作的 `ServiceErrorCode` 不同。
-- **IngestResult**：`run`、`createdEntryCount`、`revisedEntryCount`、`duplicateObservationCount`，以及可选可空 `errorCode` 和可选 `retryable`。- **EventEnvelope** 是 TypeScript 接口，字段为 `id`、`type`、`version`、`occurredAt` 和泛型 `payload`。`EventSnapshot` 和 `SseEvent` 使用同样的五个字段，但 `payload` 为 `unknown`。`SnapshotRequiredPayload` 是 `reason` 和 `latestEventId`。
-
-`unknown` 字段是有意保留的边界：`JobSnapshot.result`、事件 payload 和 SSE payload 的 schema 不猜测业务内容，也不把 unknown 证明为 JSON-safe。调用方把它们送入 JSON/HTTP/SSE 时必须提供可序列化值；本包不从 unknown 中执行代码或推断领域状态。
-
-### Action、重试与可序列化引用
-
-- **ActionKind**：`connector`、`transform`、`library`、`query`、`control`、`script`、`agent`、`artifact`、`render`、`delivery`。
-- **ExecutionPlacement**：`host`、`trusted_worker`、`remote_worker`。
-- **ActionRef**：匹配小写段组成的点分名称，并以 `@` 加正整数版本结束；版本不能是 `0`、前导零、非安全整数，ref 不能含大写、空格或裸名称。`parseActionRef` 返回 `{ baseRef, version }`，其中 version 为 number。
-- **ActionErrorCode**：`dependency_unavailable`、`authentication_required`、`budget_exhausted`、`cancelled`、`timeout`、`rate_limited`、`malformed_payload`、`unsupported_version`、`invalid_configuration`、`invalid_action_ref`、`invalid_input`、`unknown_action`、`internal_error`。
-- **AgentInvocationInput**：`provider`/`model`、至少一条带 `role`/`content` 的消息、可选工具描述、`budget`（最大时长/工具调用数/输出 token）和 JSON-safe `metadata`；工具 schema 和 metadata 不能包含 Secret、句柄、函数或其它非 JSON-safe 值。`AgentInvocationOutput`：`content`、工具调用、非负 token usage、provider/model、`finishReason`（`stop`/`tool_call`/`length`/`cancelled`）和 JSON-safe metadata。当前由 [`Agent Invocation Action`](../application/0010-agent-invocation.md) 使用，尚不代表真实模型或 Harness 已接入。
-- **RetryPolicy**：正整数 `maxAttempts`、非负整数 `backoffMs`，以及可选的 ActionErrorCode `retryableErrors` allow-list。**ActionExecution** 还有 `idempotent`、`supportsCancellation`、可空正整数 `timeoutMs` 和可空 RetryPolicy。
-- **ActionDefinition** 是受信进程内的 executable 定义，含 `ref`、可选 `manifestHash`、`kind`、`description`、`capabilities`、`executionPlacement`、运行时 Zod `inputSchema`/`outputSchema` 和 `execution`。**ActionDescriptor/ActionManifest** 是 manifest-safe 投影，只含 ref/version/manifestHash?/kind/description/capabilities/executionPlacement/idempotent/supportsCancellation/timeoutMs/retryPolicy；不含 executable schema，且 ref 中的版本必须与 `version` 相同。
-- **JsonValue** 只允许 `null`、布尔、有限数值、字符串、递归数组和原型为 `Object.prototype` 或 `null` 的普通对象；`undefined`、NaN、Infinity、函数、Date、Uint8Array 等不可进入该合同。
-- **BlobRef** 是本包唯一拥有的 strict JSON wire shape，恰有 `key`、`hash`、非负整数 `byteSize` 和非空 `mediaType`。本 schema 不读取 Blob bytes，也不证明 hash、key、byteSize 或 containment；这些验证由[FileBlobStore](../storage/0005-file-blob-store.md)负责。**BlobRefLike** 不是本包的共享 wire DTO，而是 Blob Store 读取校验所需的本地输入接口。
-- **NormalizedAssetInputContract** 是 Workflow JSON 中的 strict 对象，含 `kind`、可空 `sourceUrl`、`status`、可空 `mimeType`、可空非负整数 `byteSize` 和可选可空 `blobRef`；只有 `saved` 状态可以带非空 BlobRef。
-- **NormalizedIngestItemContract** 是 Workflow JSON 中的 strict 规范化内容边界，字段为可选可空 `externalId`、`title`、可空 `summary`、`contentText`、可空 `webUrl`、`kind`、可空 `publisher`/`metrics`/`publishedAt`、可选可空 `updatedAt`、JSON-safe `sourceLocator`、`rawPayload`、可选 `rawPayloadMimeType` 和资产数组。`externalId`、`webUrl`、非空 `sourceLocator` 至少要有一个身份证据。领域侧的完整语义与 bytes 类型见[规范化内容](../domain/0001-normalized-content.md)。
-- **ValueRef** 是本包记录并拥有的 Workflow JSON wire shape：`key: string`、`hash: string`、`byteSize: number`、`mediaType: "application/json"`。运行时 `ValueRef`/`ValueStore` 接口由 `@notnotype/nb-workflow` 提供；canonical JSON 编码、读取时的 key/hash/byteSize/mediaType 四重校验和 JSON parse/assert 由[Workflow Value Store](../storage/0006-workflow-value-store.md)拥有。本包不把 ValueRef 当作字节数组，也不执行 ValueStore 读写。
-
-## 外部行为
-
-边界调用者向 schema 传入 `unknown`，或先以 `Record<string, unknown>` 接收 HTTP/query，再调用对应的 `.parse`。成功时得到 schema 推导的 DTO；默认 `z.object` 会剔除未声明字段，显式 `passthrough` 的 `sourceConfigSchema` 会保留未知配置，内置 Source config 的 strict schema 会拒绝未知字段。带默认值的字段在 parse 后才出现默认值。
-
-Action 的 executable 定义可以携带运行时 Zod schema，但公共 Descriptor/Manifest 只投影元数据。Workflow JSON 的 normalized asset 只能携带 BlobRef 等 JSON 值，不能携带 `Uint8Array`。SSE/事件 DTO 保留未知 payload，由使用方决定具体事件语义；当前 Product API 将投影 JSON 字符串化后发送。
-
-## 输入
-
-输入入口包括 Source 创建/更新、Source probe、ingest 命令、查询参数、Job/Run/Entry/Story/事件投影，以及 Action/Workflow 的 schema 输入。所有字段、空值和默认值以“概念与定义”中的对应 schema 为准：
-
-1. 外部未知值必须在边界解析；不能把未经 parse 的对象当作公共 DTO。
-2. `sourceConfigSchema` 是唯一会保留未声明配置字段的基础 Source config；内置 config 必须使用其各自 strict schema。
-3. ActionRef、RetryPolicy、BlobRef、normalized asset/item 和 Source snapshot 的相互约束必须在 parse 时检查。
-4. `unknown` payload/result 不做结构假设；需要业务含义的消费者另行校验。
-
-## 输出
-
-- 输出是 Zod parse 后的结构化 DTO 或 manifest-safe 投影。状态数组和 enum 只返回列出的值；分页 DTO 的 nextCursor 可空。Asset 输出走 `publicAssetSnapshotSchema`（不含 `storageKey`）：仓储内部的 `AssetSnapshot` 带该字段，Product API 在返回前剥离，因此客户端拿到的公开读 DTO 与 `AssetSnapshot` 不是同一个形状。Action Descriptor/Manifest 可被 `JSON.stringify` 后再次解析为同值，且不包含 executable Zod schema。BlobRef/ValueRef 只代表受控内容或 Workflow JSON 的引用，不代表内联 bytes。
-
-并非所有 DTO 字段都由本包深度验证：`JobSnapshot.result`、`EventSnapshot.payload` 和 `SseEvent.payload` 明确为 `unknown`。因此“schema parse 成功”不等于这些字段的业务内容或 JSON 编码已经通过校验。
-
-## 状态与持久化
-
-本组件无持久状态。schema、enum、parseActionRef 和类型定义在进程内由源码重新生成；重启不会恢复 Source、Run、Job、Entry、Blob、Workflow 或 SSE 游标。Source/Run/Job/Entry/Observation/Revision/Story 的 durable truth 由相应 application/storage 组件持有，本文件只定义公共投影形状。
-
-## 状态转换
-
-本组件没有业务状态机。可观察的转换只有：
-
-- `unknown` 输入经 schema parse 成功后成为合同 DTO；失败则抛出 ZodError，不产生部分 DTO 或持久写入。
-- 带默认值的输入字段在 parse 中从缺失变为默认值，例如 CreateSource `enabled=true`、ingest `triggerKind=manual`、Bilibili `schemaVersion=1`/`limit=20`、AI HOT `schemaVersion=1` 和查询 limit。
-- Source execution snapshot 与 Source snapshot 是两个不同投影；后者增加可变诊断字段，前者不因当前诊断变化。
-- ActionDefinition 经 application 的 descriptor 投影后丢弃 executable schema；若 ref/version 不一致，descriptor parse 不成功。
-
-## 副作用
-
-`@cosmos/contracts` 的 schema parse、类型投影和 `parseActionRef` 不访问数据库、Blob Root、网络、文件、日志或领域事件，也不触发 Action、Connector、重试、SSE 推送或业务写入。应用层将 bytes 写 Blob、将 ValueRef 解引用、将 DTO 映射为数据库记录的副作用不属于本组件。
-
-## 错误与降级
-
-- schema 约束不满足时抛出 ZodError；本包不把失败转换为 HTTP 状态码、不自动重试、不写错误记录。
-- ActionRef 不合法时 `parseActionRef` 的 schema parse 失败；ActionErrorCode 的分类只描述公共错误代码集合，具体异常由 application ActionRegistry 产生。
-- RetryPolicy 仅声明 allow-list、最大次数和退避值，不自行执行重试。
-- `unknown` result/payload 不会被本包降级为 `{}` 或 `null`。
-- 严格 Source config 的未知字段、非 JSON-safe sourceLocator/asset、非 saved 状态的 BlobRef 和不满足身份证据的 normalized item 都 fail closed。
-- Story 表示扩展：`storyTimeRangeSchema` 在两端都有 `exact` 时按时刻比较（不按字符串），`end` 早于 `start` 时 parse 失败；写入命令的 `keyFacts` 超过 20 条、单条 `text` 超过 500 字符或去空白后为空同样失败（读取侧数组不设条数上限，旧 payload 始终可解析）。`entryId` 只限制 trim 后长度不超过 300（空串合法，归一化时变 null），**不校验**目标条目是否存在、也不要求它属于本 Story——悬空出处由读取侧降级（见 [Web Client](../interfaces/0005-web-client.md)）。这些失败都是 ZodError，HTTP 状态码映射由 API 拥有。
-
-## 依赖
-
-- 运行时依赖 `zod`。
-- `packages/contracts/src/base.ts`、`action.ts`、`index.ts` 是实现锚点；`index.ts` re-export base/action。
-- domain 规范引用[规范化内容](../domain/0001-normalized-content.md)。ContentKind、Publisher、Temporal、Metrics 的领域算法由 domain 拥有；本包只拥有其 wire schema。
-- `ValueRef` 的运行时类型和 Store 接口来自 `@notnotype/nb-workflow`；本包记录其跨边界 JSON shape，[Workflow Value Store](../storage/0006-workflow-value-store.md)拥有 canonical 编码和四重读取校验。[FileBlobStore](../storage/0005-file-blob-store.md)拥有 BlobRefLike 的 bytes/hash/key/containment 校验。
-- application ActionRegistry、Workflow ingest、API Controller 和 storage repository 是消费者，不是本组件的持久化实现。
-
-## 配置
-
-本组件没有环境变量、文件根目录、端口或运行时可变配置。schema 中的范围和默认值是源码常量：调度间隔 1,000 至 31 天毫秒、Bilibili limit 1 至 100 默认 20、查询 limit 1 至 100 默认 20 或 50、Source name 1 至 200、幂等键 1 至 300。Source 的未知 config 仅因 `sourceConfigSchema.passthrough()` 保留；这不改变内置 strict config 的边界。
-
-## 重建验收
-
-1. **协议与基础枚举**：给定 `protocolVersion`，观察其值为 `v1`；给定不在列举集合内的 ContentKind、PublisherKind、Run/Step/Job/Asset status 或 JobKind，观察 schema parse 失败，且没有文件、数据库或网络副作用。
-2. **Source config 边界**：给定带额外键的基础 `sourceConfigSchema`，观察额外键保留；给定同样额外键给内置 strict config，观察 parse 失败；给定 Bilibili `feed` 且无 profile，观察 parse 成功（profile 已归连接，登录态由连接器在执行时判定）；给定缺省 Bilibili limit/schemaVersion 和 AI HOT schemaVersion，观察 parse 后分别为 20、1、1；给定 `("source.bilibili@1", "search")` 且缺 `query`，观察失败，给定 `("source.bilibili@1", "fetch")`，观察回退到定义级那份。
-3. **输入默认值**：给定缺少 CreateSource `enabled` 或 IngestCommand `triggerKind` 的有效对象，观察 parse 后分别为 `true` 和 `manual`；给定超长名称、空 sourceId 或超过 300 个字符的幂等键，观察失败，且不创建 Source/Run。
-4. **Temporal 证据**：给定 exact、fallback 都为 null 的 TemporalValue，观察 parse 失败；给定合法 exact 或 fallback，观察 parse 成功；不允许以空对象替代时间证据。
-5. **ActionRef**：逐一给定 `source.fetch`、`source.fetch@0`、`source.fetch@01`、`Source.fetch@1`、带空格 ref 和超过安全整数的版本，观察 parse 失败；给定 `connector.imap.poll@7`，观察 `parseActionRef` 返回 `{baseRef:"connector.imap.poll",version:7}`。
-6. **Descriptor 安全边界**：给定包含 Zod input/output schema 的 ActionDefinition，构造并 parse Descriptor，观察 JSON 序列化结果不含 `inputSchema`/`outputSchema`；给定 ref 版本与 Descriptor version 不同，观察失败。
-7. **JSON 与 BlobRef**：给定包含 `Uint8Array`、函数、NaN 或额外 key 的 Blob/asset/sourceLocator，观察相应 JSON-safe/strict schema 失败；给定非 saved asset 携带非空 BlobRef，观察失败；不允许把 raw bytes 写入 Workflow JSON DTO。
-8. **Normalized item 边界**：给定无 externalId、无 webUrl 且 sourceLocator 为空的 item，观察失败；给定其中任一身份依据，观察 parse 成功；不允许 contracts 包写入领域或 Blob。
-9. **事件 unknown 边界**：给定任意值作为 Event/SSE payload，观察 schema 只按 `unknown` 字段接受而不推断业务结构；调用方若不能 JSON.stringify，失败应发生在调用方，不由本包伪造 payload。
-10. **无持久状态**：重启或重新导入 contracts 模块后，观察无 Source/Run/Job/SSE 游标等状态被恢复；唯一可重复结果来自源码中的 schema、枚举和默认值。
-11. **用户组织枚举与回执**：给定 `targetType: "workspace"` 的 Label 附加命令或 `targetType: "topic"` 的收藏命令，观察 parse 失败；给定缺 `title` 的 `LabelDetail` 分组项或 `ok: false` 的回执，观察失败；不允许把未知 targetType 当作已支持能力。
-12. **看板区块类型与 config 白名单**：给定 `type: "gadget"` 的创建命令，观察 parse 失败；给定 `feed`/`collection` config 含白名单外键或 `collectionId: ""`，观察对应 schema parse 失败；给定 `feed`/`collection` 空 config，观察 parse 成功（未绑定态）；给定未知 type，观察 `blockConfigSchemaFor` 返回 null；给定 `BoardBlock.type` 为未知字符串，观察读取侧 DTO 仍 parse 成功（降级由客户端处理）。
-13. **Spotlight 目标枚举与读取降级**：给定 `targetType: "workspace"` 的 pin 命令，观察 parse 失败；给定 `targetType` 为未知字符串的 placement DTO，观察读取侧仍 parse 成功。
-14. **Story 表示扩展**：给定缺 `start` 的时间范围、`end` 早于 `start`、命令里带 21 条事实或 501 字的单条事实，观察对应 schema parse 失败；给定 `end` 为 null、或两端都有 `exact` 且顺序正确的范围，观察 parse 成功；给定省略两项与带两项的 `UpdateStoryRevisionCommand`、以及不带扩展字段的 `StoryDetail` payload，观察都 parse 成功（省略由 API/storage 解释为清空，读取侧兼容旧 payload）。`entryId` 指向的条目是否存在不由本包判断。
-
-## 实现与测试锚点
-
-- `packages/contracts/src/base.ts`：`protocolVersion`、内容/Publisher/Temporal/metrics schema、Source config/command、`sourceExecutionSnapshotSchema` 与 `sourceSnapshotSchema`。
-- `packages/contracts/src/index.ts`：ConnectorDescriptor、Run/Step/Job/Asset/Health/Error DTO、Feed/Search、Entry/Observation/Story/Revision、Topic/Entity、用户组织（Label/Collection/Favorite）DTO 与命令、看板（Board/Section/Block）DTO 与命令、Ingest 与 Event/SSE schema。
-- `packages/contracts/src/story.ts`：Story 表示扩展 schema（`storyTimeRangeSchema`/`storyKeyFactSchema`，两个上限常量与 domain 各钉一份）、`StoryDetail`、Story 编排命令（含 `UpdateStoryRevisionCommand` 与 split 后继）及 Entry↔Story 关系 DTO。
-- `packages/contracts/src/action.ts`：`actionRefSchema`、`parseActionRef`、ActionKind/placement/error、`retryPolicySchema`、`actionDefinitionSchema`、`actionDescriptorSchema`/`actionManifestSchema`、JsonValue/BlobRef/normalized asset/item 与三个 ingest Action DTO。
-- `packages/contracts/src/index.test.ts`：Bilibili mode/profile 和 strict unknown、AI HOT 默认值和 strict unknown、可扩展 CreateSource、probe/job snapshot、Publisher 空白归一化、TemporalValue 证据约束、topic/entity/用户组织三类 DTO 与命令的枚举校验与读取侧降级。
-- `packages/contracts/src/action.test.ts`：ActionRef bare/zero/leading-zero/uppercase/space/unsafe 拒绝、版本解析、固定枚举、Descriptor 去 executable schema、版本一致性、Retry/Execution 约束、错误代码与 `workflow-activity`、Source snapshot 分离、JSON-safe asset/manifest、Uint8Array 与额外 BlobRef 拒绝。
-- 消费边界：`packages/application/src/action.ts` 对 unknown input/output parse；`packages/application/src/workflow-ingest.ts` 使用 normalized item 合同；`apps/api/src/app.controller.ts` 对 HTTP body/query parse 并 JSON.stringify SSE。
-- `packages/contracts/src/provider-model.ts`：Provider/model 配置的全部 schema——`createModelProviderCommandSchema`、`updateModelProviderCommandSchema`、`modelProviderSnapshotSchema`、`modelProviderOperationSnapshotSchema`、`modelProviderPageSchema`、`createConfiguredModelCommandSchema`、`updateConfiguredModelCommandSchema`、`configuredModelSnapshotSchema`、`configuredModelPageSchema`、`createProviderModelDiscoveryCommandSchema`、`providerModelDiscoveryCandidateSchema`、`providerModelDiscoveryErrorCodeSchema`、`providerModelDiscoverySnapshotSchema`。同目录 `provider-model.test.ts` 覆盖 URL 语法拒绝、`modelId` 不得是 URL、预算跨字段 refine、`superRefine` 的三条发现不变式。服务端错误码枚举在 `packages/contracts/src/platform.ts` 的 `serviceErrorCodeSchema`。
+→ 概念与定义、协议和内容基础类型、Source 与采集命令、状态和查询 DTO 已归档:[part-01-base-types.md](0001-public-contracts/part-01-base-types.md)
+→ Feed、Entry、Story 与事件 DTO、Action、重试与可序列化引用 已归档:[part-02-content-dtos.md](0001-public-contracts/part-02-content-dtos.md)
+→ 外部行为、输入、输出、状态与持久化、状态转换、副作用、错误与降级、依赖、配置、重建验收、实现与测试锚点 已归档:[part-03-behaviour-and-acceptance.md](0001-public-contracts/part-03-behaviour-and-acceptance.md)
 
 ## 非目标/边界
 

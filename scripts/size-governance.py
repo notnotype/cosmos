@@ -72,7 +72,7 @@ EXCLUDE_NAMES = {"bun.lock", "bun.lockb", "package-lock.json", "yarn.lock", "pnp
 # 依赖目录与构建产物整个跳过；.worktree 是整仓副本，不跳会全量重复统计
 # test-results/playwright-report 是浏览器验收的运行产物（已在 .gitignore 里），
 # 一次失败会留下 60 KB 的 error-context.md，把本地文档门禁判红——它与文档无关。
-SKIP_DIRS = {"node_modules", ".git", ".worktree", ".next", "dist", "build", "out", "coverage", ".turbo", ".venv", "__pycache__", "test-results", "playwright-report"}
+SKIP_DIRS = {"node_modules", ".git", ".worktree", ".worktrees", ".next", "dist", "build", "out", "coverage", ".turbo", ".venv", "__pycache__", "test-results", "playwright-report"}
 # 会话临时目录不是仓库内容，不入治理口径（其中残留的扫描输出会污染统计）
 SKIP_DIR_PATHS = {".agent/tmp"}
 
@@ -95,7 +95,7 @@ def classify(path: Path) -> str | None:
 
 
 def ignored_paths(root: Path) -> set[str]:
-    """返回被 .gitignore 排除、且存在于工作区的文件（仓库相对 POSIX 路径）。
+    """返回被 .gitignore 排除的工作区路径（仓库相对 POSIX 路径；目录条目带尾斜杠）。
 
     扫描器按文件系统遍历，本身不读 .gitignore，于是本机专属文件（会话计划、
     本地工具配置、生成物）会被算进治理口径与包地图——它们在其他 clone 与 CI
@@ -103,6 +103,10 @@ def ignored_paths(root: Path) -> set[str]:
 
     只排除**被忽略**的文件：未跟踪但未被忽略的文件属仓库内容（只是还没 add），
     必须继续计入，否则门禁会漏掉新引入的超标文件。
+
+    注意 git 对整目录被忽略的情况只返回目录条目（`.worktrees/`），不展开成文件，
+    所以调用方必须按前缀匹配，不能只做等值比较——否则整棵被忽略目录下的文件
+    一个都跳不掉，本地每次门禁都会报一批 CI 上不存在的幻影违规。
     """
     try:
         completed = subprocess.run(
@@ -113,6 +117,13 @@ def ignored_paths(root: Path) -> set[str]:
         # 不是 git 工作区（或没有 git）时退回纯文件系统口径，不让治理脚本硬失败。
         return set()
     return {name for name in completed.stdout.decode("utf-8", "surrogateescape").split("\0") if name}
+
+
+def is_ignored(rel: str, skip: set[str]) -> bool:
+    """判断仓库相对路径是否被 git 忽略：精确命中文件条目，或落在被忽略目录条目之下。"""
+    if rel in skip:
+        return True
+    return any(rel.startswith(prefix) for prefix in skip if prefix.endswith("/"))
 
 
 def scan(root: Path, cats: set[str]) -> list[dict]:
@@ -130,7 +141,7 @@ def scan(root: Path, cats: set[str]) -> list[dict]:
             if cat not in cats:
                 continue
             rel = path.relative_to(root).as_posix()
-            if rel in skip:
+            if is_ignored(rel, skip):
                 continue
             try:
                 data = path.read_bytes()

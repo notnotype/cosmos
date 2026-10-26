@@ -141,7 +141,7 @@ Blob Store 只拥有字节能力：
 - 读取已授权的 Blob；
 - 删除未绑定或已到期的 Blob。
 
-Blob Store 不拥有 Observation、EntryRevision、Asset 或 ContentRepresentation 语义，不判断调用方是否有权读取敏感来源。
+Blob Store 不拥有 Observation、EntryRevision、Asset 或 ContentRepresentation 语义，不判断调用方是否有权读取敏感来源。保留声明输入的重建使用独立 `readBounded` 字节能力：单句柄分块读取且最多探测上限外一字节，始终关闭句柄；不能先无界读完再校验或依赖 stat 后读的竞态。Storage 以 1 MiB 限制 JSON 编码字节并严格解码，Application 验证声明后规范化。超限或不可用输入返回冲突，不改来源事实与当前表示；普通 Blob 读取合同不变。
 
 ### 3.7 Web 与 Agent
 

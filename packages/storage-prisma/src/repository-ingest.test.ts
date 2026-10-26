@@ -112,6 +112,24 @@ import { PrismaContentQueryRepository } from "./repository/content-query.js";
                 draft: { blocks: [], contentText: "", status: "complete", parserVersion: "fixture", qualitySignals: {} }, actorId: "user",
             })).rejects.toThrow("selection conflict");
             expect(await prisma.contentRepresentation.count()).toBe(4);
+            const original = revisions[0].evidenceObservation!;
+            const stableRevision = await prisma.entryRevision.findUniqueOrThrow({ where: { id: revisions[0].id } });
+            for (const bytes of [
+                new TextEncoder().encode(JSON.stringify({ format: "plain-text", text: "x".repeat(1_048_576) })),
+                new TextEncoder().encode("{malformed-private-body"),
+                new Uint8Array([0xff, 0xfe]),
+                new TextEncoder().encode('{"format":"not-declared"}'),
+            ]) {
+                const blob = await repository.blobs.put(bytes);
+                await prisma.observation.update({ where: { id: original.id }, data: { contentSourceBlobKey: blob.key } });
+                await expect(rebuild.rebuild(revisions[0].id, authority)).rejects.toMatchObject({ code: "conflict" });
+                expect(await prisma.contentRepresentation.count()).toBe(4);
+                expect(await prisma.entryRevision.findUniqueOrThrow({ where: { id: revisions[0].id } })).toEqual(stableRevision);
+            }
+            await prisma.observation.update({ where: { id: original.id }, data: { contentSourceBlobKey: "sha256/missing" } });
+            await expect(rebuild.rebuild(revisions[0].id, authority)).rejects.toMatchObject({ code: "conflict" });
+            await prisma.observation.update({ where: { id: original.id }, data: { contentSourceBlobKey: original.contentSourceBlobKey } });
+            expect(await prisma.observation.findUniqueOrThrow({ where: { id: original.id } })).toEqual(original);
         });
     });
 

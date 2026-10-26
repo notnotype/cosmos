@@ -18,7 +18,7 @@ Contracts 唯一拥有跨边界 JSON schema；Application ContentQuery 统一提
 
 表示携带 id、entryRevisionId、representationVersion、parserVersion、status、qualitySignals、createdAt 与 supersedesRepresentationId。表示读取状态 `complete/partial/failed` 与原文证据 availability 分开；complete 不保证原站完整或事实正确。证据引用绑定 entryId、entryRevisionId、representationVersion、blockId?。
 
-实施预算候选：输入 1 MiB，节点 50000，块 5000，解析深度 64，单块文本 65536 字符，列表最多 3 层，表格最多 200 行×50 列，单 URL 4096 字符。超限明确 partial/warnings，不声称处理了被截断内容；最终常量与执行点须经合同审查。
+输入上限 1 MiB：plain-text/HTML 按正文 UTF-8 字节；structured source 按声明 JSON 编码字节（包含壳、分隔符、元数据、嵌套与转义）逐顶层块累计，超限保留有序前缀并标记 partial/warnings，不先序列化整个超大输入。节点 50000，块 5000，解析深度 64，单块文本 65536 字符，列表最多 3 层，表格最多 200 行×50 列，单 URL 4096 字符；不声称处理了被截断内容。
 
 ## Query profiles
 
@@ -41,7 +41,7 @@ Contracts 唯一拥有跨边界 JSON schema；Application ContentQuery 统一提
 | --- | --- |
 | `GET revisions/:revisionId/content` | 可选 `representationVersion` 正整数；省略时读取明确 current 指针。返回严格 `StructuredContentView`，无原始 payload 或内部 Blob key。 |
 | `POST revisions/:revisionId/content/selection` | `expectedCurrentId`、`expectedLocked`、`operation: lock/unlock/rollback`；仅 rollback 必须提供 `representationId`。指针和锁状态一起校验，回退后锁定。 |
-| `POST revisions/:revisionId/content/rebuild` | 空对象 `{}`；主机从 Observation 保留的声明输入重新解析。创建新表示并按质量／人工锁规则决定是否提升；返回表示 ID、版本和 promoted。没有保留输入时返回 409，不猜测 raw payload 格式。 |
+| `POST revisions/:revisionId/content/rebuild` | 空对象 `{}`；主机从 Observation 保留的声明输入重新解析。创建新表示并按质量／人工锁规则决定是否提升；返回表示 ID、版本和 promoted。没有保留输入、读取失败、超出 1 MiB 声明 JSON 字节或 UTF-8/JSON/声明校验无效时返回 409，不创建新表示；Blob 单句柄有界读取，不猜测 raw payload 格式。 |
 | `GET stories/:storyId/agent-candidates` | 返回最近 100 个候选及 pending/accepted/rejected 状态，按创建时间与 ID 倒序。 |
 | `POST stories/:storyId/agent-candidates` | 严格 body：`connectionId`、`task`、可选 `sources: [{entryRevisionId, representationVersion}]`；必需 `Idempotency-Key`（非空、最长 200 字符）。返回 202 的 `StoryAgentGeneration`，不返回同步候选。相同键同意图复用冻结 Run，不同意图返回 409；不存在 Story/无法读取精确版本/连接不可用分别 404/400/409。 |
 | `GET stories/:storyId/agent-generations/:runId` | 仅返回 runId/storyId/task/connectionId、`queued/running/completed/failed/cancelled`、candidateId、errorCode。仅 completed 有 candidateId，失败只给 `generation_failed`；无模型响应正文、凭证或内部错误。不同 Story 或未知 Run 返回 404。 |

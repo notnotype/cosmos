@@ -10,9 +10,9 @@
 
 ## 当前状态与本轮切片
 
-编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取。本轮补齐合成解析升级/质量保护，并修复旧证据提示与过期接受门禁。真实 Agent 与独立审查仍未闭合，不整体标完成。
+编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取。本轮补齐合成解析升级/质量保护，并修复旧证据提示与过期接受门禁。本轮独立审查与两项预算 Required 复核闭合；真实 Agent 仍未验收，不整体标完成。
 
-当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；普通子 Agent 工具不能指定批准模型，未委派或冒称独立审查。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
+当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；本轮另经明确授权以小型 workflow 固定 `jijiapi/gpt-6-luna` 完成只读独立审查，详见末节。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
 
 ## 设计依据与决定
 
@@ -119,33 +119,8 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 - [内部 @2 前置接线](walkthrough/history-internal-agent-v2.md)：产品接线完成前的计划和验证原文；5,325 字节原样归档。
 - [完整 Story 产品接线](walkthrough/history-product-agent-wiring.md)：已完成的接线计划、红绿过程与分层验证，6,618 字节历史正文移入本册。
 - [媒体与异常读取验收](walkthrough/history-media-and-reading-degradation.md)：已完成的媒体降级、旧文本、损坏表示与缺 Asset 验收原文。
+- [表示版本产品验收与首次提交](walkthrough/history-version-product-acceptance.md)：锁定/精确版本/回退产品验收和逐步提交基线核对；5,794 字节原文归档，仅规范末尾分隔换行。
 - 以下保留后续验收计划与证据；历史目标授权不代表当前自动续跑已启用。
-
-### 2026-10-26：表示版本产品验收计划
-
-沿用已批准的精确版本、质量推进与人工保护合同。本轮只新增 `e2e/browser/story-representation-versions.spec.ts`，复用现有隔离 RSS→API/Worker→Web 栈及公开内容管理 API；不改业务、schema 或 UI，不操作真实来源/模型/数据。当前 Web 只有当前表示阅读，没有历史管理按钮；API 命令加阅读页刷新不冒称按钮验收。Leader 单独写本记录，不启动无法指定已批准模型的子 Agent。
-
-1. **锁定与稳定输入**：受控 RSS 落库得到 v1；锁定后重建 v2，不晋升当前。两版本同解析器/正文/块，原 EntryRevision、Observation 和 Story 版本不变。
-2. **精确引用与冲突**：显式 v1/v2 读到各自身份；不存在版本明确 unavailable，不退为 current/legacy。过时当前 ID、锁状态及跨来源回退分别拒绝，当前指针不变。
-3. **回退与产品阅读**：解锁后重建 v3 晋升；回退 v1 自动锁定，后续 v4 不晋升。1024/1440 实际阅读页刷新读取相应当前 ID、正文可读、原文链接可聚焦、无横向溢出及非预期浏览器错误。
-
-先编写并运行该验收，用运行结果识别缺陷；若确有业务缺陷，先报告实际行为/预期/证据，再决定修复，不为绿灯改合同。验证命令：`bun run build:api`、`bun run build:worker` 后 `bunx playwright test --config playwright.config.ts e2e/browser/story-representation-versions.spec.ts`；另跑已有 ContentQuery/重建/选择的聚焦回归和文档门禁。独立审查、其他媒体降级和真实 Agent 仍分层未完成。
-
-### 2026-10-26：表示版本产品验收结果
-
-- 三条断言均有本轮运行证据：v1 锁定后 v2 不晋升；按精确版本返回不同表示身份、同解析器输入得到相同正文/块；缺失版本返回 unavailable，不读 current/legacy。过时指针/锁状态及跨来源回退为 409，缺失目标为 404，均不改变当前表示。解锁后 v3 晋升，回退 v1 自动锁定，后续 v4 不晋升；原 EntryRevision、Observation 与 Story 快照完全相同。
-- 两个实际 viewport（1024/1440）都通过生产阅读页刷新捕获真实 GET 的当前表示 ID，验证正文、原文链接键盘焦点、无页面横向溢出；完整过程 pageerror/console error/requestfailed 均为空。无 API 响应伪造、数据库直写或业务改动。本轮补的是已有能力的完整产品证据，不是实现新的历史管理 UI。
-- `bun run build:api` → `bun run build:worker` → `bunx playwright test --config playwright.config.ts e2e/browser/story-representation-versions.spec.ts` 全部 exit 0（pwsh-fea9b2f9055b416e）；API/Worker/共享包构建通过，浏览器含生产 Web 构建/start，2 项通过、23.6s。隔离数据库/Blob/受控 RSS，不访问真实用户数据或模型。
-- `bun run vitest run packages/application/src/content-query.test.ts packages/application/src/content-commands.test.ts packages/application/src/content-rebuild.test.ts packages/storage-prisma/src/content-query.test.ts packages/storage-prisma/src/representation-selection.test.ts apps/api/src/app.controller.structured-content.test.ts`：6 文件 / 20 测试通过，7.92s，pwsh-f23612e9f0784d7e，exit 0。
-- 当前状态已同步 Task README 与 PROJECT-STATUS；`bun run docs:check`（1184 文件、0 失败）、`git diff --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 均通过（pwsh-bd62bab8695d431f，exit 0），保留 5 项既存基线增长 warning；主记录 26,656 字节（本句补记前）。未运行本轮默认单元全套、单独全仓 typecheck、完整浏览器整套、真实来源/Agent、旧用户库升级、独立审查；构建中的类型检查不冒称单独全仓 typecheck。解析器升级、不同质量候选与 Agent 旧证据演进不由同解析器重建验收替代。信心 B，本切片完成、Task40 仍 active；下一步媒体/读取状态的剩余产品验收及独立审查。无 goal/子 Agent/Git 外部操作/部署。
-
-### 2026-10-26：逐步提交授权与既有基线核对
-
-维护者要求继续 Task40，每完成一个可独立验收的步骤作一次本地 Git 提交，并附简要中文说明。此授权不包含 push、分支/worktree、部署、真实数据或真实模型请求；不创建/恢复 goal。先把已完成但未提交的内部 @2、完整 Story 接线及表示版本验收合为连贯基线，之后媒体验收独立提交；不使用 `git add -A`。
-
-- 本轮 `bun run test` 后串行 `bun run typecheck` 均 exit 0（pwsh-68940fe8713b4907）：201 文件 / 1148 测试通过、175.08s，全仓类型通过。上一轮产品与组件浏览器证据保留以上分层结果，本轮未重跑浏览器。
-- Leader 按正确性、简单性、架构、安全、性能五轴核对候选持久化/正式决定、既有队列复用、API/Worker 装配、连接与版本权限、终态/fence、同键恢复及有界轮询；未识别新增 Critical/Required blocker。不把此次自查当独立审查：普通子 Agent 工具无法指定 `jijiapi/gpt-6-luna`，未使用默认路由，独立审查继续未完成。
-- 仅 Task40 相关 32 个既有改动及其新文件进入候选范围，当前 master 基于 `31d9577`；公共导出为显式增量冻结，未改旧路由历史。旧内部计划/结果 5,325 字节原文移入历史分册，当前决定和有效结果不移走。文档链接 1185 文件、大小治理及 diff 门禁通过（pwsh-1536d396c5d548da，exit 0），保留 5 项既存增长 warning。首次 staged diff 发现 3 个新归档的末尾分隔空行，仅规范最后换行、不改历史正文；提交前复查。
 
 ### 2026-10-26：解析器、质量与旧证据演进验收计划
 
@@ -174,4 +149,27 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 - 五轴自查未见新增 blocker：规则在源 owner，事务防陈旧页面绕过；无新表/平台/外呼/自动写入；最多 100 候选，来源按候选批量读取；仅多一次只读状态投影。非独立审查，指定模型路由不可由普通工具指定，未启动默认路由 Agent。
 - 文档门禁：`bun run docs:check` 检查 1193 文件、0 失败，`git diff --check` 与 `python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 通过（pwsh-0b12a13b93e74294，exit 0），395 文件、保留 5 项既存基线增长 warning；提交前另查 staged diff，防止新文件空白遗漏。
 - 已完成的媒体与异常读取过程 10,217 字节原文归档，仅规范末尾分隔换行；保留当前状态、有效决定与本轮证据。未运行浏览器整套、真实来源/Agent、用户旧库升级、部署与独立审查。信心 B，本演进切片完成，Task40 active；下一步独立审查及另获费用/凭据/网络授权的真实 Agent 验收。按授权仅本地中文提交，无 goal/push/新分支/worktree。
+
+### 2026-10-26：指定路由独立审查计划
+
+维护者要求先独立审查，再在另行明确授权后真实 Agent 验收，并按步骤本地中文提交。本轮另经明确选择批准一个小型 workflow，所有审查 Agent 固定 `jijiapi/gpt-6-luna`；不授权 Cosmos Provider 请求，不读取真实数据/凭据，不恢复 goal 或操作远端。基线 `3b46e9492db87ca034040dc0ea0dab058785e846`（工作区干净），Leader 唯一记录与修复写入者。
+
+1. 两名 fresh-context 只读审查者分别检查内容/版本/证据/阅读与 Agent/队列/恢复/正式决定，先读测试再读实现，覆盖正确性、简单性、架构、安全、性能；Task40 当前树为准，重点比较 `31d9577..3b46e94`，不把旧完成声明当证据。
+2. 每项 finding 必须有实际路径行号、触发条件、用户影响、合同依据与验证或未验证标记。Critical/Required 经 Leader 核实后先处理并回归，独立结论不由 Leader 自查替代；两名审查者均不能编辑、commit 或发公网请求。
+3. 审查闭合后只准备真实 Agent 的准确请求清单：新隔离根、合成 Story、Provider/model、完整发送文本、单次传输/预算、TTY 无回显凭据、费用/留存和清理；等待新的逐次确认后才能运行，不复用 Task39 历史授权。若路由或安全执行入口不足，报告实际限制，不降级模型或自动重试。
+
+审查 workflow-1fb660700b074977 已收集。内容审查提出两项 Required（先整读 Blob 再校验、structured source 缺总字节预算），均为静态发现，Leader 将补行为证据。另一会话无法访问 Windows 仓库（`fatal: cannot change to '/mnt/d/Otirik/Workstation/cosmos': No such file or directory`），未形成结论；已请具备仓库工具的同路由只读审查者补齐 Agent/恢复职责，不将失败会话当作通过。维护者另批准准备受控 Story 终端入口，但尚未授权真实网络请求；先闭合 Required。
+
+预算修复（不增新平台/迁移/外呼），先 RED 后实现：
+1. FileBlobStore 提供有界读取，正常/恰好边界成功，超限、读取中增长、非法限额拒绝；不依赖先 stat 后无界 read，文件句柄必须关闭。
+2. rebuild 对保留的声明输入 JSON 在读取阶段限 1 MiB（含 JSON 编码开销）；超限、缺失、损坏 UTF-8/JSON 或无效声明明确 409，当前表示和原始来源不变。普通 Blob 读取合同不变。
+3. structured source 按有序顶层块累计 UTF-8 JSON 字节（含嵌套、元数据、转义及结构），达到 1 MiB 停止后续块并标 partial；不先 stringify/encode 整个超大输入。正常输入及已有节点/深度/质量约束保持。复验后请独立审查者核对修复，再逐步本地中文提交。
+
+### 2026-10-27：独立审查闭合与预算修复结果
+
+- 路由固定 `jijiapi/gpt-6-luna`。可访问仓库的独立审查者完成内容职责后补齐 Agent/恢复职责，未再启动默认模型替代会话；不是两名均成功的审查。内容聚焦 9 文件/44 测试与 Agent/Kernel 5 文件/70 测试通过。五轴结论：正确性/安全两项 Required（重建先整读再解析、结构源总字节无界）；简单性/架构/性能未报告其它可核实问题。不代表无缺陷或浏览器整套通过。
+- Leader RED：Blob/Normalizer/重建 3 文件/26 测试中 4 失败（pwsh-5e9e6bc21bc244c8）。修复位于原 owner：`FileBlobStore.readBounded` 单句柄 64 KiB 块并最多额外探测一字节，finally close；重建限 JSON 编码 1 MiB、严格 UTF-8/JSON/声明校验，失败 409 且不变更表示；结构源预算计 shell、逗号、嵌套、元数据与转义，超限保留完整有序前缀并标 partial。普通 Blob 读取、公开导出、数据库 schema 与权限不变。
+- GREEN：独立审查者重新读取修复及测试，`bunx vitest run packages/application/src/content-input-budget.test.ts packages/application/src/content-normalizer.test.ts packages/application/src/content-rebuild.test.ts packages/blob-store/src/index.test.ts packages/storage-prisma/src/repository-ingest.test.ts`，5 文件/30 测试通过；`bun run typecheck:packages` 通过，原两项 Required 关闭，未报新 finding。覆盖精确上限、非法预算、JSON/Unicode 编码、深度/节点、缺失/过大/损坏重建及来源不变；读取期间增长的安全性来自单句柄循环代码审查，未做并发增长压力测试。
+- Leader 最终 `bun run test; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; bun run typecheck`：204 文件/1158 测试通过，186.78s，随后全仓类型通过（pwsh-61d9fe9c69d04f1a，exit 0）。一次测试数组类型推断报错已以显式 `readonly StructuredSourceBlock[]` 修正，无类型逃逸。文档门禁：`bun run docs:check`（1196 文件/0 失败）、`git diff --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 通过（pwsh-547692c9af4e4acb，exit 0；396 文件、5 项既存 warning）。初次门禁仅主记录约 9.3k token 超标，已原文归档完成步骤恢复健康区，不放宽预算；staged diff 提交前复查。
+- 本轮未运行浏览器、真实来源/Agent、用户库升级或部署；未读取用户凭据/数据。独立审查步骤闭合，Task40 仍 active。受控真实 Story 入口准备另成一步，先离线验证、披露准确请求并另获逐次确认；本次零 Provider 发送，终端无回显执行仍需本地真人 TTY。信心 B，仅按已授权步骤本地中文提交。
 

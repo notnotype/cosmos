@@ -31,12 +31,13 @@ export class ContentRebuild {
         if (!state) throw new ContentCommandError("not_found", "Content source revision not found");
         // Missing declared input is not permission to reinterpret an arbitrary raw payload.
         if (state.source === null) throw new ContentCommandError("conflict", "Content rebuild input unavailable");
-        const source = contentSourceSchema.parse(state.source);
+        const source = contentSourceSchema.safeParse(state.source);
+        if (!source.success) throw new ContentCommandError("conflict", "Content rebuild input unavailable or invalid");
         return this.repository.commitRebuild({
             entryRevisionId,
             expectedCurrentId: state.currentRepresentationId,
             expectedLocked: state.locked,
-            draft: normalizeContent(source),
+            draft: normalizeContent(source.data),
             actorId: authority.actorId,
         });
     }

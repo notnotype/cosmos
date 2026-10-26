@@ -1,3 +1,4 @@
+import type { StructuredSourceBlock } from "@cosmos/domain";
 import { describe, expect, it } from "vitest";
 import { structuredSourceBlockSchema } from "@cosmos/contracts";
 import { adaptLegacyContentText, normalizeContent } from "./content-normalizer.js";
@@ -137,6 +138,31 @@ describe("content normalizer", () => {
         ] });
         expect(result.status).toBe("complete");
         expect(result.contentText).toBe("one two three");
+    });
+
+    it("stops structured input at a deterministic UTF-8 JSON byte prefix", () => {
+        const blocks = Array.from({ length: 60 }, (_, index) => ({
+            type: "divider" as const, data: {}, source: `${index}:` + "界".repeat(10_000),
+        }));
+        const result = normalizeContent({ format: "structured-source-content", blocks });
+        expect(result.status).toBe("partial");
+        expect(result.blocks.length).toBeGreaterThan(0);
+        expect(result.blocks.length).toBeLessThan(blocks.length);
+        expect(new TextEncoder().encode(JSON.stringify({ format: "structured-source-content", blocks: result.blocks })).byteLength).toBeLessThanOrEqual(1_048_576);
+        expect(result.blocks).toEqual(blocks.slice(0, result.blocks.length));
+        expect(normalizeContent({ format: "structured-source-content", blocks })).toEqual(result);
+    });
+
+    it("counts nested content and JSON escapes before accepting a structured block", () => {
+        const prefix = { type: "paragraph" as const, data: { inlines: [{ type: "text" as const, text: "prefix" }] } };
+        const oversized: readonly StructuredSourceBlock[] = [
+            { type: "quote", data: { blocks: Array.from({ length: 40 }, () => ({ type: "code", data: { text: "界".repeat(10_000) } })) } },
+            { type: "divider", data: {}, source: "\u0000".repeat(180_000) },
+        ];
+        for (const block of oversized) {
+            const result = normalizeContent({ format: "structured-source-content", blocks: [prefix, block, prefix] });
+            expect(result).toMatchObject({ status: "partial", contentText: "prefix", blocks: [prefix] });
+        }
     });
 
     it("safely adapts legacy HTML to text blocks without raw markup", () => {

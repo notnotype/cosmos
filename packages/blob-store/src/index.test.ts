@@ -50,6 +50,24 @@ describe("FileBlobStore", () => {
         })).rejects.toBeInstanceOf(BlobIntegrityError);
     });
 
+    it("bounds reads before exposing bytes and keeps unrestricted reads unchanged", async () => {
+        const root = await mkdtemp(join(tmpdir(), "cosmos-bounded-blob-"));
+        temporaryRoots.push(root);
+        const store = new FileBlobStore(createBlobStoreConfig(root));
+        const stored = await store.put(new Uint8Array(131_073).fill(97));
+        expect(await store.readBounded(stored.key, 131_073)).toHaveLength(131_073);
+        await expect(store.readBounded(stored.key, 131_072)).rejects.toThrow("Blob byte budget exceeded");
+        for (const limit of [-1, 1.5, Infinity, Number.MAX_SAFE_INTEGER]) {
+            await expect(store.readBounded(stored.key, limit)).rejects.toThrow("Invalid Blob byte budget");
+        }
+        const empty = await store.put(new Uint8Array());
+        expect(await store.readBounded(empty.key, 0)).toHaveLength(0);
+        expect(await store.read(stored.key)).toHaveLength(131_073);
+        await expect(store.readBounded("../outside", 10)).rejects.toThrow("Blob key escapes");
+        await store.delete(stored.key);
+        expect(await store.exists(stored.key)).toBe(false);
+    });
+
     it("rejects blob keys outside the configured root", () => {
         const config = createBlobStoreConfig("C:/cosmos-test/blobs");
 

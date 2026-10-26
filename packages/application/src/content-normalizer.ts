@@ -1,3 +1,4 @@
+import { boundedJsonByteLength } from "./content-input-budget.js";
 import { parseFragment } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 type HtmlNode = DefaultTreeAdapterTypes.Node;
@@ -324,9 +325,15 @@ function normalizeHtml(html: string, baseUrl?: string, legacy = false): ContentD
 export function normalizeContent(source: ContentSource): ContentDraft {
     if (source.format === "plain-text") return normalizePlain(source.text);
     if (source.format === "safe-html-input") return normalizeHtml(source.html, source.baseUrl);
-    const state: State = { blocks: [], warnings: [], text: [], nodes: 0, bytes: 0, partial: false };
+    const state: State = { blocks: [], warnings: [], text: [], nodes: 0, bytes: byteLength('{"format":"structured-source-content","blocks":[]}'), partial: false };
+    let accepted = 0;
     for (const block of source.blocks) {
         if (state.blocks.length >= CONTENT_BLOCK_MAX_COUNT) { state.partial = true; break; }
+        const separator = accepted > 0 ? 1 : 0;
+        const bytes = boundedJsonByteLength(block, CONTENT_INPUT_MAX_BYTES - state.bytes - separator);
+        if (bytes === null) { state.partial = true; state.warnings.push("input byte budget exceeded"); break; }
+        state.bytes += bytes + separator;
+        accepted++;
         const normalized = normalizeStructuredBlock(block, state, 0);
         if (normalized) pushBlock(state, normalized);
     }

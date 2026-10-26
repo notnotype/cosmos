@@ -1,6 +1,8 @@
+import { constants as bufferConstants } from "node:buffer";
 import { createHash } from "node:crypto";
 import {
     mkdir,
+    open,
     readFile,
     stat,
     unlink,
@@ -81,6 +83,28 @@ export class FileBlobStore {
 
     async read(key: string): Promise<Uint8Array> {
         return readFile(resolveBlobKey(this.config, key));
+    }
+
+    async readBounded(key: string, maxBytes: number): Promise<Uint8Array> {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes >= bufferConstants.MAX_LENGTH) {
+            throw new Error("Invalid Blob byte budget");
+        }
+        const handle = await open(resolveBlobKey(this.config, key), "r");
+        try {
+            const chunks: Buffer[] = [];
+            let total = 0;
+            while (true) {
+                // The extra byte detects growth on the same handle without an unbounded read.
+                const chunk = Buffer.alloc(Math.min(64 * 1024, maxBytes - total + 1));
+                const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+                if (bytesRead === 0) return Buffer.concat(chunks, total);
+                total += bytesRead;
+                if (total > maxBytes) throw new Error("Blob byte budget exceeded");
+                chunks.push(chunk.subarray(0, bytesRead));
+            }
+        } finally {
+            await handle.close();
+        }
     }
 
     async exists(key: string): Promise<boolean> {

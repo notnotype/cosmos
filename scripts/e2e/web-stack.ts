@@ -28,6 +28,10 @@ async function main(): Promise<void> {
     await assertPortFree(webPort);
     stack = await createIsolatedStackRoot("browser-stack");
     applyMigrations(stack.dataRoot);
+    if (process.env.COSMOS_E2E_READING_DEGRADATION === "1") {
+        const { seedReadingDegradation } = await import("./reading-degradation-seed.js");
+        await seedReadingDegradation(stack);
+    }
     const apiPort = await findAvailablePort(14310);
     const baseEnvironment = environmentForStack(process.env, stack, {
         NODE_ENV: "test",

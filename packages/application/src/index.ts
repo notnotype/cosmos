@@ -68,6 +68,8 @@ export { bindContentBlocks, type ContentAssetBinding } from "./content-binding.j
 export { type ContentDraft } from "./content-normalizer.js";
 export { ContentRebuild, type ContentRebuildRepository, type ContentRebuildState } from "./content-rebuild.js";
 export { requireContentProfile, type ContentReadAuthority } from "./content-access-policy.js";
+export { StoryAgentWorkflowControl } from "./story-agent-workflow-control.js";
+export { createStoryAgentWorkflowDefinition, createStoryAgentSaveAction, type StoryAgentGeneratedCandidateStore } from "./story-agent-workflow.js";
 export { StoryAgentService } from "./story-agent-service.js";
 export {
     StoryAgent, type StoryAgentSnapshot, type StoryAgentSnapshotReader,

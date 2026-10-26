@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { ContentRebuild, ContentCommands, ContentQuery, StoryAgentCandidates, ConfiguredModels, ModelProviderCredentials, ModelProviderQuery, ModelProviderRemovals, ProviderModelDiscoveryRunner, createHttpsProviderModelDirectory } from "@cosmos/application";
+import { ContentRebuild, ContentCommands, ContentQuery, StoryAgentWorkflowControl, StoryAgentCandidates, ConfiguredModels, ModelProviderCredentials, ModelProviderQuery, ModelProviderRemovals, ProviderModelDiscoveryRunner, createHttpsProviderModelDirectory } from "@cosmos/application";
 import { createBuiltinManifestCatalog } from "@cosmos/application/catalog";
 import { MediaCleanupWorkflowControlService } from "@cosmos/application/media-cleanup";
 import { IngestWorkflowControlService } from "@cosmos/application/workflow-control";
@@ -11,6 +11,7 @@ import {
     PrismaContentRebuildRepository,
     PrismaContentSelectionRepository,
     PrismaStoryAgentCandidateRepository,
+    PrismaAgentModelConnectionResolver,
     PrismaWorkflowHostStore,
     PrismaProviderCredentialRepository,
     PrismaModelProviderQueryRepository,
@@ -50,6 +51,18 @@ export const cosmosContentRebuild = new ContentRebuild(new PrismaContentRebuildR
 export const cosmosContentQuery = new ContentQuery(new PrismaContentQueryRepository(cosmosRepository.prisma));
 export const cosmosContentCommands = new ContentCommands(new PrismaContentSelectionRepository(cosmosRepository.prisma));
 export const cosmosStoryAgentCandidates = new StoryAgentCandidates(new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma));
+export const cosmosStoryAgentControl = new StoryAgentWorkflowControl({
+    store: cosmosWorkflowStore, content: cosmosContentQuery,
+    connections: new PrismaAgentModelConnectionResolver(cosmosRepository.prisma),
+    stories: { readStory: async (storyId) => {
+        const detail = await cosmosRepository.story(storyId);
+        if (!detail) return null;
+        const entries = [...detail.entries, ...(detail.entry ? [detail.entry] : [])];
+        return { storyId: detail.story.id, storyRevisionId: detail.story.revisionId,
+            title: detail.story.title, summary: detail.story.summary ?? "",
+            entryRevisionIds: [...new Set(entries.flatMap((entry) => entry.revisions.map((revision) => revision.id)))] };
+    } },
+});
 export const cosmosMediaCleanupControl = new MediaCleanupWorkflowControlService({
     store: cosmosWorkflowStore,
 });
@@ -126,6 +139,10 @@ export const cosmosMediaCleanupControl = new MediaCleanupWorkflowControlService(
         {
             provide: "COSMOS_CONTENT_REBUILD",
             useValue: cosmosContentRebuild,
+        },
+        {
+            provide: "COSMOS_STORY_AGENT_WORKFLOW_CONTROL",
+            useValue: cosmosStoryAgentControl,
         },
         SourceProbeService,
     ],

@@ -16,6 +16,20 @@ export const storyAgentRequestSchema = z.object({
     sources: storyAgentSourceBindingSchema.array().max(100).optional(),
 }).strict();
 
+export const storyAgentGenerationRequestSchema = storyAgentRequestSchema.extend({
+    connectionId: z.string().trim().min(1).max(200),
+}).strict();
+
+export const storyAgentGenerationSchema = z.object({
+    runId: z.string().min(1), storyId: z.string().min(1), task: storyAgentTaskSchema,
+    connectionId: z.string().min(1),
+    status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
+    candidateId: z.string().nullable(),
+    errorCode: z.enum(["generation_failed"]).nullable(),
+}).strict();
+export type StoryAgentGenerationRequest = z.infer<typeof storyAgentGenerationRequestSchema>;
+export type StoryAgentGeneration = z.infer<typeof storyAgentGenerationSchema>;
+
 const evidence = evidenceRefSchema.array().max(100);
 export const storyAgentProposalSchema = z.discriminatedUnion("task", [
     z.object({

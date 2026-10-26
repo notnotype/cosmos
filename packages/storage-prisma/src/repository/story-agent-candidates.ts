@@ -8,7 +8,7 @@ import {
 import { type StoryAgentCandidate, storyAgentCandidateSchema, storySuccessorSchema, storyTimeRangeSchema } from "@cosmos/contracts";
 import { writeEntryRelation } from "./entry-relation-command.js";
 import { writeStoryRevision } from "./story-revision-command.js";
-import { appendDomainEvent } from "./repository-internals.js";
+import { appendDomainEvent, assertWorkflowActionFence } from "./repository-internals.js";
 
 function parseCandidate(value: string): StoryAgentCandidate {
     return storyAgentCandidateSchema.parse(JSON.parse(value));
@@ -22,8 +22,25 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
     constructor(private readonly prisma: PrismaClient) {}
 
     async save(candidate: StoryAgentCandidate): Promise<StoryAgentCandidateRecord> {
+        return this.persist(candidate);
+    }
+
+    async saveGenerated(candidate: StoryAgentCandidate, fence: import("@cosmos/application").HostActionExecutionFence): Promise<StoryAgentCandidateRecord> {
+        return this.persist(candidate, fence);
+    }
+
+    private async persist(candidate: StoryAgentCandidate, fence?: import("@cosmos/application").HostActionExecutionFence): Promise<StoryAgentCandidateRecord> {
         const parsed = storyAgentCandidateSchema.parse(candidate);
         const row = await this.prisma.$transaction(async (tx) => {
+            if (fence) {
+                await assertWorkflowActionFence(tx, fence, fence.workflowRunId);
+                if (parsed.id !== `story-candidate-${fence.workflowRunId}`) throw new StoryAgentCandidateError("conflict", "Story candidate Run identity mismatch");
+                const existing = await tx.storyAgentCandidate.findUnique({ where: { id: parsed.id } });
+                if (existing) {
+                    if (JSON.stringify(parseCandidate(existing.candidateJson)) !== JSON.stringify(parsed)) throw new StoryAgentCandidateError("conflict", "Story candidate replay mismatch");
+                    return existing;
+                }
+            }
             const revision = await tx.storyRevision.findUnique({ where: { id: parsed.storyRevisionId } });
             if (!revision || revision.storyId !== parsed.storyId) throw new StoryAgentCandidateError("conflict", "Story candidate revision mismatch");
             for (const binding of parsed.inputSources) {
@@ -43,7 +60,8 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
                 },
             });
         });
-        return record(parseCandidate(row.candidateJson), "pending");
+        if (row.status !== "pending" && row.status !== "accepted" && row.status !== "rejected") throw new Error("Invalid Story candidate status");
+        return record(parseCandidate(row.candidateJson), row.status);
     }
 
     async list(storyId: string): Promise<readonly StoryAgentCandidateRecord[]> {

@@ -3,6 +3,7 @@ import { isWorkflowEnvelopeMarker } from "../workflow-envelope-marker.js";
 import { PrismaWorkflowHostCompletionDeliveryStore } from "./completion-delivery-store.js";
 import { RECOVERABLE_RUN_STATUSES, type WorkflowRunRow, assertValidDate, invalidState, isTerminalRunStatus, parseJson, requireNonEmptyString } from "./internals-core.js";
 import { normalizeRunLease, toEnvelope } from "./internals-activity.js";
+import { terminalRunProjection } from "./terminal-projection.js";
 import { appendWorkflowRunCancelledEvent, appendWorkflowRunFailedEvent, hasCurrentRunLease } from "./internals-events-lease.js";
 
 export class PrismaWorkflowHostRunLifecycleStore extends PrismaWorkflowHostCompletionDeliveryStore {
@@ -19,25 +20,16 @@ export class PrismaWorkflowHostRunLifecycleStore extends PrismaWorkflowHostCompl
                 || !hasCurrentRunLease(run as WorkflowRunRow, runLease, now)) {
                 return false;
             }
-            const finishedAt = now;
             const updated = await tx.workflowRun.updateMany({
                 where: {
                     id: runLease.runId,
                     status: run.status,
+                    kernelRevision: run.kernelRevision,
                     runLeaseOwner: runLease.owner,
                     runLeaseToken: runLease.leaseToken,
                     runLeaseExpiresAt: { gt: now },
                 },
-                data: {
-                    status: "failed",
-                    errorMessage: error,
-                    finishedAt,
-                    updatedAt: now,
-                    runLeaseOwner: null,
-                    runLeaseToken: null,
-                    runLeaseExpiresAt: null,
-                    resumeRequired: false,
-                },
+                data: terminalRunProjection(run as WorkflowRunRow, "failed", error, now),
             });
             if (updated.count !== 1) return false;
             await appendWorkflowRunFailedEvent(tx, {
@@ -73,17 +65,9 @@ export class PrismaWorkflowHostRunLifecycleStore extends PrismaWorkflowHostCompl
                 where: {
                     id: runId,
                     status: run.status,
+                    kernelRevision: run.kernelRevision,
                 },
-                data: {
-                    status: "cancelled",
-                    errorMessage: reason,
-                    finishedAt: now,
-                    updatedAt: now,
-                    runLeaseOwner: null,
-                    runLeaseToken: null,
-                    runLeaseExpiresAt: null,
-                    resumeRequired: false,
-                },
+                data: terminalRunProjection(run as WorkflowRunRow, "cancelled", reason, now),
             });
             if (updated.count !== 1) {
                 throw new WorkflowHostConflictError(

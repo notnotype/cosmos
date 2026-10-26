@@ -114,6 +114,7 @@ type	StoryAgentCandidateAuthority
 type	StoryAgentCandidateRecord
 type	StoryAgentCandidateRepository
 type	StoryAgentCandidateStatus
+type	StoryAgentGeneratedCandidateStore
 type	StoryAgentHost
 type	StoryAgentRequest
 type	StoryAgentSnapshot
@@ -210,6 +211,7 @@ value	StoryAgent
 value	StoryAgentCandidateError
 value	StoryAgentCandidates
 value	StoryAgentService
+value	StoryAgentWorkflowControl
 value	StoryMergeConflictError
 value	StoryNotFoundError
 value	StoryRevisionConflictError
@@ -233,6 +235,8 @@ value	createBuiltinManifestCatalog
 value	createHealthSnapshot
 value	createHttpsProviderModelDirectory
 value	createMediaAcquirer
+value	createStoryAgentSaveAction
+value	createStoryAgentWorkflowDefinition
 value	getAgentInvocationDefinition
 value	getAgentInvocationV2Definition
 value	isPublicAddress

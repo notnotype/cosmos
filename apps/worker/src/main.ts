@@ -9,6 +9,8 @@ import {
     IngestionWorker,
     parseAllowedHosts,
     SourceConfigProbeService,
+    createStoryAgentWorkflowDefinition,
+    createStoryAgentSaveAction,
 } from "@cosmos/application";
 import {
     createIngestActions,
@@ -21,7 +23,7 @@ import {
 import { IngestWorkflowControlService } from "@cosmos/application/workflow-control";
 import { createLogger } from "@cosmos/logging";
 import { createBuiltInConnectorRegistry } from "@cosmos/plugin-collectors";
-import { PrismaAgentModelConnectionResolver, PrismaConnectorStateStore, PrismaCosmosRepository } from "@cosmos/storage-prisma";
+import { PrismaAgentModelConnectionResolver, PrismaConnectorStateStore, PrismaCosmosRepository, PrismaStoryAgentCandidateRepository } from "@cosmos/storage-prisma";
 import { createWorkerAdminServer, type ComponentHealth, type WorkerAdminServer } from "@cosmos/worker-admin";
 import type { ConnectorStateHandle, ConnectorStateStorePort, LoggerPort } from "@cosmos/application";
 import type { CatalogPort } from "@cosmos/application/catalog";
@@ -163,6 +165,7 @@ async function bootstrap(): Promise<void> {
                 definitions: [
                     createIngestWorkflowDefinition(),
                     createMediaCleanupWorkflowDefinition(),
+                    createStoryAgentWorkflowDefinition(),
                 ],
                 actions: [
                     // Agent 只有连接作用域一个版本：模型、地址与凭证都在调用时按那条连接解析，
@@ -184,6 +187,7 @@ async function bootstrap(): Promise<void> {
                         logger,
                     }),
                     ...createMediaCleanupActions({ domain: repository, logger }),
+                    createStoryAgentSaveAction(new PrismaStoryAgentCandidateRepository(repository.prisma)),
                 ],
                 owner: instanceId,
                 workerId: config.workerId,

@@ -62,7 +62,7 @@ Task 导航：
 - [`38-agent-invocation/`](38-agent-invocation/)：Phase 3 第一切片 Agent Invocation 基础接入——版本化 `agent.invoke@1` 普通 Workflow Action、Invocation Port、`trusted_worker` 执行位置与 Fake Adapter 先行；复用现有 Run/Activity/Job/Attempt/Lease/取消/重试/completion durable truth。真实 `pi-ai`、`neuro-agent-harness`、`nb-memory`、Artifact、Workspace、Knowledge/Research 后置；编号 38 由维护者 2026-10-08 分配。
 
 - [`39-pi-ai-adapter/`](39-pi-ai-adapter/)：真实 pi-ai Adapter，承接 Task 38；编号 39 由维护者分配，当前状态与验证见任务记录。
-- [`40-story-content-representation/`](40-story-content-representation/)：Story 内容表示与多模态阅读——有序内容块、版本化投影、统一 Web/Agent 读取与候选接受；编号 40 由维护者分配，内容表示、读取、阅读和候选决定已有实现，当前推进剩余修复、生产 Agent 装配与整体验收；当前证据和缺口见同一 walkthrough。
+- [`40-story-content-representation/`](40-story-content-representation/)：Story 内容表示与多模态阅读——有序内容块、版本化投影、统一 Web/Agent 读取与候选接受；编号 40 由维护者分配。内容表示、阅读、候选决定及 Story 生成接线已实现，隔离完整产品链路已验收；真实 Agent、剩余产品验收与独立审查未完成，证据和缺口见同一 walkthrough。
 
 当前提交基线、验证结果和未完成边界只在 [`../../PROJECT-STATUS.md`](../../PROJECT-STATUS.md) 维护。
 

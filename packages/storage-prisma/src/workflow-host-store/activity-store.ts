@@ -6,6 +6,7 @@ import { isWorkflowEnvelopeMarker } from "../workflow-envelope-marker.js";
 import { PrismaWorkflowHostRunLeaseStore } from "./run-lease-store.js";
 import { ACTIVITY_KIND, type ActivityJobRow, DEFAULT_COMPLETION_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS, TERMINAL_RUN_STATUSES, type WorkflowCompletionRow, type WorkflowRunRow, assertValidDate, encodeJson, invalidState, isTerminalRunStatus, isUniqueConstraintError, normalizeRetryDelay, parseJson, requireNonEmptyString, validateLeaseMs } from "./internals-core.js";
 import { activityIdentityJson, existingActionResult, normalizeActivityJobLease, normalizeActivityRequest, normalizeRunLease, parseActivityPayload, pendingActivityForState, previousJobLeaseGuard, rejectedActivityResult, sameCompletionIdentity, toActivityJobClaim, toCompletion, validateActivityTerminalResult, validateCompletionForJob } from "./internals-activity.js";
+import { terminalRunProjection } from "./terminal-projection.js";
 import { appendActivityLifecycleEvent, appendWorkflowRunFailedEvent, hasCurrentRunLease } from "./internals-events-lease.js";
 
 export class PrismaWorkflowHostActivityStore extends PrismaWorkflowHostRunLeaseStore {
@@ -312,17 +313,8 @@ export class PrismaWorkflowHostActivityStore extends PrismaWorkflowHostRunLeaseS
         if (updated.count !== 1) return;
         const error = "Activity dispatch outcome is unknown; the external request may already have been sent.";
         const runFailed = await tx.workflowRun.updateMany({
-            where: { id: run.id, status: { notIn: [...TERMINAL_RUN_STATUSES] } },
-            data: {
-                status: "failed",
-                errorMessage: error,
-                finishedAt: now,
-                updatedAt: now,
-                runLeaseOwner: null,
-                runLeaseToken: null,
-                runLeaseExpiresAt: null,
-                resumeRequired: false,
-            },
+            where: { id: run.id, status: { notIn: [...TERMINAL_RUN_STATUSES] }, kernelRevision: run.kernelRevision },
+            data: terminalRunProjection(run as WorkflowRunRow, "failed", error, now),
         });
         if (runFailed.count === 1) {
             await appendWorkflowRunFailedEvent(tx, { workflowRunId: run.id, error });

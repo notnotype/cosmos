@@ -168,6 +168,7 @@ export async function seedPendingActivity(
             createdAt: now,
         }],
         activityCompletions: [],
+        logs: [],
         progress: null,
         journal: [],
         revision: row.kernelRevision,

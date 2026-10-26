@@ -40,7 +40,21 @@
 
 `AgentModelConnectionResolver`（端口）返回 `AgentModelConnectionSnapshot | null`：一次读取连接、模型与 Provider，任一不满足就返回 `null`。分三次读会读到三个时刻的状态，用户刚换模型时可能把新模型的预算和旧服务商的地址拼在一起。
 
-与 @1 的选择关系：@2 用于用户在模型页里选好的连接，Worker 现在只注册它。`@1` 的 Worker 部署 profile 与注册已随 F 切片退出（前置的真实服务验收已完成，见 [API 0009](../../api/0009-provider-model-configuration.md)）；`agent.invoke@1` 作为端口、输入输出契约与 catalog 条目仍保留，因为 Story 生成侧按这个端口注入，但已没有进程注册它。
+与 @1 的选择关系：@2 用于用户在模型页里选好的连接，Worker 现在只注册它。`@1` 的 Worker 部署 profile 与注册已随 F 切片退出（前置的真实服务验收已完成，见 [API 0009](../../api/0009-provider-model-configuration.md)）；`agent.invoke@1` 的端口、输入输出契约、Fake 与 disabled catalog 条目仍保留，但没有生产进程注册它，Story 内部生成用例也已改用 @2。
+
+### Story 候选消费者（产品接线）
+
+`StoryAgent` 依赖 `AgentInvocationV2Port`；`StoryAgentHost` 只提供 `connectionId`、预算、读取权限和候选 ID/时间，不声明 Provider、模型、地址或凭证。空连接 ID 和预先取消在读取 Story 前被拒绝。连接状态、模型与凭证仍由 Worker @2 的 resolver/Adapter 解析；候选记录采用返回的实际 Provider/模型。
+
+默认只读取 Story 摘要，正文必须显式申请权限并指定来源修订及表示版本；输出须为无工具调用的完整 JSON 提案，且证据只能引用实际读取的版本/块。候选保存与人工接受/拒绝边界不变。
+
+产品 POST 显式提交 `connectionId`、task、可选精确 sources 与 `Idempotency-Key`，返回 202 任务投影；详见 [内容表示 API](../../api/0008-story-content-representation.md)。API 冻结 Query 允许的输入，按键去重复用既有 Host 的 `cosmos.story-agent@1`，不加载 SDK、不静默选第一条连接。相同键不同意图拒绝；已入队请求重放不重读变化后的输入。固定预算 60s、2048 输出 token、0 工具调用，@2 仍按连接上限夹取。
+
+Worker 注册生成与 `story.agent-candidate.save@1`，候选按 Run 派生固定 ID；保存事务检查 live Run/Job 双租约、Kernel revision 与 Activity 身份，拒绝取消后的旧执行。同一候选幂等，正式接受仍另经原子命令。外呼结果不确定不得自动重发模型；失败/取消可发生在候选提交之后，终态页面查询实际候选列表，不能保证“没有保存”。浏览器在发送前保存同键意图；未知响应只人工恢复同一请求，已知 Run 刷新只 GET 查询。
+
+实现与行为锚点：[入队控制](../../../packages/application/src/story-agent-workflow-control.ts)、[Workflow 与保存 Action](../../../packages/application/src/story-agent-workflow.ts)、[隔离 Worker 行为](../../../apps/worker/src/story-agent-workflow.test.ts)、[完整产品浏览器](../../../e2e/browser/story-agent-generation.spec.ts)。隔离产品验收使用真实 SDK 和合成传输，不替代真实 Provider 验收。
+
+无网络组合测试见 `apps/worker/src/story-agent-invocation.test.ts`：真实 Action Registry、Worker @2 工厂和 pi-ai Adapter，连接/凭证端口及 SDK 响应为合成输入；验证 pending 候选、精确历史版本、模型预算夹取与错误/取消不保存，不替代真实模型或完整产品验收。
 
 ## 输入
 

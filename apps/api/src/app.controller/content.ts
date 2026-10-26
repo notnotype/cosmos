@@ -10,6 +10,8 @@ import {
     Query,
     Body,
     StreamableFile,
+    HttpCode,
+    Headers,
 } from "@nestjs/common";
 import {
     entryListQuerySchema,
@@ -20,7 +22,8 @@ import {
     contentRebuildResultSchema,
     storyAgentCandidateRecordSchema,
     storyAgentCandidateDecisionSchema,
-    storyAgentRequestSchema,
+    storyAgentGenerationRequestSchema,
+    storyAgentGenerationSchema,
     searchQuerySchema,
     mergeStoriesCommandSchema,
     migrateStoryUserStateCommandSchema,
@@ -48,7 +51,8 @@ import {
     removeEntityRelationCommandSchema,
     updateStoryRevisionCommandSchema,
 } from "@cosmos/contracts";
-import { ContentCommandError, StoryAgentCandidateError } from "@cosmos/application";
+import { ContentCommandError, StoryAgentCandidateError, WorkflowHostError } from "@cosmos/application";
+import { ZodError } from "zod";
 import "reflect-metadata";
 import { AppControllerRuns } from "./runs.js";
 import { validationError, sourceCommandError, clampLimit, catalogPage } from "./internals.js";
@@ -58,6 +62,15 @@ import {
     toPublicRevisionDetail,
     toPublicStoryDetail,
 } from "./public-projection.js";
+
+function storyGenerationError(error: unknown): never {
+    if (error instanceof ZodError) throw new BadRequestException({ code: "validation_failed", message: "Invalid Story generation input.", retryable: false });
+    if (!(error instanceof WorkflowHostError)) throw error;
+    const response = { code: error.code, message: error.message, retryable: false };
+    if (error.code === "not_found") throw new NotFoundException(response);
+    if (error.code === "invalid_state") throw new BadRequestException(response);
+    throw new ConflictException(response);
+}
 
 export class AppControllerContent extends AppControllerRuns {
     @Get("revisions/:revisionId/content")
@@ -119,14 +132,23 @@ export class AppControllerContent extends AppControllerRuns {
     }
 
     @Post("stories/:storyId/agent-candidates")
-    @Bind(Param("storyId"), Body())
-    async proposeStoryAgentCandidate(storyId: string, body: unknown) {
-        const parsed = storyAgentRequestSchema.safeParse(body);
-        if (!parsed.success) throw new BadRequestException({ code: "validation_failed", message: "Invalid Story Agent request.", retryable: false });
-        if (!this.storyAgentService) throw new ConflictException({ code: "conflict", message: "Story Agent generation is not configured.", retryable: false });
-        return storyAgentCandidateRecordSchema.parse(await this.storyAgentService.propose({ storyId, ...parsed.data }, {
-            idempotencyKey: randomUUID(), signal: new AbortController().signal,
-        }));
+    @HttpCode(202)
+    @Bind(Param("storyId"), Body(), Headers("idempotency-key"))
+    async proposeStoryAgentCandidate(storyId: string, body: unknown, idempotencyKey?: string) {
+        const parsed = storyAgentGenerationRequestSchema.safeParse(body);
+        if (!parsed.success || !idempotencyKey?.trim() || idempotencyKey.length > 200) throw new BadRequestException({ code: "validation_failed", message: "A valid generation request and Idempotency-Key are required.", retryable: false });
+        if (!this.storyAgentControl) throw new ConflictException({ code: "conflict", message: "Story Agent generation is not configured.", retryable: false });
+        try {
+            return storyAgentGenerationSchema.parse(await this.storyAgentControl.enqueue({ storyId, ...parsed.data, idempotencyKey }));
+        } catch (error) { storyGenerationError(error); }
+    }
+
+    @Get("stories/:storyId/agent-generations/:runId")
+    @Bind(Param("storyId"), Param("runId"))
+    async storyAgentGeneration(storyId: string, runId: string) {
+        if (!this.storyAgentControl) throw new ConflictException({ code: "conflict", message: "Story Agent generation is not configured.", retryable: false });
+        try { return storyAgentGenerationSchema.parse(await this.storyAgentControl.read(storyId, runId)); }
+        catch (error) { storyGenerationError(error); }
     }
 
     @Get("stories/:storyId/agent-candidates")

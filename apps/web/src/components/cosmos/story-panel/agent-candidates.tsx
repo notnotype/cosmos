@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import type { StoryAgentCandidateRecordContract, StoryAgentTask, StoryDetail } from "@cosmos/contracts";
+import { useCallback, useEffect, useState } from "react";
+import { MODEL_CONNECTION_CONNECTOR_ID, type ConnectionInstance, type StoryAgentCandidateRecordContract, type StoryAgentTask, type StoryDetail } from "@cosmos/contracts";
 
 import { client, readError } from "@/app/home/page-runtime";
 import { Button } from "@/components/ui/button";
 import { messages } from "@/copy/messages";
 import { selectReadingSources } from "../story-source-reader";
+import { useStoryAgentGeneration, type GenerationClient } from "./use-story-agent-generation";
 
 const copy = messages.reading.candidates;
 const taskLabels: Record<StoryAgentTask, string> = copy.tasks;
@@ -29,25 +30,32 @@ function ProposalPreview({ record }: { record: StoryAgentCandidateRecordContract
     </ul>;
 }
 
-type CandidateClient = Pick<typeof client, "storyAgentCandidates" | "revisionContent" | "proposeStoryAgentCandidate" | "decideStoryAgentCandidate">;
+type CandidateClient = Pick<typeof client, "storyAgentCandidates" | "revisionContent" | "decideStoryAgentCandidate" | "listConnections"> & GenerationClient;
+type PanelProps = { story: StoryDetail; unsavedEdit: boolean; onAccepted: () => Promise<void>; api?: CandidateClient };
 
-export function StoryAgentCandidatesPanel({ story, unsavedEdit, onAccepted, api = client }: {
-    story: StoryDetail;
-    unsavedEdit: boolean;
-    onAccepted: () => Promise<void>;
-    api?: CandidateClient;
-}) {
+export function StoryAgentCandidatesPanel(props: PanelProps) {
+    return <CandidatesForStory key={props.story.story.id} {...props} />;
+}
+
+function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: PanelProps) {
     const [records, setRecords] = useState<StoryAgentCandidateRecordContract[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [attempt, setAttempt] = useState(0);
     const [task, setTask] = useState<StoryAgentTask>("story.summarize");
     const [includeSources, setIncludeSources] = useState(false);
+    const [connectionId, setConnectionId] = useState("");
+    const [connections, setConnections] = useState<readonly ConnectionInstance[] | null>(null);
     const storyId = story.story.id;
+    const refresh = useCallback(() => setAttempt((value) => value + 1), []);
+    const generation = useStoryAgentGeneration(storyId, api, refresh);
+    const generating = busy || generation.active;
     useEffect(() => {
         let active = true;
-        void api.storyAgentCandidates(storyId).then((value) => {
-            if (active) setRecords(value);
+        void Promise.all([api.storyAgentCandidates(storyId), api.listConnections()]).then(([value, available]) => {
+            if (!active) return;
+            setRecords(value);
+            setConnections(available.filter((item) => item.connectorId === MODEL_CONNECTION_CONNECTOR_ID && item.status === "active"));
         }).catch((caught: unknown) => { if (active) setError(readError(caught)); });
         return () => { active = false; };
     }, [storyId, attempt, api]);
@@ -65,8 +73,7 @@ export function StoryAgentCandidatesPanel({ story, unsavedEdit, onAccepted, api 
                 }
                 if (sources.length === 0) throw new Error(copy.noSources);
             }
-            const record = await api.proposeStoryAgentCandidate(storyId, { task, ...(includeSources ? { sources } : {}) });
-            setRecords((current) => [record, ...(current ?? [])]);
+            await generation.start({ connectionId, task, ...(includeSources ? { sources } : {}) });
         } catch (caught) {
             setError(readError(caught));
         } finally {
@@ -91,12 +98,19 @@ export function StoryAgentCandidatesPanel({ story, unsavedEdit, onAccepted, api 
         <h2 className="font-semibold">{copy.section}</h2>
         <p className="text-sm text-muted-foreground">{copy.hint}</p>
         <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm">{copy.type} <select className="rounded border border-border bg-background p-2" value={task} disabled={busy} onChange={(event) => setTask(event.target.value as StoryAgentTask)}>
+            <label className="text-sm">{copy.connection} <select aria-label={copy.connection} className="max-w-full rounded border border-border bg-background p-2" value={connectionId} disabled={generating || connections === null} onChange={(event) => setConnectionId(event.target.value)}>
+                <option value="">{copy.selectConnection}</option>
+                {connections?.map((connection) => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
+            </select></label>
+            <label className="text-sm">{copy.type} <select className="rounded border border-border bg-background p-2" value={task} disabled={generating} onChange={(event) => setTask(event.target.value as StoryAgentTask)}>
                 {Object.entries(taskLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select></label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeSources} disabled={busy} onChange={(event) => setIncludeSources(event.target.checked)} />{copy.sources}</label>
-            <Button size="sm" disabled={busy || (task !== "story.summarize" && !includeSources)} onClick={() => void propose()}>{copy.generate}</Button>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeSources} disabled={generating} onChange={(event) => setIncludeSources(event.target.checked)} />{copy.sources}</label>
+            <Button size="sm" disabled={generating || !generation.ready || !connections?.some((item) => item.id === connectionId) || (task !== "story.summarize" && !includeSources)} onClick={() => void propose()}>{copy.generate}</Button>
         </div>
+        {connections?.length === 0 && <p role="status" className="text-sm">{copy.noConnections}</p>}
+        {generation.generation && <p role="status" className="text-sm [overflow-wrap:anywhere]">{copy.generationStatuses[generation.generation.status]} · {generation.generation.connectionId}</p>}
+        {generation.error && <div role="alert" className="text-sm"><p>{generation.error}</p>{generation.recoverable && <Button variant="outline" size="sm" disabled={generation.sending} onClick={generation.retry}>{copy.recover}</Button>}</div>}
         {!includeSources && <p className="text-xs text-muted-foreground">{copy.scope}</p>}
         {unsavedEdit && <p role="status" className="text-sm text-muted-foreground">{copy.unsaved}</p>}
         {busy && <p role="status" className="text-sm">{copy.busy}</p>}

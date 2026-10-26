@@ -223,6 +223,8 @@ type	StepStatus
 type	StorageStats
 type	StoryAgentCandidate
 type	StoryAgentCandidateRecordContract
+type	StoryAgentGeneration
+type	StoryAgentGenerationRequest
 type	StoryAgentProposal
 type	StoryAgentSourceBinding
 type	StoryAgentTask
@@ -519,6 +521,8 @@ value	storageStatsSchema
 value	storyAgentCandidateDecisionSchema
 value	storyAgentCandidateRecordSchema
 value	storyAgentCandidateSchema
+value	storyAgentGenerationRequestSchema
+value	storyAgentGenerationSchema
 value	storyAgentProposalSchema
 value	storyAgentRequestSchema
 value	storyAgentSourceBindingSchema

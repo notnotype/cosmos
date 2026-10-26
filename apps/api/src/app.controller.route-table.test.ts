@@ -67,6 +67,7 @@ describe("AppController route table", () => {
     const expected = [...snapshotRoutes(),
         { verb: "GET", path: "/revisions/:revisionId/content", handler: "revisionContent" },
         { verb: "GET", path: "/stories/:storyId/agent-candidates", handler: "listStoryAgentCandidates" },
+        { verb: "GET", path: "/stories/:storyId/agent-generations/:runId", handler: "storyAgentGeneration" },
         { verb: "POST", path: "/revisions/:revisionId/content/rebuild", handler: "rebuildRevisionContent" },
         { verb: "POST", path: "/revisions/:revisionId/content/selection", handler: "selectRevisionContent" },
         { verb: "POST", path: "/stories/:storyId/agent-candidates", handler: "proposeStoryAgentCandidate" },

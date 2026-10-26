@@ -41,6 +41,8 @@ async function main(): Promise<void> {
         COSMOS_API_HOST: "127.0.0.1",
         COSMOS_API_PORT: String(apiPort),
         COSMOS_API_URL: `http://127.0.0.1:${apiPort}`,
+        COSMOS_ALLOWED_ORIGIN: `http://127.0.0.1:${webPort}`,
+        COSMOS_MODEL_CONFIGURATION_AUTHORITIES: `127.0.0.1:${apiPort}`,
         NEXT_PUBLIC_COSMOS_API_URL: "",
         COSMOS_LOG_OUTPUT: "both",
     });
@@ -64,7 +66,7 @@ async function main(): Promise<void> {
     worker = spawnService({
         name: "browser-stack-worker",
         command: process.env.NODE_BINARY?.trim() || "node",
-        args: ["apps/worker/dist/main.js"],
+        args: ["--import", "./scripts/e2e/story-agent-fetch-fixture.mjs", "apps/worker/dist/main.js"],
         cwd: repositoryRoot,
         env: baseEnvironment,
     });

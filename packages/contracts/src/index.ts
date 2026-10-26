@@ -220,6 +220,7 @@ export {
 
 export {
     storyAgentTaskSchema, storyAgentSourceBindingSchema, storyAgentRequestSchema, storyAgentProposalSchema,
+    storyAgentGenerationRequestSchema, storyAgentGenerationSchema, type StoryAgentGenerationRequest, type StoryAgentGeneration,
     storyAgentCandidateSchema, storyAgentCandidateRecordSchema, storyAgentCandidateDecisionSchema,
     type StoryAgentCandidateRecordContract, type StoryAgentTask, type StoryAgentSourceBinding,
     type StoryAgentProposal, type StoryAgentCandidate,

@@ -421,6 +421,16 @@ Storage 只执行已授权的读取，Blob Store 只读取已授权的 Blob。Ag
 
 原始 HTML、JSON、文本和 Agent 生成内容都是数据，不是系统指令。原始 HTML 不在 Web 阅读页执行或直接渲染；块规范化器删除脚本、事件属性和不安全结构。Agent 工具只能接收受控投影，不能把来源内容当作可执行配置。
 
+### 8.4 Story 生成的产品接线
+
+Story 候选区每次明确选择已有模型连接；不暗选连接或建立全局默认。API 校验请求并通过共同 Query owner 固定 Story 修订与显式允许的来源表示，连同 connectionId、受管预算和任务写入既有 WorkflowHost envelope。快照不得包含凭证、原始 payload 或内部 Blob key；默认仅摘要，正文必须显式选择。重复 Idempotency-Key 必须匹配同一 Story、连接、任务和来源选择，否则冲突。
+
+Worker 注册 `cosmos.story-agent@1`，调用既有 `agent.invoke@2`；连接、模型和凭证在调用时解析，API 不加载生成 SDK。结果经同一提案与证据校验后，在有效 Run/Activity fence 下按确定候选 ID 保存；恢复/重放不创建第二候选。取消/失效 fence 禁止保存。仅保存 pending，不作正式决定。页面按安全任务状态轮询；刷新恢复同一请求，响应不确定时复用原幂等键，不暗中再次外呼。真实外部调用仍需独立授权。
+
+Host 主动取消、强制失败及外呼结果不确定的终态化，必须在同一事务同步任务行与已有 Kernel 状态、递增 revision 并撤销 lease；未启动的 envelope marker 不伪造 Kernel 状态。保留不确定外呼禁止自动重发的门禁，读端不能吞掉状态不一致来假报失败。接线验收发现旧路径只更新任务行、读端因此报 `status projection is inconsistent`；修复放在上述存储 owner，不改变 Story 的候选权限。
+
+终态可能晚于候选提交；失败/取消不承诺“未保存候选”，Web 所有终态都重新读取实际候选列表。回执丢失仍禁止自动重复模型调用，已保存候选继续走人工决定。
+
 ## 9. 兼容与演进
 
 ### 9.1 旧数据

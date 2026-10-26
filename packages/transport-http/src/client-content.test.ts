@@ -46,21 +46,25 @@ describe("HttpCosmosClient structured reading", () => {
             { url: "http://localhost:4310/api/v1/story-agent-candidates/candidate%2F1/decision", body: { decision: "reject" } },
         ]);
     });
-    it("posts exact source bindings for candidate generation and rejects malformed versions before fetch", async () => {
-        const requests: { url: string; body: unknown }[] = [];
-        const candidate = { id: "candidate-1", storyId: "story/1", storyRevisionId: "sr-1", producer: "agent",
-            producerVersion: "story-agent@1", provider: "fake", model: "fixture", confidence: null,
-            inputSources: [{ entryRevisionId: "revision-1", representationVersion: 2 }], createdAt: "2026-10-08T12:00:00.000Z",
-            proposal: { task: "story.summarize", title: "Suggested", summary: "Summary", keyFacts: [] } };
+    it("queues exact source bindings with a stable key and reads an encoded generation route", async () => {
+        const requests: { url: string; body: unknown; key: string | null }[] = [];
+        const generation = { runId: "run/1", storyId: "story/1", task: "story.summarize", connectionId: "connection-1",
+            status: "queued", candidateId: null, errorCode: null };
         const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async (input, init) => {
-            requests.push({ url: String(input), body: JSON.parse(String(init?.body)) });
-            return Response.json({ candidate, status: "pending" });
+            requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null,
+                key: new Headers(init?.headers).get("idempotency-key") });
+            return Response.json(generation, { status: init?.method === "POST" ? 202 : 200 });
         } });
-        const request = { task: "story.summarize" as const, sources: candidate.inputSources };
-        await expect(client.proposeStoryAgentCandidate("story/1", request)).resolves.toMatchObject({ status: "pending" });
-        expect(requests).toEqual([{ url: "http://localhost:4310/api/v1/stories/story%2F1/agent-candidates", body: request }]);
-        await expect(client.proposeStoryAgentCandidate("story/1", { ...request, sources: [{ entryRevisionId: "revision-1", representationVersion: 0 }] })).rejects.toThrow();
-        expect(requests).toHaveLength(1);
+        const request = { task: "story.summarize" as const, connectionId: "connection-1", sources: [{ entryRevisionId: "revision-1", representationVersion: 2 }] };
+        await expect(client.proposeStoryAgentCandidate("story/1", request, "stable-key")).resolves.toEqual(generation);
+        await expect(client.storyAgentGeneration("story/1", "run/1")).resolves.toEqual(generation);
+        expect(requests).toEqual([
+            { url: "http://localhost:4310/api/v1/stories/story%2F1/agent-candidates", body: request, key: "stable-key" },
+            { url: "http://localhost:4310/api/v1/stories/story%2F1/agent-generations/run%2F1", body: null, key: null },
+        ]);
+        await expect(client.proposeStoryAgentCandidate("story/1", { ...request, sources: [{ entryRevisionId: "revision-1", representationVersion: 0 }] }, "stable-key")).rejects.toThrow();
+        await expect(client.proposeStoryAgentCandidate("story/1", request, " ")).rejects.toThrow();
+        expect(requests).toHaveLength(2);
     });
     it("sends a validated selection command to the encoded revision endpoint", async () => {
         const requests: { url: string; body: unknown; method: string | undefined }[] = [];

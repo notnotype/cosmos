@@ -28,9 +28,10 @@ import {
     contentRebuildResultSchema,
     storyAgentCandidateRecordSchema,
     storyAgentCandidateDecisionSchema,
-    storyAgentRequestSchema,
-    type StoryAgentTask,
-    type StoryAgentSourceBinding,
+    storyAgentGenerationRequestSchema,
+    storyAgentGenerationSchema,
+    type StoryAgentGeneration,
+    type StoryAgentGenerationRequest,
     type StoryAgentCandidateRecordContract,
     type StructuredContentViewContract,
     type FeedPage,
@@ -163,11 +164,17 @@ export class ContentClient extends SourcesClient {
         });
     }
 
-    async proposeStoryAgentCandidate(storyId: string, request: {
-        task: StoryAgentTask; sources?: readonly StoryAgentSourceBinding[];
-    }): Promise<StoryAgentCandidateRecordContract> {
+    async proposeStoryAgentCandidate(storyId: string, request: StoryAgentGenerationRequest, idempotencyKey: string): Promise<StoryAgentGeneration> {
+        if (!idempotencyKey.trim() || idempotencyKey.length > 200) throw new RangeError("A valid Idempotency-Key is required.");
         return this.request(`/api/v1/stories/${encodeURIComponent(storyId)}/agent-candidates`, {
-            method: "POST", body: storyAgentRequestSchema.parse(request), schema: storyAgentCandidateRecordSchema,
+            method: "POST", headers: { "idempotency-key": idempotencyKey },
+            body: storyAgentGenerationRequestSchema.parse(request), schema: storyAgentGenerationSchema,
+        });
+    }
+
+    async storyAgentGeneration(storyId: string, runId: string): Promise<StoryAgentGeneration> {
+        return this.request(`/api/v1/stories/${encodeURIComponent(storyId)}/agent-generations/${encodeURIComponent(runId)}`, {
+            schema: storyAgentGenerationSchema,
         });
     }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentInvocationOutput, StoryAgentProposal } from "@cosmos/contracts";
+import { agentInvocationV2InputSchema, type AgentInvocationOutput, type StoryAgentProposal } from "@cosmos/contracts";
+import type { AgentInvocationV2Port } from "./agent-invocation-v2.js";
 import { ContentQuery } from "./content-query.js";
 import { StoryAgent, type StoryAgentHost } from "./story-agent.js";
 import { StoryAgentService } from "./story-agent-service.js";
@@ -9,7 +10,7 @@ const binding = { entryRevisionId: "revision-1", representationVersion: 2 };
 const evidence = { entryId: "entry-1", ...binding, blockId: "block-1" };
 const host: StoryAgentHost = {
     authority: { allowedProfiles: ["summary-only", "structured-content"] },
-    provider: "fake", model: "fixture", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1000 },
+    connectionId: "connection-1", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1000 },
     createCandidateId: () => "candidate-1", now: () => new Date("2026-10-08T12:00:00.000Z"),
 };
 const context = { idempotencyKey: "fixture", signal: new AbortController().signal };
@@ -21,8 +22,12 @@ function fixture(proposal: StoryAgentProposal) {
         representation: { id: "representation-2", ...binding, entryRevisionId: target.entryRevisionId, parserVersion: "fixture@1", status: "partial",
             contentText: "Untrusted source", blocks: [{ id: "block-1", type: "paragraph", data: { inlines: [{ type: "text", text: "Untrusted source" }] } }],
             createdAt: "2026-10-08T12:00:00.000Z" } }));
-    const invoke = vi.fn(async (): Promise<AgentInvocationOutput> => ({ content: JSON.stringify(proposal),
-        toolCalls: [], usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, provider: "fake", model: "fixture", finishReason: "stop", metadata: {} }));
+    const invoke = vi.fn<AgentInvocationV2Port["invoke"]>(async (input): Promise<AgentInvocationOutput> => {
+        agentInvocationV2InputSchema.parse(input);
+        return { content: JSON.stringify(proposal), toolCalls: [],
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            provider: "fake", model: "fixture", finishReason: "stop", metadata: {} };
+    });
     return { agent: new StoryAgent({ readStory }, new ContentQuery({ readContentSource }), { invoke }),
         readStory, readContentSource, invoke };
 }
@@ -30,6 +35,32 @@ const summary: StoryAgentProposal = { task: "story.summarize", title: "Suggested
     keyFacts: [{ text: "Fact", evidence: [evidence] }] };
 
 describe("StoryAgent candidate boundary", () => {
+    it("passes only the host connection and preserves the actual invocation identity", async () => {
+        const f = fixture({ ...summary, keyFacts: [] });
+        const legacyHost = { ...host, provider: "ignored-provider", model: "ignored-model" };
+        const candidate = await f.agent.propose({ storyId: "story-1", task: "story.summarize" }, legacyHost, context);
+        const [input, invocationContext] = f.invoke.mock.calls[0]!;
+        expect(input).toEqual({ connectionId: "connection-1", budget: host.budget, tools: [],
+            messages: expect.any(Array), metadata: { task: "story.summarize", storyId: "story-1", storyRevisionId: "story-revision-1" } });
+        expect(invocationContext).toBe(context);
+        expect(candidate).toMatchObject({ provider: "fake", model: "fixture" });
+    });
+    it.each(["", "   ", "x".repeat(201)])("rejects invalid host connection IDs before reading snapshots: %s", async (connectionId) => {
+        const f = fixture(summary);
+        await expect(f.agent.propose({ storyId: "story-1", task: "story.summarize" }, { ...host, connectionId }, context)).rejects.toThrow();
+        expect(f.readStory).not.toHaveBeenCalled();
+        expect(f.readContentSource).not.toHaveBeenCalled();
+        expect(f.invoke).not.toHaveBeenCalled();
+    });
+    it("does not read snapshots or invoke when already cancelled", async () => {
+        const f = fixture(summary);
+        const controller = new AbortController();
+        controller.abort(new Error("Cancelled before reading"));
+        await expect(f.agent.propose({ storyId: "story-1", task: "story.summarize" }, host,
+            { ...context, signal: controller.signal })).rejects.toThrow("Cancelled before reading");
+        expect(f.readStory).not.toHaveBeenCalled();
+        expect(f.invoke).not.toHaveBeenCalled();
+    });
     it.each<StoryAgentProposal>([
         summary,
         { task: "story.extract-relations", relations: [{ sourceEntryId: "entry-1", targetEntryId: "entry-2", type: "near_duplicate_of", reason: "Fixture", evidence: [evidence] }] },

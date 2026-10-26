@@ -39,11 +39,11 @@ Source 身份/revision 持久化合同仍以「`sourceDefinitionRef + operationI
 
 ## 当前下一步
 
-**Task [40](.agents/tasks/40-story-content-representation/README.md)（Story 内容表示与多模态阅读）实施与验收中**：已实现确定性解析、有序安全内容块、版本表示与历史读取、重建／锁定／回退、Story 来源切换和 Agent 候选决策。候选接受复用正式命令，与状态及审计原子提交。隔离组件实验室 9 个浏览器用例通过，覆盖 320/768/1024/1440。生产 Agent profile/resolver 未配置，生成入口明确返回 409；NASA RSS 隔离验收已通过（10 条）；真实 Agent 与完整产品运行时浏览器验收仍未完成。未迁移用户数据、未部署，最终验证与未覆盖范围见同一 Task walkthrough。
+**Task [40](.agents/tasks/40-story-content-representation/README.md)（内容表示与多模态阅读）实施与验收中**：内容表示、版本读取、多来源阅读和人工候选决定已实现。接线已完成：显式选连接→API 202→Worker @2→候选→人工决定。候选组件 7 项、生成产品链 1 项、版本产品验收 2 项通过（隔离数据、真实产品组合与合成模型传输），不是真实 Provider 验收。真实 Agent、剩余媒体状态验收及独立审查未完成。未迁移用户数据、未部署；证据见 [Task walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。
 
 **Task 38（Agent Invocation 基础接入 v1）已完成**（2026-10-08）：新增版本化 `agent.invoke@1` Workflow Action、JSON-safe Agent Invocation 合同、Invocation Port 与确定性 Fake Adapter；复用现有 Activity Worker 的 Run/Job/Lease、取消、重试和 completion 语义。全量单元测试 139 个文件/798 个测试、全仓 typecheck、共享包构建和 docs:check 均通过。真实 `pi-ai` Adapter 已由 Task 39 承接交付；`neuro-agent-harness`、`nb-memory`、工具执行、Artifact、Workspace、Knowledge/Research 仍未实现，另开后续 Task。
 
-**Task [39](.agents/tasks/39-pi-ai-adapter/README.md)（Pi-ai Adapter 与 Provider/model 配置）已完成**（2026-10-26）：新增 `@cosmos/agent-pi-ai` 真实 SDK 适配、模型页配置、Provider 独占凭证与清理补偿、模型型 Connection 单选、Worker `@2` 消费；旧部署 profile 与 `agent.invoke@1` 注册已退出，模型与凭证一律按调用时的 Connection 解析（`@1` 契约仍被 Story 生成复用）。1134 用例、typecheck、lint、`bun run build` 通过；组件实验室验收 45 项；真实 Provider `@1`/`@2` 各一次 HTTP 200；隔离迁移 2/2。边界：默认库升级与生产部署未运行；`test:browser` 58/60（两条失败均早于本 Task）；Provider 删除是同步 204。偏差见 Task walkthrough。
+**Task [39](.agents/tasks/39-pi-ai-adapter/README.md)（Pi-ai Adapter 与 Provider/model 配置）已完成**（2026-10-26）：新增 `@cosmos/agent-pi-ai` 真实 SDK 适配、模型页配置、Provider 独占凭证与清理补偿、模型型 Connection 单选、Worker `@2` 消费；旧部署 profile 与 `agent.invoke@1` 注册已退出，模型与凭证一律按调用时的 Connection 解析（`@1` 契约保留但无生产注册，Story 当前消费 `@2`）。1134 用例、typecheck、lint、`bun run build` 通过；组件实验室验收 45 项；真实 Provider `@1`/`@2` 各一次 HTTP 200；隔离迁移 2/2。边界：默认库升级与生产部署未运行；`test:browser` 58/60（两条失败均早于本 Task）；Provider 删除是同步 204。偏差见 Task walkthrough。
 
 Task 36 已完成并通过真人验收；实现、合并与验收证据见 [Task36 完成历史](PROJECT-STATUS/history-2026-10-task36.md)。当前仍保留右栏 240 px 下限与首屏预算约束，分支和 worktree 尚未清理。
 

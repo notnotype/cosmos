@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { ContentRebuild, StoryAgent, StoryAgentService, ContentCommands, ContentQuery, StoryAgentCandidates, StoryAgentCandidateError } from "@cosmos/application";
+import { ContentRebuild, StoryAgentWorkflowControl, WorkflowHostError, ContentCommands, ContentQuery, StoryAgentCandidates, StoryAgentCandidateError } from "@cosmos/application";
 import { AppController } from "./app.controller.js";
 
 function setup() {
@@ -29,26 +29,31 @@ describe("structured content endpoint", () => {
         readRebuildSource.mockResolvedValueOnce({ currentRepresentationId: "rep-1", locked: true, source: null });
         await expect(controller.rebuildRevisionContent("revision-1", {})).rejects.toMatchObject({ status: 409 });
     });
-    it("generates only a pending candidate with host-owned Agent configuration", async () => {
-        const invoke = vi.fn(async () => ({ content: JSON.stringify({ task: "story.summarize", title: "Suggested", summary: "Summary", keyFacts: [] }),
-            toolCalls: [], usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, provider: "fake", model: "fixture", finishReason: "stop" as const, metadata: {} }));
-        const save = vi.fn(async (candidate: import("@cosmos/contracts").StoryAgentCandidate) => ({ candidate, status: "pending" as const }));
-        const decide = vi.fn(async (): Promise<never> => { throw new Error("Unexpected formal decision"); });
-        const candidates = new StoryAgentCandidates({ save, decide, list: async () => [] });
-        const agent = new StoryAgent({ readStory: async () => ({ storyId: "story-1", storyRevisionId: "sr-1", title: "Original", summary: "", entryRevisionIds: [] }) },
-            new ContentQuery({ readContentSource: async () => { throw new Error("Unexpected source read"); } }), { invoke });
-        const service = new StoryAgentService(agent, candidates, { authority: { allowedProfiles: ["summary-only"] },
-            provider: "fake", model: "fixture", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1000 },
-            createCandidateId: () => "candidate-1", now: () => new Date("2026-10-08T12:00:00.000Z") });
+    it("queues generation with a required connection and stable client idempotency key", async () => {
+        const control = new StoryAgentWorkflowControl({ store: {} as never,
+            connections: { resolve: async () => null }, stories: { readStory: async () => null },
+            content: new ContentQuery({ readContentSource: async () => null }) });
+        const queued = { runId: "run-1", storyId: "story-1", task: "story.summarize" as const,
+            connectionId: "connection-1", status: "queued" as const, candidateId: null, errorCode: null };
+        const enqueue = vi.spyOn(control, "enqueue").mockResolvedValue(queued);
+        const read = vi.spyOn(control, "read").mockResolvedValue(queued);
         const controller = new AppController({} as never, {} as never, undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, candidates, service);
-        await expect(controller.proposeStoryAgentCandidate("story-1", { task: "story.summarize", provider: "attacker" })).rejects.toBeInstanceOf(BadRequestException);
-        expect(invoke).not.toHaveBeenCalled();
-        await expect(controller.proposeStoryAgentCandidate("story-1", { task: "story.summarize" })).resolves.toMatchObject({ status: "pending", candidate: { storyRevisionId: "sr-1", inputSources: [] } });
-        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ provider: "fake", model: "fixture", tools: [] }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
-        expect(save).toHaveBeenCalledOnce();
-        expect(decide).not.toHaveBeenCalled();
-        await expect(setup().controller.proposeStoryAgentCandidate("story-1", { task: "story.summarize" })).rejects.toMatchObject({ status: 409 });
+            undefined, undefined, undefined, undefined, undefined, control);
+        const body = { task: "story.summarize", connectionId: "connection-1" };
+        await expect(controller.proposeStoryAgentCandidate("story-1", { ...body, provider: "attacker" }, "key")).rejects.toBeInstanceOf(BadRequestException);
+        await expect(controller.proposeStoryAgentCandidate("story-1", { task: body.task }, "key")).rejects.toBeInstanceOf(BadRequestException);
+        await expect(controller.proposeStoryAgentCandidate("story-1", body, "")).rejects.toBeInstanceOf(BadRequestException);
+        expect(enqueue).not.toHaveBeenCalled();
+        await expect(controller.proposeStoryAgentCandidate("story-1", body, "key")).resolves.toEqual(queued);
+        expect(enqueue).toHaveBeenCalledWith({ ...body, storyId: "story-1", idempotencyKey: "key" });
+        await expect(controller.storyAgentGeneration("story-1", "run-1")).resolves.toEqual(queued);
+        expect(read).toHaveBeenCalledWith("story-1", "run-1");
+        expect(Reflect.getMetadata("__httpCode__", controller.proposeStoryAgentCandidate)).toBe(202);
+        enqueue.mockRejectedValueOnce(new WorkflowHostError("conflict", "Unavailable connection"));
+        await expect(controller.proposeStoryAgentCandidate("story-1", body, "key")).rejects.toMatchObject({ status: 409 });
+        read.mockRejectedValueOnce(new WorkflowHostError("not_found", "Not found"));
+        await expect(controller.storyAgentGeneration("story-1", "missing")).rejects.toBeInstanceOf(NotFoundException);
+        await expect(setup().controller.proposeStoryAgentCandidate("story-1", body, "key")).rejects.toMatchObject({ status: 409 });
     });
     it("lists candidates and rejects request-controlled decision authority", async () => {
         const list = vi.fn(async () => []);

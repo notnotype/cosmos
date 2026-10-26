@@ -10,9 +10,9 @@
 
 ## 当前状态与本轮切片
 
-编号由维护者分配为 40。生命周期：实施与整体验收进行中。解析、版本/历史读取、阅读和人工候选决定已有实现与分层证据；本轮完成显式连接选择→API 202 入队→持久化 Worker @2→pending 候选→人工接受/拒绝，隔离产品浏览器已通过。真实 Agent、剩余媒体/精确版本产品清单及独立审查仍未闭合，Task40 不整体标完成。
+编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品已覆盖表示版本管理，以及音视频元数据、受限图片和空正文。真实 Agent、其他读取降级、解析器/质量/旧证据演进及独立审查仍未闭合，不整体标完成。
 
-当前目标：本轮维护者已授权完成 Story 接线并确认每次显式选已有连接。Task39 保持完成，本 Task 消费其能力，不另建任务平台。最终结果见本文末；leader 唯一写入者，无子 Agent（普通工具不能指定要求的模型路由）。无自动 goal/Git 生命周期/部署/真实数据或外部模型请求；真实调用仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表本轮授权，本轮已执行 RED/GREEN。
+当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；普通子 Agent 工具不能指定批准模型，未委派或冒称独立审查。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
 
 ## 设计依据与决定
 
@@ -173,4 +173,25 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 - 本轮 `bun run test` 后串行 `bun run typecheck` 均 exit 0（pwsh-68940fe8713b4907）：201 文件 / 1148 测试通过、175.08s，全仓类型通过。上一轮产品与组件浏览器证据保留以上分层结果，本轮未重跑浏览器。
 - Leader 按正确性、简单性、架构、安全、性能五轴核对候选持久化/正式决定、既有队列复用、API/Worker 装配、连接与版本权限、终态/fence、同键恢复及有界轮询；未识别新增 Critical/Required blocker。不把此次自查当独立审查：普通子 Agent 工具无法指定 `jijiapi/gpt-6-luna`，未使用默认路由，独立审查继续未完成。
 - 仅 Task40 相关 32 个既有改动及其新文件进入候选范围，当前 master 基于 `31d9577`；公共导出为显式增量冻结，未改旧路由历史。旧内部计划/结果 5,325 字节原文移入历史分册，当前决定和有效结果不移走。文档链接 1185 文件、大小治理及 diff 门禁通过（pwsh-1536d396c5d548da，exit 0），保留 5 项既存增长 warning。首次 staged diff 发现 3 个新归档的末尾分隔空行，仅规范最后换行、不改历史正文；提交前复查。
+
+### 2026-10-26：媒体降级产品验收计划
+
+既有基线已本地提交 `22f0f9a`，提交后工作区干净；本步只新增 `e2e/browser/story-media-degradation.spec.ts` 和本记录/状态同步，不改业务合同或 UI。测试自己启动临时 loopback RSS，走真实采集/API/Worker/生产 Web；不伪造 API 响应或直写数据库，不访问外部来源、真实数据或模型。Leader 为唯一写入者，无子 Agent/goal；完成后依维护者授权单独中文本地提交，不 push。
+
+1. 音视频只有媒体、没有正文：真实 Asset 为 metadata_only，正文按块顺序显示类型/状态/原因和安全原文链接，无播放器或本地已保存宣称；不下载音视频。
+2. 图片地址使用非白名单 loopback：真实 Worker 得到 skipped/security_blocked，仍显示图片前后正文、原因与安全外链；不发送媒体请求，不绕过主机门禁。
+3. 空 HTML 正文：读取投影块为空、给出无正文说明并保留文章原文入口；刷新后上述状态一致。1024/1440 都检查正文可读、真实键盘焦点、无横向溢出和非预期浏览器错误。
+
+先运行验收观察实际结果；发现业务缺陷先报告行为/预期/证据，不为测试绿灯改合同。复验完整产品本步用例、已有媒体/内容聚焦回归及文档/staged diff/大小门禁。独立审查、legacy/失效表示与更多异常媒体、解析器/证据演进和真实 Agent 仍分别未完成。
+
+### 2026-10-26：媒体降级产品验收结果
+
+- 三条计划均通过：audio/video 块正文为空、Asset metadata_only；图片 skipped/security_blocked、前后段有序；空 HTML 的 blocks=[]、正文为空且不是 unavailable。说明、安全原文及播放器/离线宣称按计划检查。
+- 1024/1440 刷新投影一致；真实 Tab/Shift+Tab 焦点、safe href/target/rel、无横溢及全程 pageerror/console error/requestfailed=0。127.0.0.1/127.0.0.2 两个受控接收端确认媒体零请求，不放宽主机门禁。
+- 首轮媒体用例停在键盘脚本：`Locator.press` 在发键前重聚焦，破坏 Tab/Shift+Tab 往返。改用当前页面 keyboard 发键，保留原焦点断言后通过，不改产品代码。随后增加非白名单接收端作为零请求见证并再跑最终版本。
+- `bunx playwright test --config playwright.config.ts e2e/browser/story-media-degradation.spec.ts e2e/browser/source-media-interactions.spec.ts`：3 项通过、31.1s（新增双宽度 2 项、原切换/保存图片失败恢复 1 项），pwsh-d6aa27272bf9481a，exit 0；包括生产 Web 构建/start及真实 API/Worker。原有恢复用例只在故障注入前检查错误，不把它冒称全程零错误；新增两项为全程检查。
+- `bun run vitest run packages/application/src/content-normalizer.test.ts packages/application/src/content-ingest.test.ts packages/application/src/media-acquisition.test.ts packages/storage-prisma/src/content-query.test.ts apps/web/src/components/cosmos/content-block-reader.test.ts`：5 文件 / 57 测试通过、5.09s（pwsh-541801486dc34528，exit 0）。
+- `bunx tsc --noEmit --strict --module esnext --moduleResolution bundler --target es2022 --esModuleInterop --skipLibCheck --types node e2e/browser/story-media-degradation.spec.ts`：最终用例类型检查通过，与最终浏览器串行（pwsh-d6aa27272bf9481a，exit 0）；不把 Playwright 转译当类型检查。
+- 五轴自查未见 blocker：仅有界测试/记录，无业务变更；非独立审查。本步未跑全套单元/全仓类型（基线 1148 项/类型已过）、浏览器整套、真实来源/Agent、旧库升级。信心 B，本切片完成、Task40 active；余项按计划继续。
+- `bun run docs:check`（1186 文件零错误）、`git diff --cached --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 全通过（pwsh-88d1cbfa52a04ec1，exit 0），5 项既存 warning。首次主记录约 9.1k token 触警，去掉本次重复说明后通过，未调阈值/基线/豁免。仅四个本步文件暂存，复查后本地提交。
 

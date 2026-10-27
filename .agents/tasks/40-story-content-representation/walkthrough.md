@@ -10,7 +10,7 @@
 
 ## 当前状态与本轮切片
 
-编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取，合成解析升级/质量保护与旧证据接受门禁。独立审查/预算复核及受控终端入口离线验收闭合；真实 Agent 仍未验收，不整体标完成。
+编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取，合成解析升级/质量保护与旧证据接受门禁。独立审查/预算复核、受控入口离线及单次真实 Story 摘要生成/拒绝已验收；真实运行无来源/工具，不等于整体验收完成。
 
 当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；本轮另经明确授权以小型 workflow 固定 `jijiapi/gpt-6-luna` 完成只读独立审查，详见末节。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
 
@@ -172,3 +172,13 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 | `bun run docs:check`、`git diff --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` | 1204 文件/0 失败，大小门禁 397 文件 PASS、5 项既存 warning，pwsh-4b78d921282640cc/exit 0；最初主记录超 token，已将完成演进记录 5,675 字节原文分册，仅规范分隔换行，不改预算。 |
 
 零真实 Provider 发送，无用户凭据/数据/goal/push/新分支/worktree/部署。未跑浏览器、属性或 Node 进程 E2E、真实来源/Agent、用户库升级，入口不等于真人 TTY 或产品浏览器验收。下一步另披露完整 `--plan`、费用/留存未知与本地明文/强杀残留风险，逐次获授权后才由维护者在干净工作区真人 TTY 执行；Harness 无该 TTY，不收聊天/环境变量凭据。信心 B，Task40 active；本步按授权本地中文提交。
+
+### 2026-10-27：单次真实 Story Agent 验收
+
+本轮只收集维护者本地终端结果、只读核对固定计划/安全结果及凭据目录文件清单，更新摘要并按既有逐步中文提交授权收口；不重新执行入口、不新增模型请求、不读取 DB/凭据/原始响应或清理产物。基线 `d1acdf522a4c979c9b04068ee9aa878a830bd1fd`，核对前工作区干净。
+
+- 授权链：维护者先运行 `bun run scripts/acceptance/story-agent-acceptance.ts --plan` 并贴回完整消息（会话 m05907）；解释固定 endpoint/model、合成文本、最多一次 POST、512 输出 token、60s 生成预算及未知费用/留存、本地明文与强杀残留风险后，在问题 `task40_one_real_request` 明确选择“批准这一次请求”。只批准该计划，不授权失败重跑。随后维护者在真人 TTY 执行 `bun run scripts/acceptance/story-agent-acceptance.ts`，返回固定报告（m05915）。凭据未进入聊天。
+- 真实目标 `https://api-slb.jiji.cc/v1/chat/completions`、`jijiapi/gpt-6-luna`，summary-only 合成图书馆 Story，无来源/工具。产物根 `.agent/tmp/task40-story-3AImPn`；Leader 亲自读取 `request-plan.json` 与 `result.json`，前者与已披露消息及预算一致，后者为 `status=completed`、`stage=verified`、`transportSends=1`、`pendingCount=1`、`decision=rejected`、`formalUnchanged=true`、`secretCleanup=completed`、`disconnect=completed`。这里只记录安全状态，未读模型输出或 SQLite 内容，未采集 HTTP 状态码/账单金额，不据此宣称 HTTP 200 或免费。
+- 只读 glob 检查本隔离根 `data/secrets` 无文件；结合已审查入口的删除后读回校验及完成报告，确认本次正常退出清理证据。保留隔离 DB、计划和结果，不把临时产物暂存提交，不宣称 Provider 端已删除数据或强杀路径安全。
+- 本次证明真实 Provider→SDK→连接配置→durable Host/Worker @2→一个 pending→预先约定的拒绝流程，正式 Story 与全部 Revision 不变。拒绝由终端验收程序执行，不冒称真人在 Web 点击拒绝。真实模型的来源正文授权、块证据、关系/质量任务、接受写入及产品浏览器组合未在本次运行；它们既有合成/离线证据不能标成真实模型覆盖。无部署、用户库升级或真实用户数据操作。
+- 本轮仅文档改动，不重跑全量测试/类型/浏览器或任何模型请求；上一入口步骤的 1165 项与类型结果仍为历史证据。`bun run docs:check`（1204 文件/0 失败）、`git diff --check`、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` 已通过（pwsh-04501a68d0fd4aca/exit 0；397 文件、5 项既存 warning）；首次仅 EOF 多空行报错，已规范换行，提交前再查 staged diff。该受控真实 Agent 切片通过，Task40 仍 active；下一步按已批准目标核对整体验收及风险，不默认新增付费测试；任何新真实请求须重新授权。

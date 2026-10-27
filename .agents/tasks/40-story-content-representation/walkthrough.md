@@ -164,40 +164,7 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 
 因此当前结论不是“所有层都通过”：交付切片有单元、SQLite、生产浏览器、组件实验室和一次真实 Agent 证据；但完整浏览器与 Node 进程套件均非全绿，旧库升级也没有行为证据。后续收口顺序：先用隔离的 Task40 前置 schema/数据库快照补迁移无回填验收；定位并修复/归属 Node recovery 超时；首屏预算门禁交由其现有 owner 处置，不放宽阈值；随后重跑目标浏览器、相关全量门禁并复核真实来源证据是否需更新。Task40 保持 active；不以合成解析器或真实终端摘要替代未覆盖组合，也不再次外呼或操作用户数据。
 
-### 2026-10-27：前置 schema 旧库升级隔离测试计划
-
-实查基线 `master` / `b35951eb99006b3543e95ae3c585005612cc34ef`，工作区干净。本步只补升级证据并本地中文提交；不创建 goal/branch/worktree，不操作 `.cosmos/`、用户数据、远端或 Provider。
-
-合同依据目标设计 §3.10、架构 §9.1 和真实迁移：新增表示/候选为空，Revision 新指针/证据 NULL、未锁定，Observation 新字段 NULL；旧事实、Entry/Story 指针不变。前置库不存在内容表示指针；producer 回填属于前置迁移。
-
-1. 新建 `.agent/tmp/task40-content-upgrade-*`，真实迁移截至 `20260924100000_story_revision_producer`；旧列 SQL 播种两版 Revision/Observation、人工 Story、媒体/事件，记录全旧列快照。
-2. 真实 `prisma migrate deploy` 升级，验旧事实/指针、无回填、旧内容只读降级，并验约束/重复部署。
-3. 若原样通过，仅在临时副本注入回填/指针改写观察 RED；只有真实合同缺口才最小修复，不改历史 migration。运行下列门禁。
-
-假设/边界：合成前置库，不是用户快照、备份恢复或破坏性迁移验收；recovery/JS 预算及真实来源/Agent 留待独立步骤。
-
-### 2026-10-27：旧库升级隔离测试结果
-
-新增 [夹具](../../../packages/storage-prisma/src/content-upgrade.fixtures.ts) 与 [测试](../../../packages/storage-prisma/src/content-upgrade.test.ts)，生产代码/schema/历史 migration 未修改。仅清理本次创建且校验父目录/前缀的临时根。
-
-RED：下表聚焦命令两次 exit 1：仅在临时迁移副本分别注入伪造表示、Story 指针 `story-r2`→`story-r1`，分别因 `expected 1 to be +0`、Story 快照不等失败；各 1 失败/1 通过。移除注入后 2/2 通过。这验证断言敏感性，不代表真实迁移存在缺陷。
-
-GREEN：八表全部旧列/标识、两版 Revision/Observation、人工 Story 及旧指针不变；新增表空/指针 NULL/未锁定；旧文本安全降级、精确缺失版本不替代；读取及重复 deploy 不改事实/文件，旧 checksum 不变；版本/指针唯一、外键/索引/删除置空生效。
-
-| 完整命令 | 本步结果 |
-| --- | --- |
-| `bunx vitest run packages/storage-prisma/src/content-upgrade.test.ts` | 最终 1 文件/2 项通过（15.24s）。 |
-| `bunx vitest run packages/storage-prisma/src/content-query.test.ts packages/storage-prisma/src/content-evolution.test.ts packages/storage-prisma/src/representation-selection.test.ts packages/storage-prisma/src/story-revision-producer-migration.test.ts packages/storage-prisma/src/provider-model-migration.test.ts` | 5 文件/8 项通过（24.90s）。相邻 Provider 夹具按原规范保留该次新建隔离根，未清理其它根。 |
-| `bun run test` | 最终 206 文件/1167 项通过（211.78s）。 |
-| `bun run typecheck` | 全包及 API/Worker/Web exit 0。 |
-| `bun run docs:check` | 1207 文件，failures=[]。 |
-| `bun .agent/tmp/task40-markdown-check.ts` | 四份文档标题/围栏/尾随空白通过；表格/结构人工复核。 |
-| `$env:PYTHONUTF8='1'; python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new` | 曾因本文约 9.5k→9.1k、状态入口约 9.0k 失败；精简本次记录后 PASS，398 文件、5 项既存 warning，未改阈值/基线。 |
-| `git diff --check` | exit 0。 |
-
-五轴自查（非独立审查）：正确性——动态旧列快照；简单性——复用 deploy helper；架构——真实迁移/统一 Query；安全——隔离合成数据；性能——无产品热路径改动。未发现生产修复缺口。工具不能指定要求路由，无子 Agent/替代模型。
-
-未运行：`bun run test:e2e`、`bun run test:browser`、组件实验室、property、构建、真实来源/Agent。Task40 保持 active；下一步单独诊断 recovery，JS 预算由现有 owner 处理且不放宽。真实来源/Agent 的未覆盖组合及用户库/备份恢复边界不因本步消失。
+2026-10-27 前置 schema 旧库升级的计划、RED/GREEN 与完整命令已原文归档至[升级历史](walkthrough/history-old-schema-upgrade.md)。有效结论：真实迁移路径下旧事实/标识/指针保持且无历史回填，新增表示/候选为空；未操作用户库，不是用户快照或备份恢复验收。
 
 2026-10-27 Node recovery 的计划、RED/GREEN 与完整命令已归档至[独立诊断历史](walkthrough/history-node-recovery.md)。有效结论：派发后结果未知时 `outcome_unknown` 终止且不自动重发；仅旧测试预期需修正，完整 Node E2E 通过。completion 分类及旧 spec 表述仍待后续评估。
 
@@ -244,3 +211,39 @@ git diff --check
 - 相关回归 3 文件/19 项；全量 206 文件/1167 项（211.17s）；全仓类型通过。文档链接/Markdown 初次通过；大小门禁因本文 29.99 KB / 约 10.0k token 失败，仅归档已完成 recovery 过程。原文与 HEAD 对比通过（只调相对链接层级），有效结论保留；最终链接 1209 文件零失败、结构六文件通过、diff exit 0、大小 PASS（400 文件/5 项既存 warning），主文档及新分册均在健康区；未改阈值/基线。
 - 五轴自审：合同无改；用户事实/持久化未动；外部输入校验保留；编辑依赖实测可用；预算窗口与阈值未改。无 Critical/Important 自审发现；工具不能指定 `jijiapi/gpt-6-luna`，未派子 Agent，非独立 review。
 - 未运行：本步 Node E2E、显式降级播种、组件实验室、真实来源/Provider/Agent 复验及部署；真实 RSS/摘要历史不升级为新证据。未操作用户数据或历史 migration。Task40 active；下一步核对批准清单与真实验收授权，另评估 completion 分类和旧 spec，不宣称整体关闭。
+
+### 2026-10-27：剩余清单复核与隔离组合计划
+
+基线 `master` / `8353a50`，工作区干净。复核目标设计 §4.1 十二点和本 Task 阶段 3–8：升级/recovery/JS 预算已有后续证据，剩余阅读降级显式复验、真实来源和 Agent 正文/关系/质量/Web 组合；completion 分类及旧 spec 待独立评估。
+
+本轮授权仅覆盖有界证据与本地提交，不含新外呼。真实来源需显式来源/联网前置；真实 Agent 须逐次批准模型/端点、全文、预算费用、留存，并由维护者终端输入临时凭据。旧 RSS/summary-only 授权不可复用。不外呼，不操作用户数据、goal/branch/worktree/部署。工具无法固定 `jijiapi/gpt-6-luna`，不派代理或换模型。
+
+选定 `COSMOS_E2E_READING_DEGRADATION=1`：新隔离栈组合阅读降级（1024/1440）、媒体降级及候选接受/拒绝/证据失效。真实 API/Worker/生产 Web、本地来源、合成模型，不代表真实模型理解。先构建；失败保留诊断不重跑抹除；无缺口不改业务/测试。只更新当前文档、运行门禁并提交。
+
+### 隔离组合结果与剩余边界
+
+以下 PowerShell 命令 exit 0；构建失败即停止，Playwright 无自动重试。本轮仅文档落盘，无生产代码、测试或 schema 修改，不制造 RED 或虚报修复。
+
+```powershell
+$env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'
+$env:COSMOS_E2E_READING_DEGRADATION='1'
+bun run build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+bunx playwright test --config playwright.config.ts e2e/browser/story-reading-degradation.spec.ts e2e/browser/story-media-degradation.spec.ts e2e/browser/story-agent-generation.spec.ts
+```
+
+- 构建 API/Worker/共享包与生产 Web 通过；隔离 Web Stack 再按其动态 API 地址构建通过。组合 **5 通过/0 跳过/0 失败，37.5s**：阅读降级 1024/1440 各一项，媒体降级同宽度各一项，候选生成/人工决定一项。仅输出颜色环境 warning，无测试失败。
+- 首开/刷新：旧 HTML 无脚本/跟踪图；坏/失败表示不偷换正文；缺 Asset 保序及安全外链；音视频仅元数据，图片被拦/空正文诚实提示。候选 pending 不改 Story，接受写入、旧正文版本候选禁接受/可拒绝、刷新保持决定。合成 SSE 不证明真实模型理解。
+- 清单 #4/#10/#11/#12 的上述组合有本轮证据；#8 真实模型分层读取及其它真实来源/任务/Web 组合仍缺。历史两项跳过保留，不拼成一次 67 项全绿。
+- 五轴自审：正确性查 API/刷新/不变；简单性复用测试；架构走生产栈；安全隔离/本地/合成；性能无代码/预算变化。非独立审查。未运行完整浏览器、全量单元/独立类型、Node E2E、组件实验室、property、真实来源/Agent、用户库升级/部署；旧证据不冒称本轮。
+- Task40 active；下一步先准备“带来源正文的摘要→人工决定”真实请求计划，披露全文/模型/端点/预算费用/留存清理风险后逐次申请授权；当前 summary-only 入口不支持该组合，不直接执行或复用旧凭据。关系/质量、completion 分类和旧 spec 后续独立评估。
+- 文档预检：约 9.2k token 失败，升级过程[原文归档](walkthrough/history-old-schema-upgrade.md)且保留有效结论；对基线校验通过，仅调链接深度。两次 diff 因 EOF 空行 exit 2，修正后 exit 0；大小仍约 9.0k 失败，再精简本轮重复文字。未改阈值/基线。最终以下命令均 exit 0：链接 1210 文件零失败，归档原文一致，Markdown 七文件通过，diff 通过，大小 PASS（401 文件、5 项既存 warning）。
+
+```powershell
+bun run docs:check
+bun .agent/tmp/task40-archive-check.ts
+bun .agent/tmp/task40-markdown-check.ts
+git diff --check
+$env:PYTHONUTF8='1'
+python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new
+```

@@ -199,31 +199,48 @@ GREEN：八表全部旧列/标识、两版 Revision/Observation、人工 Story �
 
 未运行：`bun run test:e2e`、`bun run test:browser`、组件实验室、property、构建、真实来源/Agent。Task40 保持 active；下一步单独诊断 recovery，JS 预算由现有 owner 处理且不放宽。真实来源/Agent 的未覆盖组合及用户库/备份恢复边界不因本步消失。
 
-### 2026-10-27：Node recovery 独立诊断计划
+2026-10-27 Node recovery 的计划、RED/GREEN 与完整命令已归档至[独立诊断历史](walkthrough/history-node-recovery.md)。有效结论：派发后结果未知时 `outcome_unknown` 终止且不自动重发；仅旧测试预期需修正，完整 Node E2E 通过。completion 分类及旧 spec 表述仍待后续评估。
 
-基线 `master` / `b883f30`，工作区干净。维护者授权单独诊断并本地中文提交；只用新建隔离根、本地受控 RSS 和真实 Node API/Worker，不操作用户数据、外呼、goal、分支/worktree 或远端。先原样构建/复现，再对照 Worker/Host/SQL 租约与请求边界取证；只按单一已验证根因补测试/最小修复，不放宽等待上限。当前仅知第二 Worker 请求等待超时，尚不判定产品或测试缺陷。JS 预算和真实来源/Agent 不在本步。随后运行聚焦 recovery、相关回归、完整 Node E2E、单元/类型与文档门禁，并记录未运行项。
+### 2026-10-27：首屏 JS 预算切片计划
 
-### 2026-10-27：Node recovery 诊断结果
+基线 `master` / `83f7e64`，工作区干净。按维护者授权只处理原预算并复验浏览器，本地中文提交；不改门槛/测量窗口，不操作用户数据、goal、分支或远端。Windows / Node v24.14.0 / Bun 1.4.2，以同一隔离浏览器栈重复采样。现有门禁两次均为 401954 > 335974 bytes；先追静态依赖，再以单一假设做最小修复，保持阅读/编辑能力和边界校验。完成后跑聚焦重复采样、完整浏览器、相关回归/全量测试/类型及文档门禁；真实来源/Agent 不在本步。
 
-根因是旧测试预期失效，不是 Worker 未接管。批准的 [Host 派发保护](../../../docs/aegis/plans/2026-10-18-task39-provider-discovery.md)禁止结果未知时自动重发；[持久 owner](../../../packages/storage-prisma/src/workflow-host-store/activity-store.ts)消费派发授权后，崩溃/租约过期必须终止为 `outcome_unknown`。该规则通用于 Activity，包含 RSS，不只模型请求。原测试仍等第二个 HTTP 请求，故确定超时；未改产品或放宽等待上限。
+依赖图发现两份 Zod 4.4.3：contracts/Web 解析到 Bun 管理的安装，transport 的 `client-configured-models.ts:11` 却因未声明直接依赖而借用根安装。下一小步在 transport 声明已有 Zod 依赖并由包管理器更新锁定关系，验证消除重复；不加构建 alias，不删输入/响应校验。
 
-证据/测试过程：
+### 首屏预算：诊断与聚焦验证
 
-- 原样构建及 recovery RED：`Timed out waiting for second Worker started and reclaimed RSS`。隔离 DB 显示唯一 Job `failed_terminal`/`outcome_unknown`/attempts=1、Run `failed`、无 Entry/Observation；第二 Worker 已启动。请求已到本地 RSS，但响应尚未释放。
-- 改 [recovery E2E](../../../e2e/recovery.e2e.test.ts)：观察真实 Job/Run 租约过期替代固定 1250ms sleep；断言已消费派发授权、第二 Worker 完成未知结果终止、清除租约且不再尝试。释放旧响应后等待 completion 安全排空，仍仅一次请求、一个 Job、零来源事实/空 Feed；日志脱敏和隔离清理保留，主要行为移入实际测试用例。初版曾误把配置 Worker ID 当作租约 owner，已按真实带 PID 的 instanceId 修正断言。
-- 终止 Run 的失败 completion 会经当前错误分类重试至 `dead_letter`，日志出现 `Workflow run is not pending: failed.`。这是现有排空路径，不是第二次外呼；本步明确断言排空后无新增事实，未顺手修改该生命周期。通用 completion 分类/减少无用重试留后续评估。
-- Windows 验证前置曾受默认 `BUN_BINARY=bun` 的 `spawnSync bun EINVAL` 阻断；外层命令指定已核实的 Bun 可执行文件后继续，未改仓库路径默认值。所有 API/Worker 仍运行真实 Node dist，RSS 为本地合成源，无真实来源或模型请求。
+- RED：原预算测试两次 401954 > 335974 bytes。Board 浏览入口静态导入仅编辑用的拖拽库；模块级 `next/dynamic` 后两次 385227，仍失败。
+- contracts 的 `sideEffects: false` 实验两次 386549，无收益，已撤回。一轮构建撞上声明移动中间态，报 `Cannot find name 'BoardDndProvider'` / `Cannot find name 'BoardBlockList'`；稳定源重跑排除，不算验收通过。
+- `bun run --cwd apps/web next experimental-analyze --output` exit 0。诊断数据中两个 Zod 4.4.3 并存：contracts → `.bun/zod@4.4.3`，transport → 根实体安装。transport 直接 import 却漏声明依赖；补依赖，Bun 锁定关系增一行，无版本升级、alias 或校验删减。
+- `bun install --ignore-scripts` exit 0，但混合布局未重连；`bun install --linker isolated --ignore-scripts --frozen-lockfile` exit 0 后三方解析同一安装。后者是本次复验前置，不把编辑清单当既有安装已修复；未改安装源。
+- GREEN：最终源两次 313.1 KB / 15 脚本，可交互 207/212 ms、路由切换 171/100 ms。阈值、`load` 窗口及测试未改；仅编辑时加载拖拽，完整浏览器复验指针排序。
 
-| 完整命令 | 本步结果 |
-| --- | --- |
-| `$env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'; bunx vitest run --config vitest.e2e.config.ts e2e/recovery.e2e.test.ts` | 原预期 exit 1；最终 1 文件/1 项通过（9.79s），实际崩溃/接管约 2.70s。 |
-| `$env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'; bun run test:e2e` | 最终 exit 0，包含包/API/Worker 构建，7 文件/13 项通过（58.14s）。 |
-| `bunx vitest run packages/storage-prisma/src/store-dispatch-fence.test.ts packages/storage-prisma/src/workflow-backend.test.ts packages/application/src/workflow-host-runtime.test.ts apps/worker/src/workflow-host.test.ts` | 4 文件/50 项通过（89.32s）。 |
-| `bun run test` | 206 文件/1167 项通过（176.95s）。 |
-| `bun run typecheck` | 全包及 API/Worker/Web exit 0。 |
+```powershell
+$env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'
+bun run build
+bunx playwright test --config playwright.config.ts e2e/browser/layout-and-budget.spec.ts --grep '首屏可交互与路由切换' --repeat-each=2
+```
 
-五轴自查（非独立审查）：正确性——真实 Node/SQLite/HTTP 验证持久状态且不重复请求；简单性——仅测试 owner 改动；架构——遵循既有派发保护；安全——全新隔离根、日志脱敏、不接触用户数据；性能——等待真实租约、不增加超时，无产品热路径变化。工具无法指定要求路由，未使用子 Agent 或替代模型。
+上面同一命令用于基线 RED、各单变量实验与最终 GREEN；构建失败即停止，不把旧构建当新结果。
 
-文档门禁：`bun run docs:check` 1208 文件/零失败；`bun .agent/tmp/task40-markdown-check.ts` 五文件标题/围栏/尾随空白通过，表格/结构人工复核；`$env:PYTHONUTF8='1'; python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new` PASS（399 文件、5 项既存 warning）。`git diff --check` 初次报 `new blank line at EOF`，删除多余空行后复验 exit 0。已核对归档与 HEAD 历史原文完全一致，当前状态/有效决定仍在主文档；未改阈值/基线。
+### 首屏预算：最终门禁与边界
 
-未运行浏览器/组件实验室、property、真实来源/Agent、用户库升级或部署。当前 `docs/spec/README.md` 的“接管和最终 Feed”旧表述需后续 owner 同步，本步只改 Task40 记录和状态入口，不改稳定合同。Task40 仍 active；下一步单独处理首屏 JS 预算（不放宽），随后复验目标浏览器及真实来源/Agent 未覆盖组合。
+以下命令最终均 exit 0（PowerShell 各步失败即停止）；同上 `BUN_BINARY`：
+
+```powershell
+bun run test:browser
+bunx vitest run packages/transport-http/src/client-configured-models.test.ts packages/transport-http/src/client-board.test.ts apps/web/src/components/cosmos/board-drag.test.ts
+bun run test
+bun run typecheck
+bun run docs:check
+bun .agent/tmp/task40-archive-check.ts
+bun .agent/tmp/task40-markdown-check.ts
+$env:PYTHONUTF8='1'
+python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new
+git diff --check
+```
+
+- 完整浏览器：65 通过/2 跳过/0 失败，4.2m；首屏 313.1 KB、242 ms，切页 231 ms，原预算通过。真实指针排序及 Story 生成/版本用例通过。跳过为未开 `COSMOS_E2E_READING_DEGRADATION=1` 的 1024/1440 阅读降级两例，不能计入通过。
+- 相关回归 3 文件/19 项；全量 206 文件/1167 项（211.17s）；全仓类型通过。文档链接/Markdown 初次通过；大小门禁因本文 29.99 KB / 约 10.0k token 失败，仅归档已完成 recovery 过程。原文与 HEAD 对比通过（只调相对链接层级），有效结论保留；最终链接 1209 文件零失败、结构六文件通过、diff exit 0、大小 PASS（400 文件/5 项既存 warning），主文档及新分册均在健康区；未改阈值/基线。
+- 五轴自审：合同无改；用户事实/持久化未动；外部输入校验保留；编辑依赖实测可用；预算窗口与阈值未改。无 Critical/Important 自审发现；工具不能指定 `jijiapi/gpt-6-luna`，未派子 Agent，非独立 review。
+- 未运行：本步 Node E2E、显式降级播种、组件实验室、真实来源/Provider/Agent 复验及部署；真实 RSS/摘要历史不升级为新证据。未操作用户数据或历史 migration。Task40 active；下一步核对批准清单与真实验收授权，另评估 completion 分类和旧 spec，不宣称整体关闭。

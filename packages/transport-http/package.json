@@ -16,6 +16,7 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@cosmos/contracts": "workspace:*"
+        "@cosmos/contracts": "workspace:*",
+        "zod": "^4.0.0"
     }
 }

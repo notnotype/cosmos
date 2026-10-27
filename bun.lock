@@ -163,6 +163,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cosmos/contracts": "workspace:*",
+        "zod": "^4.0.0",
       },
     },
     "packages/worker-admin": {

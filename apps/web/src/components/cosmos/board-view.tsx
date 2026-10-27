@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
 import type {
@@ -11,7 +12,6 @@ import type {
 } from "@cosmos/contracts";
 import type { HttpCosmosClient } from "@cosmos/transport-http";
 
-import { BoardBlockList, BoardDndProvider } from "./board-sortable-blocks";
 import { BoardBlockContent } from "./board-view/blocks";
 import { AddBlockForm, AddSectionForm, BlockEditor, SectionEditor } from "./board-view/editor";
 import { BlockPlaceholder, blockTypeLabel } from "./board-view/shared";
@@ -19,6 +19,10 @@ import type { BoardCommands, BoardViewProps } from "./board-view/types";
 
 export type { BoardCommands } from "./board-view/types";
 export type { BoardViewProps } from "./board-view/types";
+
+// 浏览模式不需要拖拽；保留同一个编辑子树边界，避免首屏加载编辑依赖。
+const BoardDndProvider = dynamic(() => import("./board-sortable-blocks").then((module) => module.BoardDndProvider));
+const BoardBlockList = dynamic(() => import("./board-sortable-blocks").then((module) => module.BoardBlockList));
 
 
 /**

@@ -157,7 +157,7 @@ test("reads a Story at its own URL and reaches the edit surface there", async ({
     expect(titleFont.toLowerCase()).toContain("charter");
     // 正文块必须存在：取不到就断言失败，而不是把这一段整块跳过（曾经用 `if (count > 0)` 包着，
     // 元素消失时用例照样绿）。
-    const body = page.locator("article").first().locator("div.whitespace-pre-wrap").first();
+    const body = page.locator("article").first().locator('[data-content-block="paragraph"] > p').first();
     await expect(body).toBeVisible();
     const metrics = await body.evaluate((element) => {
         const style = getComputedStyle(element);

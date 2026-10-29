@@ -10,7 +10,7 @@
 
 ## 当前状态与本轮切片
 
-编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取，合成解析升级/质量保护与旧证据接受门禁。独立审查/预算复核、受控入口离线及单次真实 Story 摘要生成/拒绝已验收；真实运行无来源/工具，不等于整体验收完成。
+编号由维护者分配为 40。生命周期：实施与整体验收进行中。内容表示、显式连接→API 202→Worker @2→候选→人工决定已实现；隔离产品覆盖版本管理、媒体及异常读取，合成解析升级/质量保护与旧证据接受门禁。独立审查/预算复核、旧库升级、Node recovery 与原 JS 预算已有证据。维护者另确认一次真实 Provider 合成正文摘要与 Web 人工接受/持久化通过，非 Agent 独立复验；真实来源、关系/质量任务等仍未收口，不等于整体验收完成。
 
 当前目标：维护者要求继续 Task40，并授权每个可验收步骤作一次中文说明的本地 Git 提交；当前提交和结果见本文末。Task39 保持完成，本 Task 只消费其能力，不另建平台。Leader 唯一记录写入者；本轮另经明确授权以小型 workflow 固定 `jijiapi/gpt-6-luna` 完成只读独立审查，详见末节。无自动 goal、新分支/worktree、push、部署或真实数据操作；真实外部模型请求仍逐次另获授权。历史 goal、@1 与 TDD-off 假设不代表当前授权。
 
@@ -223,3 +223,22 @@ python scripts/size-governance.py --check --cat docs --baseline docs/doc-governa
 首轮链接 1223 文件/Markdown 十文件通过，diff 发现本节末尾多余空行而中断，已删除。随后大小门禁因主文档约 9.8k token、状态入口约 9.0k token 失败；将上一轮已完成入口实施归档（除移动后的两处相对链接外，原文一致），有效决定留在本页，并精简本轮状态摘要。未改阈值或基线。
 
 归档后链接检查先发现两处移动后的断链，修正后最终门禁 exit 0：链接 1224 文件零失败、Markdown 十一文件通过、diff 通过；大小 404 文件 PASS，5 项已登记增长 warning（含测试规范），无豁免或基线变更。历史与 `HEAD/34e0b29` 对比除两处相对链接外原文一致。
+
+### 2026-10-29：维护者真实正文摘要与 Web 接受确认
+
+本轮为文档收口，仓库基线 `master/849aea1` 干净；只记录维护者提交的固定报告及人工确认，不修改实现或合同、不外呼、不读隔离库/凭据，不使用子代理。运行产物未由 Agent 独立复验，报告未含运行提交号，不能将仓库基线冒称产物提交校验。
+
+维护者报告执行 `bun run scripts/acceptance/story-body-acceptance.ts` 完成，隔离根标识 `task40-story-72INeE`。固定字段：`status=decision_recorded`、`stage=web_review`、`failureCode=none`、`transportSends=1`、`pendingCount=1`、`formalUnchanged=true`、`bodyEvidenceRefs=3`、`manualPersistenceVerified=true`、`secretCleanup=completed`、`decision=accepted`、`apiQueue=true`、`disconnect=completed`。其中 formalUnchanged 指 pending 阶段，接受后的持久化由 manualPersistenceVerified 报告，二者不矛盾。
+
+维护者另明确确认：已核对日期、18 个名额、报名截止时间与正文证据，内容和证据正确。由此记录一次真实 Provider 正文摘要→Web 人工接受→刷新/持久化核对的有界组合通过（维护者执行及确认，不是 Agent 复跑）；此前格式失败及离线并行配置失败保留，不因本次成功撤销。
+
+来源正文仍为固定合成 seed，不是真实 RSS ingest 复验；Host 在入口进程，不是独立 Worker 进程验收。本次不覆盖关系/质量真实任务、通用 completion 分类或旧 spec 收口，不扩大到 Task40 整体完成。后续先核对剩余批准清单和真实来源/关系/质量组合前置；任何新外呼仍需完整计划和逐次授权，不自动重跑。未运行代码测试、类型检查、Node/browser 全量或真实来源；本轮仅做文档一致性审查与以下门禁：
+
+```sh
+bun run docs:check
+bun .agent/tmp/task40-markdown-check.ts
+git diff --check
+PYTHONUTF8=1 python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new
+```
+
+上述文档门禁 exit 0：链接 1224 文件零失败、Markdown 十一文件通过、diff 通过；大小 404 文件 PASS，5 项既有基线增长 warning，未调整阈值或基线。四处当前状态一致性人工审查通过。

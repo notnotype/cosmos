@@ -4,7 +4,7 @@
 >
 > 日期：2026-09-24（起点）
 >
-> 执行流程：[`../前端设计流程.md`](../前端设计流程.md)（v0.4，四层约 30 步）
+> 执行流程：[`../standards/frontend-design-process.md`](../standards/frontend-design-process.md)（v0.4，四层约 30 步）
 >
 > 需求真相源：[`../requirements/0001-original-requirements.md`](../requirements/0001-original-requirements.md) 的 2026-09-15 条目（界面职责、UI 文案、实现作废三轮原话）
 >

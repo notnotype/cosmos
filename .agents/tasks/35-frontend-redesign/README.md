@@ -8,7 +8,7 @@
 
 > @docs/前端设计流程.md 项目现在要从0开始重新设计前端界面，技术栈底座还是React + Tailwind CSS。按照流程一步步与我进行讨论。
 
-执行依据 [`docs/前端设计流程.md`](../../../docs/前端设计流程.md)（v0.4）。流程 §0 适用判断为「多页面 / 有路由」→ 四层全做；§8 硬闸门为「三层设计获批前不写代码」。第 0、1、1.5 层走完后，维护者同轮**接受设计**并授权更新稳定文档与创建本 Task；**未授权**实现代码、worktree、分支、commit、push、PR、merge、发布或部署。
+执行依据 [`docs/standards/frontend-design-process.md`](../../../docs/standards/frontend-design-process.md)（v0.4）。流程 §0 适用判断为「多页面 / 有路由」→ 四层全做；§8 硬闸门为「三层设计获批前不写代码」。第 0、1、1.5 层走完后，维护者同轮**接受设计**并授权更新稳定文档与创建本 Task；**未授权**实现代码、worktree、分支、commit、push、PR、merge、发布或部署。
 
 ## Goal
 

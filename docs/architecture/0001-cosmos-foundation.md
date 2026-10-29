@@ -1,8 +1,8 @@
 # Cosmos 总体架构设计
 
-> 状态：Draft v0.25
+> 文档版本：Draft v0.25（设计版本；历史变更由 Git 管理）
 >
-> 最后更新：2026-08-23
+> 当前实现核对：2026-10-29，代码基线为仓库 HEAD `354e9f9936c7bdb7fda9acd6b4e018deae8b779c`
 >
 > 原始需求真相源：[`../requirements/0001-original-requirements.md`](../requirements/0001-original-requirements.md)
 >
@@ -43,6 +43,8 @@
 用户已接受 [Provider/model 配置](../proposals/connection-credential-entry-v1.md)。目标所有权为数据库 Provider/model 配置、Provider 独占 SecretStore 引用、模型型 Connection 单选已有模型；可信 Worker 按次解析并执行发现/生成，保存不外呼。详细接口与恢复边界见 [Draft 合同](../api/0009-provider-model-configuration.md)。已落地的部分：Provider/模型创建与编辑、Provider 删除（含引用检查与本地凭证清理）、凭证写入与清理补偿、同步模型发现、模型型 Connection 选择、`agent.invoke@2` 执行链路。编辑 Provider 前的受影响连接查询不新增服务端端点，由界面用连接列表与模型列表自行聚合。这已替代原单 Worker 部署 profile 与 Connection.secretRef 模型凭证路径：Worker 不再读取 `COSMOS_AGENT_*`、也不再注册 `agent.invoke@1`，模型与凭证一律按调用时的 Connection 解析。普通非模型连接和 SecretStore 明文文件合同保留。
 
 ## 19. 当前决定
+
+以下条目是长期设计合同；只有分册“当前实现与设计合同”明确列出的部分属于当前代码切片。固定 Ingest、API manifest-only、Worker executable、Worker Admin 和本地 SQLite/Data Root 见 [`0001-cosmos-foundation/part-01-03.md`](0001-cosmos-foundation/part-01-03.md)；Gateway、多主机、独立 Migrator、Knowledge/Research、完整 Agent/Harness、Workspace/Artifact 与自动策展仍是目标或待验证。封口分册若保留早期切片口径，以本主文、架构入口及 spec/代码为准，正式更正走勘误流程。
 
 以下决定进入当前 v0.19 基线，但后续需求仍可通过记录理由调整：
 
@@ -91,8 +93,8 @@
 43. 服务器部署优先，同时为客户端模式和客户端与服务分离模式保留兼容边界；三种模式共用 Service Endpoint、Command、Query、Event 和 SSE Transport。
 44. Phase 1 直接使用 `pi-ai`；`neuro-agent-harness` 独立去领域化演进，稳定后通过 ModelRuntime、SessionStore、Profile 和 Capability Adapter 接入；sidecar 不属于 Harness Core。
 45. Desktop Shell 的具体技术后置；Docker/Compose 作为服务器交付形态的初步封装，不能改变领域和 Transport 合同。
-46. Phase 1B 的来源类型使用业务 `Source.kind`，不暴露 `opencli` 这类底层执行器类型，也不允许任意 connector override。
-47. Phase 1B 的 OpenCLI 只实现受管 Bilibili `hot`/`feed` 场景；新增场景必须通过新的配置合同和标准化测试进入 Registry。
+46. Phase 1B 的来源身份使用版本化 `SourceDefinitionManifest.ref`，manifest 显式提供 `connectorId` 与 operation；旧 `Source.kind` 只在迁移和运行时兼容期间保留，新 Product API 不接受 kind，也不允许任意 connector override。
+47. Phase 1B 已有受管 Bilibili `hot`、`feed` 与其它 manifest operation；新增场景必须通过新的配置合同和标准化测试进入 Registry。
 48. Phase 1B 的 AI HOT 只调用固定公开 endpoint，并使用服务返回的 cursor；通用 HTTP 代理能力不属于 Collector 核心。
 49. API 不执行外部采集；Probe 和 Ingest 都先创建持久 Job，由 Worker 负责执行、租约、重试和恢复。
 50. Probe 是 dry-run，不写 Observation、Entry、Asset，不推进 checkpoint；Probe 结果通过 Job Snapshot 查询。
@@ -105,20 +107,21 @@
 57. Ingest 本身是一种 Workflow；外部来源事实先完成 Observation/Entry/Revision/Asset 入库，不等待 LLM。
 58. Entry → Story 是可由用户或 Agent 配置的 Knowledge Workflow；Research 不直接耦合 Ingest，而是由分析信号产生 Research Request，再由 Trigger 启动独立 Research Workflow。
 59. Research Workflow 可以查询 Cosmos 信息库并访问外部渠道；研究结果重新经过 Observation → Entry，不直接写入 Story。
-60. `NormalizedIngestItem` 是 Phase 1B 唯一标准化输出合同；`SourceOperation` 是未来操作粒度，不与当前 `Source.kind -> IngestConnector` 映射混用。
+60. `NormalizedIngestItem` 是采集标准化输出合同；当前 manifest 已使用受管的 `fetch`/`search` 等 operation，通用的 SourceOperation 产品管理面仍是设计目标，不与 `SourceDefinitionManifest.ref -> connectorId` 映射混用。
 61. `externalId` 和 `Publisher.platformId` 都允许为空；作者 ID 缺失不能阻止录入，也不能用作者名伪造内容身份。
 62. `ContentKind` 与 `StoryKind` 是两个不同层次的枚举，必须通过显式映射投影。
 63. `TemporalValue` 优先保存证据层精准 UTC 时间；fallback 只在 exact 缺失时产生，精度提升不创建 Revision。
 64. ContentMetrics 是 Entry 当前快照；指标变化不创建 EntryRevision，Publisher 和 ContentKind 参与内容 Revision 指纹。
+
 65. `nb-workflow` 是 Cosmos Worker 使用的规范脚本 Kernel；Cosmos 不再长期维护第二套 Activity identity、fingerprint、replay、map/all、wait 和 Child Workflow 语义。
 66. `nb-workflow` 持久化是可选 Backend 能力；Memory、Local Durable 和 Distributed Durable 必须显式声明不同的恢复能力，能力不足时在 Run 启动前拒绝。
 67. Cosmos Workflow Host 持有 Run/Journal、TaskStore、Job/Attempt/Lease、Outbox、Worker 和领域事务的 durable truth；`nb-workflow` 不依赖 Cosmos 领域。
 68. `Activity` 是 journal 恢复单元，`ActionDefinition` 是能力合同，`Job` 是可领取任务，`Attempt` 是带 lease 的一次执行；`Step` 是可选逻辑/UI 投影。
 69. `TaskStore` 是 Job 状态、retry 和 lease 的唯一权威；`WakeupBus` 只负责通知，Redis Streams 是可选 Adapter，不是 Job 或领域终态真相。
 70. Local Durable 默认 SQLite + 自适应 polling；真正多主机目标是 PostgreSQL + S3/MinIO + 可选 Redis，不通过共享 SQLite 网络盘实现。
-71. API 是 manifest-only 控制面，Worker 是 executable 执行面，Migrator 是独立一次性运维单元；当前代码尚需 convergence 才完全满足。
-72. Agent 能力属于可选 `nb-workflow` Extension，映射到版本化的 `agent.invoke@1`／`@2`；Core 不依赖 Harness。真实 Agent Provider Adapter 由可信 Worker 装配并**无条件**注册 `agent.invoke@2`：没有启动期 profile、没有部署开关，能否调用由调用时那条 Connection 决定，模型、地址与凭证按 Connection → Model → Provider → SecretStore 每次解析。`agent.invoke@1` 仍作为 Story 生成侧复用的端口与输入输出契约、以及 catalog 条目保留，但没有进程注册它。
-73. Phase 3 第一切片先以 `agent.invoke@1` + Invocation Port + Fake Adapter 验证现有 Workflow/Job durable truth、trusted Worker 执行、取消、重试和预算边界；Task 39 已增加独立 pi-ai Adapter。真实调用仍是可选 Worker 能力；Connection/SecretRef 的消费遵循 ADR-0017 与 Proposal [`agent-provider-connection-credential-v1`](../proposals/agent-provider-connection-credential-v1.md)，不代表默认生产 profile 或外部服务可用性保证。Harness、`nb-memory`、Artifact、Workspace、Knowledge 和 Research 产品能力仍后置（Proposal [`agent-invocation-v1`](../proposals/agent-invocation-v1.md)、ADR [`0030`](../adr/0030-agent-invocation-v1.md)）。
+71. API 是 manifest-only 控制面，Worker 是 executable 执行面；当前本地切片已满足这两个边界，独立 Migrator 仍是目标运维单元，Compose 仍由 API 启动命令执行 migration。生产部署、多主机和 Gateway 语义仍未完成或未验证。
+72. Agent 能力属于可选 `nb-workflow` Extension，映射到版本化的 `agent.invoke@1`／`@2`；Core 不依赖 Harness。当前可信 Worker 无条件注册 `agent.invoke@2`：没有启动期 profile、没有部署开关，能否调用由调用时那条 Connection 决定，模型、地址与凭证按 Connection → Model → Provider → SecretStore 每次解析。`agent.invoke@1` 仅作为兼容端口、输入输出契约和 catalog 条目保留，没有进程注册；当前外部 Provider 的长期可用性仍未验证。
+73. Task 39 已交付 `agent.invoke@2` 的独立 pi-ai Adapter 与 Provider/Model/Connection/SecretRef 解析链路；`agent.invoke@1` 的 Invocation Port/Fake Adapter 只保留为兼容合同和既有验证依据，不应再描述为当前 Agent 首个生产切片。Harness、`nb-memory`、Artifact、Workspace、Knowledge 和 Research 产品能力仍后置（Proposal [`agent-invocation-v1`](../proposals/agent-invocation-v1.md)、ADR [`0030`](../adr/0030-agent-invocation-v1.md)）。
 74. 并发控制分为 Worker slot、多 Worker、Workflow 内并发、资源级限流和 CollectionPlan overlap policy；任一层都不能替代 TaskStore lease/fencing。
 74. 对外边界拆为 Product Service API、Worker Admin API 和 Worker Gateway API；三者使用独立消费者、路径和版本。
 75. Worker Gateway v1 使用 HTTPS long-poll，先由 SQL TaskStore 原子 claim 再返回 Attempt；未来 WebSocket 只能作为相同语义的 Transport Adapter。
@@ -127,7 +130,7 @@
 
 78. 第一条可用产品 E2E 必须从 Web 配置入口开始；首版只开放 `rss` schema 驱动入口，用户填写实际 RSS URL；`fixture-rss` 只用于集成/管线测试。
 79. 配置产品流程采用“校验 → 测试未保存配置 → 保存为停用 Source → 单独启用”；默认定时 30 分钟、测试立即执行、用户可修改或关闭定时、已排队 Run 使用创建时配置快照作为实现建议，具体调度合同待冻结。
-80. v1 媒体边界已冻结（media-boundary-v1 Proposal 与 ADR-0005）：媒体发现范围为 RSS 条目自身 enclosure 与正文媒体标签，不抓取 `webUrl` 外部全文；Application 统一媒体获取并受控下载图片，Connector 只纯提取、不直接接触 Data Root；v1 不覆盖 per-source 策略（ING-009）与 `local` 作用域键。
+80. v1 媒体边界已冻结（media-boundary-v1 Proposal 与 ADR-0005）：媒体发现范围为 RSS 条目自身 enclosure 与正文媒体标签，不抓取 `webUrl` 外部全文；Application 统一媒体获取并受控下载图片，Connector 只纯提取、不直接接触 Data Root。按来源的图片开关、单文件/单次 Run 预算、失败重试和保留期已在 v1 的受限范围落地；外链图片、视频本体、历史回填、单条数量上限、全局默认值环境化和 `local` 作用域键仍后置或待验证。
 81. v1 数据分层冻结：domain bytes/Asset → Application Workflow BlobRef → Storage Asset metadata → Product API 受控下载；公共 4 态不变，降级原因以可空 `errorMessage` 透传（无 migration）；媒体失败不自愈且保留原文外链，Connector 不直接访问 Data Root。
 82. SourceInstance 以版本化 `sourceDefinitionRef` 作为唯一业务身份；manifest 显式提供 `connectorId`，旧 `kind` 只在迁移和运行时兼容期间保留，并由 manifest 映射约束，不允许新 API 写入或隐式 kind→ref 推导。
 83. SourceInstance 持久化单调整数 `revision`，公开投影提供不透明 `revisionId`；创建从 revision 1 开始且默认停用，配置更新和启用状态变更都必须使用基于 revision 的 CAS。过期 revision 返回 `conflict`，不得使用 `updatedAt` 代替。

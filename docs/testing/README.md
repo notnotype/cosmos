@@ -125,6 +125,12 @@ COSMOS_ALLOW_REAL_NETWORK=true COSMOS_OPENCLI_PATH=<path> bun run test:real:bili
 
 每次新建 `.agent/tmp/task40-story-*` 隔离根，固定 schema/migration 来自入口声明的提交，显式 datasource 不读继承的数据库地址。成功生成仅保存 pending，再在该合成库拒绝，正式 Story 不变。保留数据库（含校验后的模型输出）、请求计划和固定字段结果，不记录原始 HTTP 响应/头或凭据。临时 SecretStore 为本地明文文件，Windows 权限仅尽力保护；正常/失败退出清理全部新 SecretRef 并断开数据库，准备失败删除本次新根；强制终止/断电仍可能残留，因此不在共享机器运行。此入口不部署产品、不升级用户库，也不证明用户环境已配置。
 
+正文摘要与人工 Web 决定使用独立 [`story-body-acceptance.ts`](../../scripts/acceptance/story-body-acceptance.ts)：先运行 `bun run scripts/acceptance/story-body-acceptance.ts --plan` 披露合成来源全文、精确版本/块、实际提示词及同一模型/端点/预算。**实现与离线通过不构成真实调用授权**；须另获本次完整计划、费用与留存许可后，在干净已提交工作区的本地真实终端无参数运行。确认后、读凭据前本地重建 API。入队走真实 HTTP，生成复用现有 Worker Host/@2/SDK，但 Host 在入口进程中手动驱动，不是独立 Worker 进程验收。保留的请求计划含代码与 schema 提交号。
+
+该入口不自动接受或拒绝：生成后核对 pending 时正式数据不变并立即删凭据，停止驱动 Host，再构建和启动仅 loopback 的生产 Web。维护者检查正文、输入版本和候选证据，手动决定并刷新，再在终端输入 `FINISH`；入口仅从 API 核对接受的正式标题/摘要/关键事实与新 Revision，或拒绝后的正式行不变。未决定退出保留 pending 并返回非通过；异常/取消关闭 API/Web、删凭据、断开库，不自动重试。生成 60s 不包含本地构建与清理，Provider 留存/费用未知及强杀残留风险同上；正文是合成 seed，不是真实来源 ingest 验收。
+
+离线回归为 `bunx vitest run scripts/acceptance/story-body-runner.test.ts scripts/acceptance/story-body-acceptance.test.ts`。显式 `bun run scripts/acceptance/story-body-browser.offline.ts` 使用真实 API/生产 Web 和合成 SDK 响应自动点击决定（须先 `bun run build:api`），不调用 Provider、不读真实凭据；它仅证明产品接线，不是真人/真实模型验收。固定字段报告记录正文引用数与人工决定后的持久化核验，不据此自动判断摘要质量或关闭 Task。
+
 ## CI 分层
 
 `.github/workflows/ci.yml` 将质量、Node E2E、浏览器 E2E 和 Windows smoke 分为独立 job。质量 job 依次执行 `bun run docs:check`、数据库检查、类型检查、单元测试、属性测试、Web lint 和构建；Node/browser/smoke job 分别报告自己的结果。当前 workflow 未按路径跳过 job，因此纯文档 PR 在远端仍运行完整默认 CI；本地最短路径只要求文档门禁、人工 diff 审查和 `git diff --check`。Docker 和真实来源没有加入默认 CI。

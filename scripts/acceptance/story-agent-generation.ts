@@ -16,6 +16,8 @@ export class GenerationDeadlineError extends Error {}
 export async function runStoryGeneration(options: {
     host: WorkflowHostComposition; control: StoryAgentWorkflowControl; runId: string;
     credential: string; transport: typeof fetch; maxDurationMs: number; onSend: () => void;
+    approved?: { storyId: string; messages: readonly { role: string; content: string }[] };
+    signal?: AbortSignal;
 }): Promise<void> {
     const controller = new AbortController();
     const deadline = performance.now() + options.maxDurationMs;
@@ -28,6 +30,12 @@ export async function runStoryGeneration(options: {
         if (performance.now() >= deadline) expire();
         controller.signal.throwIfAborted();
     };
+    const cancel = () => {
+        controller.abort(options.signal?.reason);
+        options.host.activityWorker.abortActive(controller.signal.reason);
+    };
+    options.signal?.addEventListener("abort", cancel, { once: true });
+    if (options.signal?.aborted) cancel();
     const timer = setTimeout(expire, options.maxDurationMs);
     try {
         // Keep the one-send guard installed until the active SDK call has unwound, even after cancellation.
@@ -39,14 +47,14 @@ export async function runStoryGeneration(options: {
                 await options.host.activityWorker.pollOnce();
                 check();
                 await abortable(controller.signal, () => options.host.completionDispatcher.pollOnce());
-                const state = await abortable(controller.signal, () => options.control.read(storySnapshot.storyId, options.runId));
+                const state = await abortable(controller.signal, () => options.control.read(options.approved?.storyId ?? storySnapshot.storyId, options.runId));
                 if (["completed", "failed", "cancelled"].includes(state.status)) break;
                 await delay(25, undefined, { signal: controller.signal });
             }
         }, async (input, init) => {
             check();
             const body = wireRequest.parse(JSON.parse(String(init?.body)));
-            if (JSON.stringify(body.messages) !== JSON.stringify(acceptancePlan.messages) || body.tools?.length ||
+            if (JSON.stringify(body.messages) !== JSON.stringify(options.approved?.messages ?? acceptancePlan.messages) || body.tools?.length ||
                 new Headers(init?.headers).get("authorization") !== `Bearer ${options.credential}`) throw new Error("Unapproved request payload");
             options.onSend();
             const signals = init?.signal ? [controller.signal, init.signal] : [controller.signal];
@@ -56,5 +64,5 @@ export async function runStoryGeneration(options: {
     } catch (error) {
         if (controller.signal.aborted) throw new GenerationDeadlineError("Generation deadline exceeded.");
         throw error;
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer); options.signal?.removeEventListener("abort", cancel); }
 }

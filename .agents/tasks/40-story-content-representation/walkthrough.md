@@ -168,76 +168,47 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 
 2026-10-27 Node recovery 的计划、RED/GREEN 与完整命令已归档至[独立诊断历史](walkthrough/history-node-recovery.md)。有效结论：派发后结果未知时 `outcome_unknown` 终止且不自动重发；仅旧测试预期需修正，完整 Node E2E 通过。completion 分类及旧 spec 表述仍待后续评估。
 
-### 2026-10-27：首屏 JS 预算切片计划
+### 历史分册：首屏 JS 预算验收
 
-基线 `master` / `83f7e64`，工作区干净。按维护者授权只处理原预算并复验浏览器，本地中文提交；不改门槛/测量窗口，不操作用户数据、goal、分支或远端。Windows / Node v24.14.0 / Bun 1.4.2，以同一隔离浏览器栈重复采样。现有门禁两次均为 401954 > 335974 bytes；先追静态依赖，再以单一假设做最小修复，保持阅读/编辑能力和边界校验。完成后跑聚焦重复采样、完整浏览器、相关回归/全量测试/类型及文档门禁；真实来源/Agent 不在本步。
+`8353a50` 的诊断、失败/通过与完整命令见[封口原文](walkthrough/history-js-budget-acceptance.md)。有效结论：浏览时不载入拖拽编辑依赖，transport 显式声明既有 Zod 避免双份校验库；首屏 313.1 KB 通过原 335974 bytes 预算，未改测量窗口或阈值。完整浏览器当时 65 通过/2 显式降级跳过，不能替代后续当前验证。
 
-依赖图发现两份 Zod 4.4.3：contracts/Web 解析到 Bun 管理的安装，transport 的 `client-configured-models.ts:11` 却因未声明直接依赖而借用根安装。下一小步在 transport 声明已有 Zod 依赖并由包管理器更新锁定关系，验证消除重复；不加构建 alias，不删输入/响应校验。
+### 历史分册：显式阅读降级与候选决定
 
-### 首屏预算：诊断与聚焦验证
+`c3441e4` 的计划、完整命令及门禁见[封口原文](walkthrough/history-reading-decision-combination.md)。有效结论：显式降级播种的生产栈组合 5/5 通过，涵盖 1024/1440 阅读/媒体降级及候选决定/失效；合成模型，不代表真实 Provider 理解。逐次外呼授权、真实来源/正文/关系/质量组合及 completion 分类/旧 spec 仍待独立补齐，Task40 active。
 
-- RED：原预算测试两次 401954 > 335974 bytes。Board 浏览入口静态导入仅编辑用的拖拽库；模块级 `next/dynamic` 后两次 385227，仍失败。
-- contracts 的 `sideEffects: false` 实验两次 386549，无收益，已撤回。一轮构建撞上声明移动中间态，报 `Cannot find name 'BoardDndProvider'` / `Cannot find name 'BoardBlockList'`；稳定源重跑排除，不算验收通过。
-- `bun run --cwd apps/web next experimental-analyze --output` exit 0。诊断数据中两个 Zod 4.4.3 并存：contracts → `.bun/zod@4.4.3`，transport → 根实体安装。transport 直接 import 却漏声明依赖；补依赖，Bun 锁定关系增一行，无版本升级、alias 或校验删减。
-- `bun install --ignore-scripts` exit 0，但混合布局未重连；`bun install --linker isolated --ignore-scripts --frozen-lockfile` exit 0 后三方解析同一安装。后者是本次复验前置，不把编辑清单当既有安装已修复；未改安装源。
-- GREEN：最终源两次 313.1 KB / 15 脚本，可交互 207/212 ms、路由切换 171/100 ms。阈值、`load` 窗口及测试未改；仅编辑时加载拖拽，完整浏览器复验指针排序。
+### 2026-10-29：正文摘要与 Web 人工决定入口（仅离线实施）
+
+基线 `master/c3441e4` 干净；维护者确认方案 A，本轮只实现与离线验证并本地提交，真实外呼仍未授权。唯一写入者使用当前工作区；不建 goal/branch/worktree，不操作用户数据或远端。工具不能指定 `jijiapi/gpt-6-luna` 子代理路由，本轮不派代理。
+
+计划：新增独立入口/固定全文计划、合成种子和会话编排，复用旧入口的隔离 schema、凭据与单次传输保护，不改变 summary-only 入口或产品合同。先以离线测试观察缺失行为失败，再补真实 API 入队→现有 Worker durable Host/@2/SDK→pending；Host 在入口进程中执行（非完整 Node Worker 进程验收）。来源使用固定 ID/时间与现有 Normalizer，ContentQuery 实读必须与事先公开全文逐字相同；模型配置 512 限额且 wire 层再次检查，60s 只计生成。成功生成后立即清理凭据、停止执行 Host，仅保留隔离 API/生产 Web 供维护者手动查看、接受和刷新，脚本不替人决定。
+
+先验证 `--plan` 无库/凭据/联网；正文不能由旧摘要推知、精确版本/块证据、pending 正式不变、单次 POST/重定向与失败截止、人工决定前不自动落库、退出清理。离线合成响应与自动化决定只证明入口安全/接线，不冒称真人或真实模型验收。门禁：聚焦/相关回归、全量测试/类型、隔离浏览器、文档链接/Markdown/diff/大小；失败与未运行项按实际追加。保留固定字段报告和隔离库模型输出；费用/Provider 留存未知，强杀可能残留本地明文凭据，运行须另获逐次授权并在已提交干净终端输入。
+
+### 正文入口：实施结果与验证边界
+
+- RED：`Body acceptance is not implemented`。随后修正旧 seed 字段（`Source definition is not available: undefined`）、messages 计划不一致及预取消接线。拒绝测试的 `expected 201 to be 200` 按既有 HTTP 合同改为 201；最终重跑聚焦/全量，未改产品合同。
+- 按上节独立入口方案实现；`--plan` 无凭据/建库/联网。真实模式须干净提交、本地 TTY 和 SHA 确认，重建 API 后无回显读 key；单 POST、无重定向/重试。复用层只增可选批准 messages/Story 与取消信号，旧入口默认和回归保留。
+- 真实 API 入队，现有 Host/@2/SDK 在入口进程执行（不是独立 Worker 验收）；ContentQuery 与计划逐字比对。pending 正式行不变，生成后删 SecretRef、停 Host、启 loopback 生产 Web。真人刷新/决定后 `FINISH` 核对 API；接受核对 Revision/标题/摘要/事实，拒绝核对原行不变，未决定不通过。失败/取消清理凭据/进程/连接，不自动重跑；固定报告/计划/隔离库保留，强杀风险同上。
+- 离线模型产出旧摘要没有的 18 席/日期及块引用；生产 Web 实验核对正文/输入版本/证据、pending 不变、接受/刷新/持久化，无 page error/外部请求。拒绝、失败、非法输出、截止/取消均核对清理与发送次数；不等于真实理解或真人决定。
+
+以下 PowerShell 命令最终均 exit 0；各命令失败即停。同一 API 构建供聚焦/全量使用；Web 实验每次按动态 API 地址构建，不启动独立 Worker，不改浏览器预算。
 
 ```powershell
 $env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'
-bun run build
-bunx playwright test --config playwright.config.ts e2e/browser/layout-and-budget.spec.ts --grep '首屏可交互与路由切换' --repeat-each=2
-```
-
-上面同一命令用于基线 RED、各单变量实验与最终 GREEN；构建失败即停止，不把旧构建当新结果。
-
-### 首屏预算：最终门禁与边界
-
-以下命令最终均 exit 0（PowerShell 各步失败即停止）；同上 `BUN_BINARY`：
-
-```powershell
-bun run test:browser
-bunx vitest run packages/transport-http/src/client-configured-models.test.ts packages/transport-http/src/client-board.test.ts apps/web/src/components/cosmos/board-drag.test.ts
+bun run build:api
+bunx vitest run scripts/acceptance/story-agent-runner.test.ts scripts/acceptance/story-body-runner.test.ts scripts/acceptance/story-body-acceptance.test.ts
 bun run test
 bun run typecheck
-bun run docs:check
-bun .agent/tmp/task40-archive-check.ts
-bun .agent/tmp/task40-markdown-check.ts
-$env:PYTHONUTF8='1'
-python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new
-git diff --check
+bunx tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --skipLibCheck --esModuleInterop --verbatimModuleSyntax scripts/acceptance/story-body-acceptance.ts scripts/acceptance/story-body-runner.test.ts scripts/acceptance/story-body-browser.offline.ts scripts/acceptance/story-body-acceptance.test.ts
+bun run scripts/acceptance/story-body-acceptance.ts --plan
+bun run scripts/acceptance/story-body-browser.offline.ts
 ```
 
-- 完整浏览器：65 通过/2 跳过/0 失败，4.2m；首屏 313.1 KB、242 ms，切页 231 ms，原预算通过。真实指针排序及 Story 生成/版本用例通过。跳过为未开 `COSMOS_E2E_READING_DEGRADATION=1` 的 1024/1440 阅读降级两例，不能计入通过。
-- 相关回归 3 文件/19 项；全量 206 文件/1167 项（211.17s）；全仓类型通过。文档链接/Markdown 初次通过；大小门禁因本文 29.99 KB / 约 10.0k token 失败，仅归档已完成 recovery 过程。原文与 HEAD 对比通过（只调相对链接层级），有效结论保留；最终链接 1209 文件零失败、结构六文件通过、diff exit 0、大小 PASS（400 文件/5 项既存 warning），主文档及新分册均在健康区；未改阈值/基线。
-- 五轴自审：合同无改；用户事实/持久化未动；外部输入校验保留；编辑依赖实测可用；预算窗口与阈值未改。无 Critical/Important 自审发现；工具不能指定 `jijiapi/gpt-6-luna`，未派子 Agent，非独立 review。
-- 未运行：本步 Node E2E、显式降级播种、组件实验室、真实来源/Provider/Agent 复验及部署；真实 RSS/摘要历史不升级为新证据。未操作用户数据或历史 migration。Task40 active；下一步核对批准清单与真实验收授权，另评估 completion 分类和旧 spec，不宣称整体关闭。
-
-### 2026-10-27：剩余清单复核与隔离组合计划
-
-基线 `master` / `8353a50`，工作区干净。复核目标设计 §4.1 十二点和本 Task 阶段 3–8：升级/recovery/JS 预算已有后续证据，剩余阅读降级显式复验、真实来源和 Agent 正文/关系/质量/Web 组合；completion 分类及旧 spec 待独立评估。
-
-本轮授权仅覆盖有界证据与本地提交，不含新外呼。真实来源需显式来源/联网前置；真实 Agent 须逐次批准模型/端点、全文、预算费用、留存，并由维护者终端输入临时凭据。旧 RSS/summary-only 授权不可复用。不外呼，不操作用户数据、goal/branch/worktree/部署。工具无法固定 `jijiapi/gpt-6-luna`，不派代理或换模型。
-
-选定 `COSMOS_E2E_READING_DEGRADATION=1`：新隔离栈组合阅读降级（1024/1440）、媒体降级及候选接受/拒绝/证据失效。真实 API/Worker/生产 Web、本地来源、合成模型，不代表真实模型理解。先构建；失败保留诊断不重跑抹除；无缺口不改业务/测试。只更新当前文档、运行门禁并提交。
-
-### 隔离组合结果与剩余边界
-
-以下 PowerShell 命令 exit 0；构建失败即停止，Playwright 无自动重试。本轮仅文档落盘，无生产代码、测试或 schema 修改，不制造 RED 或虚报修复。
-
-```powershell
-$env:BUN_BINARY='C:\Program Files\nodejs\node_modules\bun\bin\bun.exe'
-$env:COSMOS_E2E_READING_DEGRADATION='1'
-bun run build
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-bunx playwright test --config playwright.config.ts e2e/browser/story-reading-degradation.spec.ts e2e/browser/story-media-degradation.spec.ts e2e/browser/story-agent-generation.spec.ts
-```
-
-- 构建 API/Worker/共享包与生产 Web 通过；隔离 Web Stack 再按其动态 API 地址构建通过。组合 **5 通过/0 跳过/0 失败，37.5s**：阅读降级 1024/1440 各一项，媒体降级同宽度各一项，候选生成/人工决定一项。仅输出颜色环境 warning，无测试失败。
-- 首开/刷新：旧 HTML 无脚本/跟踪图；坏/失败表示不偷换正文；缺 Asset 保序及安全外链；音视频仅元数据，图片被拦/空正文诚实提示。候选 pending 不改 Story，接受写入、旧正文版本候选禁接受/可拒绝、刷新保持决定。合成 SSE 不证明真实模型理解。
-- 清单 #4/#10/#11/#12 的上述组合有本轮证据；#8 真实模型分层读取及其它真实来源/任务/Web 组合仍缺。历史两项跳过保留，不拼成一次 67 项全绿。
-- 五轴自审：正确性查 API/刷新/不变；简单性复用测试；架构走生产栈；安全隔离/本地/合成；性能无代码/预算变化。非独立审查。未运行完整浏览器、全量单元/独立类型、Node E2E、组件实验室、property、真实来源/Agent、用户库升级/部署；旧证据不冒称本轮。
-- Task40 active；下一步先准备“带来源正文的摘要→人工决定”真实请求计划，披露全文/模型/端点/预算费用/留存清理风险后逐次申请授权；当前 summary-only 入口不支持该组合，不直接执行或复用旧凭据。关系/质量、completion 分类和旧 spec 后续独立评估。
-- 文档预检：约 9.2k token 失败，升级过程[原文归档](walkthrough/history-old-schema-upgrade.md)且保留有效结论；对基线校验通过，仅调链接深度。两次 diff 因 EOF 空行 exit 2，修正后 exit 0；大小仍约 9.0k 失败，再精简本轮重复文字。未改阈值/基线。最终以下命令均 exit 0：链接 1210 文件零失败，归档原文一致，Markdown 七文件通过，diff 通过，大小 PASS（401 文件、5 项既存 warning）。
+- 聚焦 **3 文件/16 项，55.85s**；全量 **208 文件/1176 项，188.84s**。全仓类型与额外覆盖验收脚本的严格类型检查通过；API/隔离生产 Web 构建通过。`--plan` 及独立浏览器实验 exit 0，凭据为测试专用假值，无真实 Provider 请求。固定计划不是本轮真实调用授权。
+- 五轴自审：正确性（真实 API/正式不变/决定持久化）；简单性（复用原隔离与单次传输）；架构（DTO/HTTP/@2，不改产品）；安全（正文不可信/固定请求/凭据清理）；性能（无产品 bundle/预算变化，构建不计生成截止）。未发现 Critical/Important；非独立 review，工具不能固定指定路由，未派子 Agent。
+- 归档已完成预算过程至[历史分册](walkthrough/history-js-budget-acceptance.md)，只移历史，当前结论/有效决定仍在主文档；归档与 `c3441e4` 原文对比，未改阈值或治理基线。文档门禁结果在下面追加。
+- **未运行**：本轮完整默认浏览器、Node E2E、组件实验室、property、lint、真实来源/Provider/真人决定、用户库迁移与部署。不把历史 RSS10/summary-only、先前 Node/浏览器绿灯当本轮。Task40 仍 active；下一步先审阅已提交入口的 `--plan`，逐次批准全文、模型/端点、预算、费用与留存，再由维护者真实终端执行一次；关系/质量与真实来源组合、completion 分类及旧 spec 仍未收口。
+- 文档初检链接 1221 文件、原文/结构通过；diff 的 EOF 空行 exit 2 已修正。大小两次失败（约 9.6k/9.3k token），精简重复文字并将已完成显式组合原文移至[历史册](walkthrough/history-reading-decision-combination.md)，保留有效结论、校验与基线一致；未改阈值/基线。最终门禁命令：
 
 ```powershell
 bun run docs:check
@@ -247,3 +218,5 @@ git diff --check
 $env:PYTHONUTF8='1'
 python scripts/size-governance.py --check --cat docs --baseline docs/doc-governance/docs-baseline.json --fail-on-new
 ```
+
+最终上述门禁均 exit 0：链接 1222 文件零失败，三段历史原文校验一致，Markdown 十文件通过，diff 通过；大小 PASS（403 文件、5 项基线 warning，含测试规范既存增长）。主文档及新增分册在健康区，未放宽门槛。

@@ -43,4 +43,4 @@
 
 隔离前置旧库升级已覆盖无回填、旧事实/指针保持；Node recovery 按派发保护合同修正且完整 Node E2E 通过；首屏 JS 已在原预算下修复，完整浏览器无失败。此前另显式开启阅读降级，与媒体降级及候选人工决定组成隔离验收，均实际执行通过；不是把历史跳过项计入通过，也不是一次完整套件全绿。完整命令、结果及边界只记 [walkthrough](walkthrough.md)。Task40 仍不满足关闭条件：真实来源仍仅历史隔离 RSS 10 条；真实 Agent 仅无来源/工具的 summary-only 终端路径，不覆盖来源正文、关系/质量任务或 Web 决定。
 
-下一步对[正文摘要独立入口](../../../scripts/acceptance/story-body-acceptance.ts)先运行 `--plan`，核对完整文本、`jijiapi/gpt-6-luna`、端点、512 token/60s/单次 POST、费用与留存风险，再逐次申请真实验收授权。入口已实现，离线安全/真实 API 接线与合成响应的生产 Web 自动化决定回归已有本轮证据；未真实外呼，不复用历史授权或凭据。Host 在入口进程中驱动，不冒称独立 Worker 进程验收；关系/质量任务、通用 completion 分类与旧 spec 仍待独立评估。Task40 保持 active，不操作用户库或部署。
+下一步对[正文摘要独立入口](../../../scripts/acceptance/story-body-acceptance.ts)重新运行 `--plan`，审阅变更后的证据对象说明、全文、`jijiapi/gpt-6-luna`、端点、512 token/60s/单次 POST 与费用/留存风险，再逐次申请真实验收授权。维护者的一次真实正文调用在保存阶段被证据格式合同拒绝，未生成候选、未进入 Web 决定，不能计为通过；本轮仅补提示格式与验收固定失败分类，严格校验不放宽、不外呼。离线证据及完整命令只记 walkthrough。Host 在入口进程驱动，不冒称独立 Worker 验收；关系/质量任务、通用 completion 分类与旧 spec 仍待评估。Task40 保持 active，不操作用户库或部署。

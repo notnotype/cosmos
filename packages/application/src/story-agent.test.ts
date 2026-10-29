@@ -74,6 +74,31 @@ describe("StoryAgent candidate boundary", () => {
         expect(f.readContentSource).toHaveBeenCalledWith(binding);
         expect(f.invoke.mock.calls).toHaveLength(1);
     });
+    it.each<StoryAgentProposal>([
+        summary,
+        { task: "story.extract-relations", relations: [] },
+        { task: "story.review-content-quality", findings: [] },
+    ])("discloses structured evidence objects for $task instead of an unexplained empty array", async (proposal) => {
+        const f = fixture(proposal);
+        await f.agent.propose({ storyId: "story-1", task: proposal.task, sources: [binding] }, host, context);
+        const prompt = f.invoke.mock.calls[0]![0].messages[0]!.content;
+        const shape = JSON.parse(prompt.split("Expected shape: ")[1]!);
+        const items = shape.keyFacts ?? shape.relations ?? shape.findings;
+        expect(items[0].evidence).toEqual([{ entryId: "string", entryRevisionId: "string", representationVersion: 1, blockId: "string" }]);
+        expect(prompt).toContain("blockId is optional");
+        expect(prompt).toContain("positive integer");
+        expect(prompt).toContain("If no evidence is supplied, use an empty evidence array");
+        expect(prompt).toContain("never strings");
+    });
+    it("rejects string evidence without saving a candidate", async () => {
+        const f = fixture(summary);
+        f.invoke.mockResolvedValueOnce({ content: JSON.stringify({ ...summary, keyFacts: [{ text: "PRIVATE-FACT", evidence: ["PRIVATE-REFERENCE"] }] }),
+            toolCalls: [], usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, provider: "fake", model: "fixture", finishReason: "stop", metadata: {} });
+        const save = vi.fn<StoryAgentCandidateRepository["save"]>();
+        const service = new StoryAgentService(f.agent, new StoryAgentCandidates({ save, decide: vi.fn(), list: async () => [] }), host);
+        await expect(service.propose({ storyId: "story-1", task: "story.summarize", sources: [binding] }, context)).rejects.toThrow();
+        expect(save).not.toHaveBeenCalled();
+    });
     it("uses summary only by default without reading source content", async () => {
         const f = fixture({ ...summary, keyFacts: [] });
         const candidate = await f.agent.propose({ storyId: "story-1", task: "story.summarize" },

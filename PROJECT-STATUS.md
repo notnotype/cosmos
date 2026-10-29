@@ -39,7 +39,7 @@ Source 身份/revision 持久化合同仍以「`sourceDefinitionRef + operationI
 
 ## 当前下一步
 
-**Task [40](.agents/tasks/40-story-content-representation/README.md) 仍在验收中**：隔离旧库升级、Node recovery、原首屏 JS 预算及显式阅读/媒体降级与候选决定已有通过证据。正文摘要→Web 人工决定的独立安全入口已实现并通过离线接线验证，须先披露 `--plan` 再逐次申请真实调用授权；Host 在入口进程中执行，不能替代独立 Worker/真实模型验收。RSS 10 条和单次 summary-only 仍为历史证据，不覆盖真实正文/关系/质量组合。Task40 不关闭；命令和边界见 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。未操作用户库、部署或复验真实 Provider/来源。
+**Task [40](.agents/tasks/40-story-content-representation/README.md) 仍在验收中**：旧库升级、Node recovery、原 JS 预算及显式降级/候选决定已有隔离证据。正文摘要/Web 入口已离线接通，但一次真实正文调用因证据格式被拒，未进入 Web，不计通过。本轮离线补提示与诊断，未外呼或操作用户库；新全文须重审并逐次授权。Host 在入口进程，不替代独立 Worker 验收。历史 RSS10/summary-only 不覆盖真实正文/关系/质量，Task40 不关闭；详见 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。
 
 **Task 38（Agent Invocation 基础接入 v1）已完成**（2026-10-08）：新增版本化 `agent.invoke@1` Workflow Action、JSON-safe Agent Invocation 合同、Invocation Port 与确定性 Fake Adapter；复用现有 Activity Worker 的 Run/Job/Lease、取消、重试和 completion 语义。全量单元测试 139 个文件/798 个测试、全仓 typecheck、共享包构建和 docs:check 均通过。真实 `pi-ai` Adapter 已由 Task 39 承接交付；`neuro-agent-harness`、`nb-memory`、工具执行、Artifact、Workspace、Knowledge/Research 仍未实现，另开后续 Task。
 

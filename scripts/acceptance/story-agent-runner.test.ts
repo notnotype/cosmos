@@ -4,6 +4,18 @@ import { prepareStoryIsolation } from "./story-agent-isolation.js";
 import { access, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { acceptancePlan, createOfflineStoryTransport, runStoryAcceptance } from "./story-agent-runner.js";
+import { ContentQuery } from "@cosmos/application";
+import { prepareStoryAgentRequest } from "../../packages/application/src/story-agent-preparation.js";
+import { storySnapshot } from "./story-agent-plan.js";
+
+it("discloses the exact no-source prompt built by the current preparation owner", async () => {
+    const prepared = await prepareStoryAgentRequest({ readStory: async () => storySnapshot },
+        new ContentQuery({ readContentSource: async () => null }),
+        { storyId: storySnapshot.storyId, task: "story.summarize" },
+        { connectionId: "synthetic-connection", authority: { allowedProfiles: ["summary-only"] },
+            budget: { maxDurationMs: 60_000, maxOutputTokens: 512, maxToolCalls: 0 } });
+    expect(acceptancePlan.messages).toEqual(prepared.input.messages);
+});
 
 it.each(["delayed", "never"] as const)("aborts a %s transport at the shorter generation deadline and still removes its secret", async (outcome) => {
     const offline = createOfflineStoryTransport("valid");

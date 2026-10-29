@@ -13,6 +13,7 @@ import { runStoryGeneration, GenerationDeadlineError } from "./story-agent-gener
 import { bodyAcceptancePlan, bodyBindings, bodyStory } from "./story-body-plan.js";
 import { seedBodyStory } from "./story-body-seed.js";
 import { startBodyApi } from "./story-body-api.js";
+import { classifyBodyGenerationFailure } from "./story-body-diagnostics.js";
 
 export async function runBodyStoryAcceptance(options: { credential: string; transport: typeof fetch; maxDurationMs?: number; signal?: AbortSignal }) {
     const maxDurationMs = options.maxDurationMs ?? 60_000;
@@ -20,7 +21,7 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
     assertUsableCredential(options.credential);
     const plan = await bodyAcceptancePlan();
     const { root, repository, secretRefs } = await prepareStoryIsolation();
-    const report = { status: "failed", stage: "configuration", transportSends: 0, pendingCount: 0,
+    const report = { status: "failed", stage: "configuration", failureCode: "none", transportSends: 0, pendingCount: 0,
         formalUnchanged: false, bodyEvidenceRefs: 0, manualPersistenceVerified: false, secretCleanup: "pending", decision: "none", apiQueue: false, disconnect: "pending" };
     let api: Awaited<ReturnType<typeof startBodyApi>> | undefined;
     const writeReport = () => writeFile(join(root, "result.json"), JSON.stringify(report, null, 2));
@@ -80,7 +81,10 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
         if (proposal?.task === "story.summarize") report.bodyEvidenceRefs = proposal.keyFacts.flatMap((fact) => fact.evidence).filter((ref) =>
             ref.entryRevisionId === bodyBindings[0]!.entryRevisionId && ref.representationVersion === 1 && ref.blockId === "block-1").length;
         const state = await control.read(bodyStory.storyId, queued.runId);
-        if (state.status !== "completed" || report.pendingCount !== 1 || !report.formalUnchanged || report.transportSends !== 1) throw new Error("Generation acceptance failed");
+        if (state.status !== "completed" || report.pendingCount !== 1 || !report.formalUnchanged || report.transportSends !== 1) {
+            report.failureCode = await classifyBodyGenerationFailure(repository.prisma, queued.runId);
+            throw new Error("Generation acceptance failed");
+        }
         await cleanSecrets();
         report.status = "awaiting_manual_decision";
         report.stage = "web_review";
@@ -105,6 +109,8 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
         return { root, report, api, close, recordDecision, storyId: bodyStory.storyId };
     } catch (error) {
         report.stage = options.signal?.aborted ? "generation_cancelled" : error instanceof GenerationDeadlineError ? "generation_timeout" : report.stage;
+        if (report.failureCode === "none") report.failureCode = options.signal?.aborted ? "generation_cancelled"
+            : error instanceof GenerationDeadlineError ? "generation_timeout" : "acceptance_failed";
         await close();
         return { root, report, api: undefined, close: async () => undefined, recordDecision: async () => { throw new Error("Failed session"); }, storyId: bodyStory.storyId };
     }

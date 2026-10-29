@@ -65,6 +65,26 @@ it("bounds a stalled provider and cleans up without retry", async () => {
     expect(result.report).toMatchObject({ status: "failed", stage: "generation_timeout", transportSends: 1, secretCleanup: "completed", disconnect: "completed" });
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
 }, 30_000);
+it.each(["proposal_schema_invalid", "proposal_json_invalid", "completion_incomplete", "candidate_save_failed"] as const)("classifies %s without retaining model text in the report", async (expected) => {
+    let sends = 0;
+    const text = expected === "proposal_json_invalid" ? "PRIVATE-NOT-JSON" : JSON.stringify({ task: "story.summarize", title: "PRIVATE-TITLE", summary: "PRIVATE-SUMMARY",
+        keyFacts: [{ text: "PRIVATE-FACT", evidence: expected === "proposal_schema_invalid" ? ["PRIVATE-REFERENCE"]
+            : [{ entryId: "foreign-entry", entryRevisionId: "foreign-revision", representationVersion: 1 }] }] });
+    const result = await runBodyStoryAcceptance({ credential: "synthetic-task40-key", transport: async () => {
+        sends++;
+        const event = (delta: object, finish_reason: string | null) => ({ id: "synthetic", object: "chat.completion.chunk", created: 1,
+            model: "gpt-6-luna", choices: [{ index: 0, delta, finish_reason }] });
+        return new Response([event({ role: "assistant", content: text }, null), event({}, expected === "completion_incomplete" ? "length" : "stop")]
+            .map(value => `data: ${JSON.stringify(value)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+    } });
+    roots.push(result.root);
+    expect(result.report).toMatchObject({ status: "failed", failureCode: expected, pendingCount: 0, formalUnchanged: true,
+        transportSends: 1, secretCleanup: "completed", disconnect: "completed", decision: "none" });
+    expect(sends).toBe(1);
+    expect(await readFile(join(result.root, "result.json"), "utf8")).not.toMatch(/PRIVATE|synthetic-task40-key/);
+    expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
+}, 30_000);
+
 it.each(["network", "invalid"] as const)("fails closed and cleans credentials after %s without retry or formal writes", async (outcome) => {
     const requests: unknown[] = [];
     const result = await runBodyStoryAcceptance({ credential: "synthetic-task40-key", transport: createOfflineStoryTransport(outcome, requests) });

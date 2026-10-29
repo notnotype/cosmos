@@ -129,7 +129,7 @@ COSMOS_ALLOW_REAL_NETWORK=true COSMOS_OPENCLI_PATH=<path> bun run test:real:bili
 
 该入口不自动接受或拒绝：生成后核对 pending 时正式数据不变并立即删凭据，停止驱动 Host，再构建和启动仅 loopback 的生产 Web。维护者检查正文、输入版本和候选证据，手动决定并刷新，再在终端输入 `FINISH`；入口仅从 API 核对接受的正式标题/摘要/关键事实与新 Revision，或拒绝后的正式行不变。未决定退出保留 pending 并返回非通过；异常/取消关闭 API/Web、删凭据、断开库，不自动重试。生成 60s 不包含本地构建与清理，Provider 留存/费用未知及强杀残留风险同上；正文是合成 seed，不是真实来源 ingest 验收。
 
-离线回归为 `bunx vitest run scripts/acceptance/story-body-runner.test.ts scripts/acceptance/story-body-acceptance.test.ts`。显式 `bun run scripts/acceptance/story-body-browser.offline.ts` 使用真实 API/生产 Web 和合成 SDK 响应自动点击决定（须先 `bun run build:api`），不调用 Provider、不读真实凭据；它仅证明产品接线，不是真人/真实模型验收。固定字段报告记录正文引用数与人工决定后的持久化核验，不据此自动判断摘要质量或关闭 Task。
+离线回归为 `bunx vitest run scripts/acceptance/story-body-runner.test.ts scripts/acceptance/story-body-acceptance.test.ts`。显式 `bun run scripts/acceptance/story-body-browser.offline.ts` 使用真实 API/生产 Web 和合成 SDK 响应自动点击决定（须先 `bun run build:api`），不调用 Provider、不读真实凭据；它仅证明产品接线，不是真人/真实模型验收。固定字段报告记录正文引用数与人工决定后的持久化核验，不据此自动判断摘要质量或关闭 Task。正文入口的 `failureCode` 只做脱敏阶段分类：JSON 无法解析为 `proposal_json_invalid`、既有提案合同拒绝为 `proposal_schema_invalid`、未正常结束或带工具为 `completion_incomplete`；`candidate_save_failed` 仍不能区分证据范围拒绝与存储失败，其它故障保留固定回退码。报告不输出模型文本、原始异常或校验细节，严格校验与失败后禁止自动重跑不变。
 
 ## CI 分层
 

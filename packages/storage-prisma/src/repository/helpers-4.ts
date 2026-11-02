@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { jobKindSchema, sourceKindSchema, sourceConfigSchema, type ConnectionInstance, type FeedItem, type JobSnapshot, type IngestTriggerKind, type SourceMediaPolicy, type SourceSnapshot, type Annotation } from "@cosmos/contracts";
+import { jobKindSchema, sourceKindSchema, type ConnectionInstance, type FeedItem, type JobSnapshot, type IngestTriggerKind, type SourceSnapshot, type Annotation } from "@cosmos/contracts";
 import { deriveExternalKey, fingerprintEntryRevision, fingerprintStoryRevision, projectEntryToStory, temporalProjection, type FavoriteTargetType, type NormalizedIngestItem, type TargetType } from "@cosmos/domain";
 import { EntryNotFoundError, StoryNotFoundError, TopicNotFoundError, type HostActionExecutionFence, type PersistIngestItemResult, type ContentAssetBinding, type ContentDraft, type StagedIngestBlobs, stageIngestBlobs } from "@cosmos/application";
 import { type Prisma } from "@prisma/client";
 import { appendDomainEvent, assertWorkflowActionFence, parseJson } from "./repository-internals.js";
 import { PrismaCosmosRepositoryHelpers3 } from "./helpers-3.js";
 import { persistInitialContentRepresentation } from "./content-representation.js";
+import { mergeRunDiagnostics, projectSourceSnapshot, requireSourceManifest, type SourceRunDiagnostics } from "./source-projection.js";
 
 /** `PrismaClient` 与事务客户端都能满足的读模型：只读 Run／WorkflowRun。 */
 type RunDiagnosticsReader = Pick<Prisma.TransactionClient, "run" | "workflowRun">;
@@ -531,26 +532,12 @@ export class PrismaCosmosRepositoryHelpers4 extends PrismaCosmosRepositoryHelper
     protected async latestRunDiagnostics(
         db: RunDiagnosticsReader,
         where: { sourceInstanceId: string } | { planId: string },
-    ): Promise<{ at: Date; error: string | null } | null> {
+    ): Promise<SourceRunDiagnostics | null> {
         const [latestRun, latestWorkflowRun] = await Promise.all([
             db.run.findFirst({ where, orderBy: { createdAt: "desc" } }),
             db.workflowRun.findFirst({ where, orderBy: { createdAt: "desc" } }),
         ]);
-        const legacyProjection = latestRun
-            ? {
-                at: latestRun.finishedAt ?? latestRun.createdAt,
-                error: latestRun.errorMessage,
-            }
-            : null;
-        const workflowProjection = latestWorkflowRun
-            ? {
-                at: latestWorkflowRun.finishedAt ?? latestWorkflowRun.createdAt,
-                error: latestWorkflowRun.errorMessage,
-            }
-            : null;
-        return legacyProjection && workflowProjection
-            ? legacyProjection.at >= workflowProjection.at ? legacyProjection : workflowProjection
-            : legacyProjection ?? workflowProjection;
+        return mergeRunDiagnostics(latestRun, latestWorkflowRun);
     }
 
     protected async toSourceSnapshot(
@@ -558,10 +545,7 @@ export class PrismaCosmosRepositoryHelpers4 extends PrismaCosmosRepositoryHelper
         db: Prisma.TransactionClient = this.prisma,
     ): Promise<SourceSnapshot> {
         const latest = await this.latestRunDiagnostics(db, { sourceInstanceId: source.id });
-        const manifest = this.catalog.getSourceDefinitionByRef(source.sourceDefinitionRef);
-        if (!manifest || manifest.id !== source.kind || !manifest.operationIds.includes(source.operationId)) {
-            throw new Error(`Source definition mapping is invalid: ${source.sourceDefinitionRef}`);
-        }
+        const manifest = requireSourceManifest(this.catalog, source);
         // 计划自有字段（连接、调度、启用状态）一律从计划取（ADR-0023 决策 2）：
         // 来源侧的同名列在读取切换后不再被读，也不再被写。
         const plan = await db.collectionPlan.findUnique({
@@ -571,45 +555,7 @@ export class PrismaCosmosRepositoryHelpers4 extends PrismaCosmosRepositoryHelper
         if (!plan) {
             throw new Error(`Source has no collection plan: ${source.id}`);
         }
-        // 计划可以持有多种触发器（ADR-0025）：来源投影里的调度间隔只由 schedule 行派生。
-        const scheduleBinding = plan.triggerBindings.find((binding) => binding.kind === "schedule") ?? null;
-        const triggerConfig = scheduleBinding
-            ? JSON.parse(scheduleBinding.configJson) as { intervalMs?: number }
-            : null;
-        return {
-            id: source.id,
-            name: source.name,
-            sourceDefinitionRef: manifest.ref,
-            operationId: source.operationId,
-            connectorId: manifest.connectorId,
-            kind: manifest.id,
-            config: sourceConfigSchema.parse(JSON.parse(source.configJson)),
-            enabled: plan.enabled,
-            mediaPolicy: plan.mediaPolicyJson === null
-                ? null
-                : JSON.parse(plan.mediaPolicyJson) as SourceMediaPolicy,
-            revisionId: `${source.id}:${source.revision}`,
-            createdAt: source.createdAt.toISOString(),
-            updatedAt: source.updatedAt.toISOString(),
-            lastRunAt: latest?.at.toISOString() ?? null,
-            lastError: latest?.error ?? null,
-            planId: plan.id,
-            planRevisionId: `${plan.id}:${plan.revision}`,
-            connectionId: plan.connectionId,
-            /**
-             * 连接投影随执行快照一起冻住（Proposal connection-login-lifecycle-v1 决定 1）。
-             * 只取身份与非秘密配置：`status`/`lastError` 是活诊断，冻进 Run 的输入只会
-             * 让后来读它的人以为那就是当轮的连接状态。
-             */
-            connection: plan.connection
-                ? {
-                    id: plan.connection.id,
-                    connectorId: plan.connection.connectorId,
-                    configJson: plan.connection.configJson,
-                }
-                : null,
-            scheduleIntervalMs: typeof triggerConfig?.intervalMs === "number" ? triggerConfig.intervalMs : null,
-        };
+        return projectSourceSnapshot({ source, manifest, plan, latest });
     }
 
     protected toConnectionSnapshot(connection: Prisma.ConnectionInstanceGetPayload<{}>): ConnectionInstance {

@@ -6,7 +6,7 @@
 
 ## 最后更新
 
-2026-10-23（Task 39：Provider/model 配置的三个模型、仓储锚点与约束错误码翻译）。
+2026-11-02（来源读投影合并 legacy Run 与 WorkflowRun；来源列表为批量读，勘误登记入口建立）。
 
 ## 组件定位
 
@@ -37,12 +37,17 @@ API、`IngestionService` 和 legacy `IngestionWorker` 只调用 application port
 | [part-03](0001-prisma-repository/part-03-persistence.md) | 输入、输出、状态与持久化 | 12.2 KB |
 | [part-04](0001-prisma-repository/part-04-lifecycle.md) | 状态转换、副作用、错误与降级、依赖、配置 | 4.6 KB |
 | [part-05](0001-prisma-repository/part-05-acceptance.md) | 重建验收、实现与测试锚点 | 7.4 KB |
+| [ERRATA](0001-prisma-repository/ERRATA.md) | 已封口分册的勘误登记（追加型台账） | 1.4 KB |
 
 → 概念与定义、存储根与连接、Source/legacy Run/Step/Job、Observation/Entry/Revision/Asset/Story 已归档:[part-01-domain-model.md](0001-prisma-repository/part-01-domain-model.md)
 → Checkpoint、领域查询、事件 replay 已归档:[part-02-checkpoint-and-queries.md](0001-prisma-repository/part-02-checkpoint-and-queries.md)
 → 输入、输出、状态与持久化 已归档:[part-03-persistence.md](0001-prisma-repository/part-03-persistence.md)
 → 状态转换、副作用、错误与降级、依赖、配置 已归档:[part-04-lifecycle.md](0001-prisma-repository/part-04-lifecycle.md)
 → 重建验收、实现与测试锚点 已归档:[part-05-acceptance.md](0001-prisma-repository/part-05-acceptance.md)
+
+## 分册勘误登记
+
+分册封口后只读；对已封口分册的更正登记在独立台账 [`ERRATA.md`](0001-prisma-repository/ERRATA.md)，不改写分册正文。新增勘误追加到该台账末尾。
 
 ## 非目标/边界
 

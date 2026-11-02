@@ -46,6 +46,8 @@ Leader 的阶段判断不等于外部操作授权。commit、push、创建 PR、
 
 ## 文档
 
+- 代码实现子代理不得直接修改文档库，包括导航入口与规则；只提交带依据的修改建议，由主代理审核后另派专职文档代理修改。完整流程见[日常文档更新与代理协作](docs/standards/repository-workflow.md#日常文档更新与代理协作)。
+- 每项实现交付都须记录文档影响结论“需更新/无需更新”及理由；记录位置与更新触发条件见[同一流程](docs/standards/repository-workflow.md#日常文档更新与代理协作)。
 - `PROJECT-STATUS.md` 记录仓库现状、风险和未完成边界；`docs/README.md` 是文档入口。
 - `docs/requirements/` 保存需求，`docs/architecture/` 保存当前设计，`docs/adr/` 保存稳定决定，`docs/research/` 保存调研，`.agents/tasks/` 保存重大任务 walkthrough；当前 Phase 1 入口是 [`.agents/tasks/02-rss-ingestion/README.md`](.agents/tasks/02-rss-ingestion/README.md)。
 - 需求变更按固定顺序维护：原话追加到 `docs/requirements/0001-original-requirements.md`；存在产品歧义或长期取舍时先按 [`docs/proposals/README.md`](docs/proposals/README.md) 评审；接受后更新 PRD、架构或 ADR 并创建或复用 Task；代码与测试落地后更新 `docs/spec/`。

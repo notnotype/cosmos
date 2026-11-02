@@ -39,4 +39,6 @@
 
 ## 读取与变更顺序
 
-判断当前能力时，先读 [`spec/README.md`](spec/README.md) 和目标组件规格，再核对实现、行为测试与 [`testing/README.md`](testing/README.md)；需要设计背景时继续读取 [`architecture/README.md`](architecture/README.md) 和相关 ADR，最后按需读取对应 Task walkthrough。新需求先保留用户原话；存在歧义或长期取舍时进入 [`proposals/README.md`](proposals/README.md)，接受后更新 PRD、架构或 ADR 并创建或复用 Task；代码与测试落地后再更新当前 spec 和项目状态。代码代理发现文档偏差时，只提交带路径证据的修改建议，由 Leader 审核后另派文档代理修改。
+判断当前能力时，先读 [`spec/README.md`](spec/README.md) 和目标组件规格，再核对实现、行为测试与 [`testing/README.md`](testing/README.md)；需要设计背景时继续读取 [`architecture/README.md`](architecture/README.md) 和相关 ADR，最后按需读取对应 Task walkthrough。新需求先保留用户原话；存在歧义或长期取舍时进入 [`proposals/README.md`](proposals/README.md)，接受后更新 PRD、架构或 ADR 并创建或复用 Task；代码与测试落地后再更新当前 spec 和项目状态。
+
+每项实现交付须给出“需更新/无需更新”的文档影响结论及理由。代码实现子代理发现文档偏差时只提建议，主代理审核后另派专职文档代理修改；触发条件、记录位置和完整流程见[日常文档更新与代理协作](standards/repository-workflow.md#日常文档更新与代理协作)。

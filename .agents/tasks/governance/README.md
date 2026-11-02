@@ -32,7 +32,7 @@
 - [`G17-doc-splitting-batch3/`](G17-doc-splitting-batch3/):文档治理第三批——2026-10-26 实测仍留在基线红线区的 4 份 `docs/spec/` 文档(`interfaces/0005-web-client.md` 70.1 KB、`storage/0001-prisma-repository.md` 59.5 KB、`interfaces/0002-product-api-http.md` 58.6 KB、`contracts/0001-public-contracts.md` 53.8 KB),四份字节与 token 双超红线且相对基线登记值继续增长;`docs/requirements/0001-original-requirements.md` 按 §4.10 豁免,不在本批。**已完成收口**(2026-10-26;编号 G17 已由维护者确认):4 份主文档 **68.50 / 58.11 / 57.24 / 52.50 KB → 7.85 / 4.23 / 4.57 / 4.59 KB**,拆出 **19 个分册**(最大 `storage/0001-prisma-repository/part-02-checkpoint-and-queries.md` 23.19 KB/7.3k token,19 册全部 ≤30 KB 且 ≤9k token),四份行级守恒丢失 0 条、`docs:check` 1169 文件 0 失败,`docs-baseline.json` **12 → 8 条**。收口时同批修掉 `scripts/size-governance.py` 的 `.worktrees` 跳过缺陷(整目录被忽略时 git 只返回带尾斜杠的目录条目,原实现按文件路径精确比对永不命中,导致本地每次门禁报 5 条 CI 上不存在的幻影 FAIL);修后 `-c docs --check` **PASS(含 warning)**,仅剩 5 条基线内增长 warning。
 
 - [`G18-doc-splitting-batch4/`](G18-doc-splitting-batch4/)：P2 五条文档增长 warning 已消除，新增十三册，基线 8→3；Otirik 已于 2026-11-02 最终审核通过，G18 编号已确认，已提交 `d1141ba25f9d663154c919bddbce773beaeee810`。
-- [`G19-daily-document-governance/`](G19-daily-document-governance/)：P3 日常文档治理，正式范围已由 Otirik 批准：更新触发与代理协作规则、长期文档检查、已知证据修复及真实任务演练。P3-1 已于 2026-11-02 最终审核通过，G19 编号已确认，已获授权进行本地 Git 提交并附详细中文说明；提交结果以 Git 历史为准。P3-2/P3-3 尚未实施。不承接下述历史代码候选。
+- [`G19-daily-document-governance/`](G19-daily-document-governance/)：P3 日常文档治理，正式范围已由 Otirik 批准：更新触发与代理协作规则、长期文档检查、已知证据修复及真实任务演练。P3-1 已于 2026-11-02 最终审核通过，G19 编号已确认，已提交为 `58ca0ffe1f6db1e41087003fcff19450c15d4b5f`。P3-2 实现、独立范围/质量复审与本地验证完成，R1/R2 已关闭，Otirik 已最终验收通过，用户已授权在当前 worktree 本地提交；CI 代码大小仍有本轮未改动的存量违规，不代表全仓通过。P3-3 未开始。不承接下述历史代码候选。
 
 ## 待治理候选(编号未分配,待维护者裁决)
 

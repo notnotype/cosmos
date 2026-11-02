@@ -86,3 +86,70 @@ P3-1 三项可观察验收的实施与审查均已完成；当前状态更新为
 授权只覆盖本地 Git 提交，不扩展为 push、创建 PR、merge、发布、部署或清理 worktree。P3-2/P3-3 仍未实施，临时结构检查不作为长期工具交付；本轮不运行产品测试、类型检查、构建、浏览器、真实来源或 Agent 调用，因为没有实现或产品行为改动。提交身份及完成结果以 Git 历史和本轮最终交付为准，不在提交内容中预填尚未产生的哈希。
 
 本轮提交前实际验证（均在本 worktree）：`bun run docs:check` exit 0，1242 文件、failures=[]；`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` exit 0，422 文档、3 基线、1 豁免，PASS，无 warning；`python .agent/tmp/p3-1-review.py` exit 0，7 份 Markdown、17 个标题片段链接、failures=[]，包含新增文件的空白和 EOF 检查；`git diff --check` exit 0，无输出。标题链接数从上轮 18 变为 17，是本轮 README 将具体派发标题链接改为 walkthrough 入口后的实际统计；未新增长期检查能力。追加本结果后仍须复核结构与完整暂存区，任何失败先修正再提交。
+
+## 2026-11-02：P3-2 实施计划与派发
+
+### 生命周期、目标和验收
+
+用户明确要求开始实施 P3-2。本轮进入长期文档检查的增量实现、测试和独立审查；P3-1 已提交为 `58ca0ffe1f6db1e41087003fcff19450c15d4b5f`，该提交为本轮 base SHA。沿用 `D:/Otirik/Workstation/cosmos/.worktrees/docs-governance`、分支 `docs/no-ref-document-governance`，派发前工作树 clean，主仓只有原有 `.gitignore` 改动，不触碰。P3-3 证据修复和真实任务演练不在本轮范围；不自动暂存、提交、push、创建 PR、merge、部署或清理。
+
+最多三项验收沿用任务 README：标题锚点、受治理分册元数据及新文件空白可重复检查；针对性错误样例实际失败且修复后通过、当前文档通过；工作区、暂存区、CI 范围及缺口明确，静态检查不证明架构真实。
+
+### 已核实依据及检查设计
+
+现有 `scripts/check-documentation.ts` 只校相对路径存在，跳过纯片段和标题锚点；默认 `git ls-files` 枚举后读取工作区，不能证明暂存内容。现有 Vitest 测试位于 `scripts/check-documentation.test.ts`，CI 独立 docs job 不安装依赖，故保持 Bun/Node 原生能力，不引入运行依赖。分册提案要求 range、sealed_at、tags、token 估算及 parent；现有文件使用 `tokens_est`，parent 同时有仓库根相对及文档相对写法，必须兼容，不改封口材料来迎合工具。
+
+原有路径/治理入口检查保持全量；新增检查采用明确的变更集合，标题检查覆盖变更来源及指向变更 Markdown 目标的入链，防止改标题后遗漏反向引用。工作区对 HEAD 比较并包含未跟踪新增文档；暂存区读取 Git index 快照，不混用工作区目标或元数据；CI 使用事件基线及对应快照，缺失比较依据不得静默跳过。报告应显示模式、比较范围、已检查数及未覆盖项；无变更时不冒充全仓标题审计。标题规则覆盖中文、重复与后缀碰撞、ATX/Setext、围栏伪标题、纯片段、编码及显式 HTML 锚点；源码 `#L` 行号链接只核路径，真实性由人工审核。
+
+分册以现存同名主文档/分册目录关系及显式分册元数据识别；新增受治理分册缺少头部即失败，普通 Markdown 不强加元数据。校验必填字段、真实日期、正数 token、parent 在当前快照存在及指回主文；兼容 `tokens`/`tokens_est` 和现有 parent 两种路径。新文件空白针对比较集合中的新增 Markdown，覆盖未跟踪/新增暂存/CI 新文件的尾随空白、缺 EOF 换行及多余 EOF 空行，允许正文有意的双空格硬换行。既有历史不强迁，不新增基线豁免掩盖错误；全量索引生成、历史源码行号与架构真实性不在本轮交付。
+
+### 写入登记、步骤和审核
+
+仓库 `D:/Otirik/Workstation/cosmos`；branch/worktree/base 如上。主代理唯一写本任务 README、walkthrough 及治理索引，负责建议接受/退回/不采纳、状态和验证；隔离测试数据仅在 worktree 的 `.agent/tmp/` 下，禁止真实用户数据。
+
+1. 代码代理只写 `scripts/check-documentation.ts`、`scripts/check-documentation.test.ts`、新目录 `scripts/documentation-check/` 内本检查器的 TypeScript 实现和测试、`package.json` 的文档检查命令及 `.github/workflows/ci.yml` 的 docs 接线。新增文件须先在代理报告中登记具体路径，尽量每文件不超过 400 行、入口不超过 300 行。先运行针对性失败用例，再实现、修复、回归；新模块沿用现有测试入口。不得写 docs、根说明状态、Agent 规则或 Task 文档；须提交带路径/偏差/代码测试依据/建议/当前或目标性质/验证要求的文档建议。
+2. 主代理审核代码代理建议并记录理由后，另派文档代理；预期文档边界为 `docs/doc-governance/README.md` 的当前检查合同和 `docs/testing/README.md` 的入口勘误及链接。实际集合和代理身份在接受建议后登记，不预先授权扩张。封口测试册不改。
+3. 实现及文档写入停止后依次进行独立范围审查、质量审查；Required 问题回原责任代理修复并重审。运行聚焦行为测试、实际 CLI 失败/修复样例、工作区/暂存快照隔离测试、当前文档检查、大小与空白检查。CI 只做本地接线核对，不冒充远端运行；应用测试/构建/浏览器/真实来源及真实 Agent 验收不由本轮工具测试替代。Otirik 保留最终验收权。
+
+代码实现代理登记为 `33cfaf90-ca9f-48b3-8b43-327ed825a7fa`，只按步骤 1 的集合写入；新路径由其首报逐项登记。只读取证代理 `7fa6ce91-995f-4263-a70b-ac2277de7ddc` 独立核实既有分册格式与目录识别风险，不实施、不替代后续审查、无可写文件。主代理仍是本 walkthrough 唯一写入者。
+
+### 实施中核实与合同澄清
+
+用户要求继续后恢复原实施代理，不覆盖已有工作、不重复派实现。代码代理已逐项登记 `scripts/documentation-check/` 下的 `anchors.ts`、`metadata.ts`、`scope.ts`、`whitespace.ts`、`git.ts`、`report.ts`、`markdown.ts`、`links.ts`、`governance.ts`、`documentation-check.test.ts`、`fixtures.ts`、`snapshots.test.ts`；写入边界仍按上述登记，临时 Git fixture 仅在 `.agent/tmp/G19-P3-2-doc-check-33cfaf90/`，不得操作真实 index。所有文件与 shell 使用绝对 worktree 路径，避免会话 cwd 误指主仓。
+
+只读取证报告确认 63 份元数据文件使用 `tokens_est`，parent 有 53 份仓库根相对及 10 份文件相对。主代理复核的反例包括：`docs/proposals/frontend-redesign-v1.md` 指向非同名目录；`docs/proposals/ui-surface-ownership/attempt-and-void-2026-09-15.md` 的 parent 指向 `*-v1.md`；`docs/testing/known-unstable-cases/ERRATA.md` 是无元数据活动入口，而 `docs/requirements/0002-product-requirements/ERRATA.md` 自有元数据并链接历史册。取证代理另确认 `docs/Phase-2-UNDO.md` 指向根 `PROJECT-STATUS.md`；`docs/api/0002-product-service-api/landing-notes.md` 的 `sealed_at: —` 表示活动追加册。因此分册身份与封口状态分开判断；真实日期校验用于封口日期，显式未封口值须兼容现有合同，不能以改封口材料或新增豁免消除误报。
+
+主代理接受以当前及基准元数据、主文明确分册索引和明确分册命名关系共同识别候选的方向；删除头部不能退出候选集，普通子文档或活动 ERRATA 不因同目录而强制封口。block tags、带引号日期及 `tokens` 为兼容建议，不冒充现存实例。代码代理补针对性用例后提交证据；此处取证不是最终审查或通过声明。
+
+### 文档建议审核与独立写入
+
+代码代理提交六字段建议后，主代理接受更新检查合同、测试入口勘误及过期工件状态的建议；具体测试通过数待最终报告，不能提前宣称审查或用户验收完成。为避免双份规则，将当前检查合同集中于 `docs/doc-governance/README.md`，`docs/testing/README.md` 仅摘要勘误并链接该正文；封口分册保持不变。Task 三份记录仍由主代理维护。新增 Markdown 空白检查不复用活跃导航排除，新增 research 或包内 Markdown 也检查；不追溯旧文件。
+
+文档代理 `c089bfed-4f88-4750-b474-3b0218252204` 已另行派发，repository/worktree 为 `D:/Otirik/Workstation/cosmos/.worktrees/docs-governance`，branch/base 同本节登记；唯一可写集合为上述两份文档，隔离数据根不适用。依据为检查入口、新检查模块、快照/CLI 测试、package 脚本及 CI 接线；要求核实后写当前合同与限制、修正根豁免及现存基线位置，验证链接/Markdown/空白及实际 worktree 检查。代码代理不得代写文档，独立范围与质量审查仍待实施及文档停写后依次安排。
+
+### 范围审查 R1 与返修
+
+范围审查代理 `733e3ac9-2028-4c37-bfb0-23d98766f41e` 报告其余合同通过，但旧 path-only API 的片段解码兼容性为 Required。主代理对照基线 `scripts/check-documentation.ts:291-305` 核实：旧入口忽略片段内容；新 `scripts/documentation-check/links.ts:19-24` 同时解码路径与片段，使 `#100%` 和 `existing.md#100%` 错误流入路径检查。退回原代码代理先补回归 RED，再分离路径与片段处理，保持增量入口明确报错。写集合只限原登记内必要链接/锚点调用点与测试，禁止改文档或真实 index；修复后范围重审通过才启动质量审查。此前 52 项通过不代表该遗漏已覆盖。
+
+原代码代理 `33cfaf90-ca9f-48b3-8b43-327ed825a7fa` 已完成R1返修并停写：拆分 `scripts/documentation-check/links.ts` 路径检查与 `scripts/documentation-check/anchors.ts` 片段解码边界，旧 API 忽略纯片段及 `existing.md#100%`，坏路径仍报原错误；增量检查对进入检查范围的来源及必要入链报告无效片段，未变历史片段默认不纳入、`--all`纳入。对应两个测试文件新增6例。红测为6失败/52通过，修复后58通过；strict局部TSC、`bun run docs:check`（1254快照文件、0 failures）及 `git diff --check` 均通过。代码代理建议文档无需修改：当前检查合同已界定路径与片段职责。以上仅为实现交付，独立范围重审、质量审查及最终门禁尚未完成。
+
+### P3-2 本地验证与交付限制
+
+范围代理已重审通过并关闭 R1，质量审查进行中。主代理在本 worktree 实际执行：
+
+- `bunx vitest run scripts/check-documentation.test.ts scripts/documentation-check/documentation-check.test.ts scripts/documentation-check/snapshots.test.ts --reporter=dot` exit 0，58/58；包含 CLI 错误→修复及 index/CI 隔离样例。
+- `bunx tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/check-documentation.ts scripts/documentation-check/*.ts` exit 0，仅本检查器。
+- `bun run docs:check` exit 0，1254 快照文件、31 锚点来源、0 failures；不是全仓全项审计。`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` exit 0，422 文档、3 基线、1 豁免，无 warning；`git diff --check` exit 0。
+- `python scripts/size-governance.py -c code tests --check --baseline docs/doc-governance/code-baseline.json --fail-on-new --warn-lines 800 --fail-lines 800 --entry-warn-lines 300 --entry-fail-lines 300` exit 1，3 项现存违规、5 项基线增长 warning。违规路径为 `apps/web/src/components/cosmos/connection-panel.tsx`、`packages/application/src/workflow-host-runtime.test.ts`、`packages/storage-prisma/src/workflow-host-store/activity-store.ts`；`git diff --exit-code HEAD --` 后接这三路径 exit 0，均未修改。不新增豁免或扩大范围消债，不能宣称全仓 CI 通过。
+
+未运行产品全量测试、全仓类型检查、构建、浏览器、真实来源/Agent 或远端 CI；本轮不替代这些验收。真实 index 为空，未暂存/提交；主仓仍仅原 `.gitignore` 改动。最终质量结论及摘要收尾后另作复核。
+
+### 质量审查 R2
+
+主代理接受 Required R2：`scripts/documentation-check/scope.ts:43-55` 的 Git 快照未包含根目录；只读探针证实 `docs/source.md -> ../` 在 workspace 通过，在 staged/CI 均误报目标 `./` 不存在。完整质量报告后退回原代码代理，仅修根目录识别及三模式回归，先 RED 再 GREEN，不修改文档缩小合法链接范围；修复后复审并重跑门禁。
+
+R2 新增6例：RED 4失败/60通过→GREEN 64通过；复跑上节命令，64/64、strict、docs、文档大小及21路径审计通过，代码大小仍3违规/5warning。范围PASS，质量代理 `34b9f8b5-7781-4f5f-8391-8f595a90db5d` 复审PASS，R1/R2关闭。主代理接受无需改文档（目录合同已允许）。待Otirik验收；未运行、未提交及P3-3边界不变。
+
+Otirik 最终验收通过；未授权提交，P3-3 未开始。
+
+2026-11-02：Otirik 授权本地提交 P3-2；不含 push、合并、清理或 P3-3。

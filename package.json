@@ -47,6 +47,8 @@
         "typecheck": "bun run typecheck:packages && bun run typecheck:apps",
         "lint:web": "bun run --cwd apps/web lint",
         "docs:check": "bun run scripts/check-documentation.ts",
+        "docs:check:staged": "bun run scripts/check-documentation.ts --staged",
+        "docs:check:ci": "bun run scripts/check-documentation.ts --ci",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:property": "vitest run --config vitest.property.config.ts",

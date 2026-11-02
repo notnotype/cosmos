@@ -147,3 +147,13 @@ leader 判定：当前主线状态已与代码一致；若未来恢复 Worker Re
 ### 下一步
 
 合并前：`bun run db:generate` 后跑全仓 typecheck／test／build 与文档门禁；`listCollectionPlans()` 的计划侧批量投影可另起切片。`docs/spec/storage/0001-prisma-repository/part-01-domain-model.md` 的正文保持封口原样，后续如需重写只能出新版本分册。
+
+### 合并与合并后门禁
+
+2026-11-02，维护者授权合并进 `master` 并按流程补齐文档。实现提交 `046a374`，以 `--no-ff` 合并为 `f148f28`（基 `354e9f9`）；未 push、未清理分支与 worktree。
+
+合并后在主工作区 `D:/Otirik/Workstation/cosmos` 复跑：全仓 `bun run typecheck` exit 0；`bun run build` exit 0；`bun run docs:check` exit 0（1,228 文件）与文档大小门禁 PASS；聚焦两项测试（`source-list-projection`、`source-deletion`）9 用例通过。
+
+`bun run test` 首次带隔离 `TMPDIR` 跑时，209 文件／1,191 用例中 3 个失败全在 `packages/storage-prisma/src/prisma-cli.test.ts`：该测试从临时目录向上找 `node_modules`，当 `TMPDIR` 指进仓库时会先命中仓库自己的 `node_modules/prisma`。去掉 `TMPDIR`、用系统临时目录重跑全仓 `bun run test` 后 209 文件／1,191 用例全部通过，故这 3 个失败是环境登记口径问题，不是本切片的回归。工作区注入 `TMPDIR` 会给实现用例提隔离数据根，重跑全仓前要先取消它。
+
+未运行：浏览器／组件实验室、E2E、Node production、真实来源验收、远端 CI（`git fetch origin` 失败于代理不可达，本地 `master` 仍领先未同步）。

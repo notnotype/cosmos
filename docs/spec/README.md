@@ -100,11 +100,11 @@
 | Completion | Activity 结果的 durable、单消费者投递记录 | [`application/0007-workflow-host-contract.md`](application/0007-workflow-host-contract.md) |
 | Envelope | 保存 Run identity、Definition、idempotency、输入快照和产品投影的 Host 外壳 | [`application/0007-workflow-host-contract.md`](application/0007-workflow-host-contract.md) |
 | Checkpoint | Source 游标及其 revision 的 CAS 进度记录 | [`application/0006-ingest-workflow.md`](application/0006-ingest-workflow.md) |
-| Observation | 外部来源捕获的不可变证据及其 provenance | [`domain/0001-normalized-content.md`](domain/0001-normalized-content.md) |
-| Entry | 由稳定 external key 归并的本地内容身份 | [`domain/0001-normalized-content.md`](domain/0001-normalized-content.md) |
-| Entry Revision | Entry 内容变更的追加式、带 fingerprint 的修订 | [`domain/0001-normalized-content.md`](domain/0001-normalized-content.md) |
-| Asset | 与 Entry Revision 关联的媒体/附件及其保存状态 | [`domain/0001-normalized-content.md`](domain/0001-normalized-content.md) |
-| Story | 当前实现中的最小 Entry 上层内容投影 | [`domain/0001-normalized-content.md`](domain/0001-normalized-content.md) |
+| Observation | 外部来源捕获的不可变证据及其 provenance | [身份、观察、修订与 Story](domain/0001-normalized-content/01-concepts.md#身份观察entry修订与-story) |
+| Entry | 由稳定 external key 归并的本地内容身份 | [身份、观察、修订与 Story](domain/0001-normalized-content/01-concepts.md#身份观察entry修订与-story) |
+| Entry Revision | Entry 内容变更的追加式、带 fingerprint 的修订 | [身份、观察、修订与 Story](domain/0001-normalized-content/01-concepts.md#身份观察entry修订与-story) |
+| Asset | 与 Entry Revision 关联的媒体/附件及其保存状态 | [身份、观察、修订与 Story](domain/0001-normalized-content/01-concepts.md#身份观察entry修订与-story) |
+| Story | 当前实现中的最小 Entry 上层内容投影 | [身份、观察、修订与 Story](domain/0001-normalized-content/01-concepts.md#身份观察entry修订与-story) |
 | Blob | 受控 Blob Root 中按内容寻址保存的字节 | [`storage/0005-file-blob-store.md`](storage/0005-file-blob-store.md) |
 | BlobRef | Workflow JSON 中的 strict 内容引用；contracts 唯一拥有 JSON wire shape，FileBlobStore 负责实际 bytes 的 SHA-256/hash 和 Blob Root containment verification | [`contracts/0001-public-contracts.md`](contracts/0001-public-contracts.md) |
 | ValueRef | 只引用外置的 JSON Workflow value（固定 `application/json`）；由 ValueStore 负责 canonical JSON 与四重完整性读取，不代表媒体 bytes | [`storage/0006-workflow-value-store.md`](storage/0006-workflow-value-store.md) |

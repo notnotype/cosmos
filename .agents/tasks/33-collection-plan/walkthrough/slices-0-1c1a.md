@@ -12,7 +12,7 @@
   3. 架构主文档 §19 决定 85、§21 不变量 63；
   4. 新增 ADR [`0023`](../../../../docs/adr/0023-collection-plan-v1.md) 并登记进 [`docs/adr/README.md`](../../../../docs/adr/README.md)；
   5. 新建本 Task（编号 33 由 Agent 建议、待维护者确认）；
-  6. API Draft 补 v1 落地范围：[`0002`](../../../../docs/api/0002-product-service-api.md) §4.3、[`0003`](../../../../docs/api/0003-product-dtos.md) §2 落地注记、[`0006`](../../../../docs/api/0006-scenarios-and-conformance.md) S03。
+  6. API Draft 补 v1 落地范围：[`0002`](../../../../docs/api/0002-product-service-api/part-02-04.md#43-collectionplan) §4.3、[`0003`](../../../../docs/api/0003-product-dtos.md) §2 落地注记、[`0006`](../../../../docs/api/0006-scenarios-and-conformance.md) S03。
 - **偏差**：无范围偏差。一个发现：API Draft 早已规划 CollectionPlan 的端点、DTO 与 S03 场景，因此本轮只补「v1 落地范围」而不重写目标合同；`docs/api/0003-product-dtos/part-02-04.md` 已封口，按治理规则把更正登记在 0003 主文档的落地注记节。
 - **验证**：`bun run docs:check` 711 文件 0 失败、`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` PASS（含基线内增长 warning）。未运行 typecheck／单元测试／浏览器 E2E——本阶段没有代码改动。
 - **下一步**：切片 1a（expand）。开工前需要维护者确认 Task 编号，并给出 worktree 与提交授权（仓库规则：创建 worktree／分支与 commit 各自需要授权）。
@@ -33,7 +33,7 @@
 - **决定与偏差**：
   - `CollectionPlan` 新表的 `sourceId`／`connectionId` 带数据库级外键（`CREATE TABLE` 不受限）；四处 `planId` 是 `ALTER TABLE ADD COLUMN`，按仓库先例不加外键（与 `SourceInstance.connectionId`、`WorkflowRun.sourceInstanceId` 同例）。
   - v1 一对一用唯一索引 `CollectionPlan_sourceId_key` 在数据库层表达，不靠调用方自觉。
-  - 合同的媒体预算字段叫 `mediaPolicy`（ADR-0014 语义）；API Draft 目标合同的 `budget: WorkflowBudget` 属通用预算切片，v1 不用——Draft 的 v1 注记同批补上（[`0002`](../../../../docs/api/0002-product-service-api.md) §4.3、[`0003`](../../../../docs/api/0003-product-dtos.md) §2）。
+  - 合同的媒体预算字段叫 `mediaPolicy`（ADR-0014 语义）；API Draft 目标合同的 `budget: WorkflowBudget` 属通用预算切片，v1 不用——Draft 的 v1 注记同批补上（[`0002`](../../../../docs/api/0002-product-service-api/part-02-04.md#43-collectionplan) §4.3、[`0003`](../../../../docs/api/0003-product-dtos.md) §2）。
   - 未新增 storage 包导出：仓库方法仍挂在既有 `PrismaCosmosRepository` 上，冻结入口契约不受影响。
 - **未运行**：浏览器产品 E2E、真实来源验收（切片 1a 没有用户可观察行为变化，属后续切片的验收面）。
 - **下一步**：切片 1b（backfill）——为每个既有来源生成默认计划，回填三处计划引用并重写状态命名空间；开工前在 walkthrough 记录回填的幂等与失败停止条件。

@@ -648,7 +648,7 @@ Agent 就 B 组粒度反问「整个 B 组都不译，还是只保留 Story 和 
 
 > @docs/前端设计流程.md 项目现在要从0开始重新设计前端界面，技术栈底座还是React + Tailwind CSS。按照流程一步步与我进行讨论。
 
-同轮及后续交互确认（2026-09-24）：本条是维护者对前端重做的启动指令，执行依据是 [`docs/前端设计流程.md`](../前端设计流程.md)（v0.4）。流程 §0 的适用判断为「多页面 / 有路由」→ 四层全做；§8 硬闸门确认为「三层设计获批前不写代码」。全程按流程逐步讨论，结论落成 Proposal [`frontend-redesign-v1`](../proposals/frontend-redesign-v1.md)（**accepted**）及其四份分册，稳定决定沉淀为 ADR [`0029`](../adr/0029-ui-surface-layout-and-visual-direction-v1.md)，实施记录在 Task 35。
+同轮及后续交互确认（2026-09-24）：本条是维护者对前端重做的启动指令，执行依据是 [`docs/standards/frontend-design-process.md`](../standards/frontend-design-process.md)（v0.4）。流程 §0 的适用判断为「多页面 / 有路由」→ 四层全做；§8 硬闸门确认为「三层设计获批前不写代码」。全程按流程逐步讨论，结论落成 Proposal [`frontend-redesign-v1`](../proposals/frontend-redesign-v1.md)（**accepted**）及其四份分册，稳定决定沉淀为 ADR [`0029`](../adr/0029-ui-surface-layout-and-visual-direction-v1.md)，实施记录在 Task 35。
 
 **维护者逐步裁定的要点（原话与结论对照）**：
 

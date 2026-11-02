@@ -1,8 +1,8 @@
 # Cosmos 信息模型、相关推荐与持续工作区
 
-> 状态：Draft v0.12
+> 文档版本：Draft v0.12（设计版本；历史变更由 Git 管理）
 >
-> 最后更新：2026-09-07
+> 当前实现核对：2026-10-29，代码基线为仓库 HEAD `354e9f9936c7bdb7fda9acd6b4e018deae8b779c`
 >
 > 产品共同语言：[`../../CONTEXT.md`](../../CONTEXT.md)
 >
@@ -31,6 +31,15 @@
 | [part-05-10.md](0002-information-model/part-05-10.md) | §5–10 组织模型:Topic、推荐、热度、Workspace、关系模型与示例 | 23.5 KB |
 | [part-12-14.md](0002-information-model/part-12-14.md) | §12–14 迁移、后置压力测试问题与变更记录 | 10.1 KB |
 
+## 当前实现切片（代码基线）
+
+本主文同时记录设计合同；本节是截至代码基线 `354e9f9936c7bdb7fda9acd6b4e018deae8b779c` 可从代码与已合入规格确认的运行边界，不把下方长期模型当作已交付能力：
+
+- 固定 Source ingest/probe 负责把 `Observation`、`Entry`、`EntryRevision`、Asset 和最小主 Story projection 写入持久层；重复内容、无实质变化和人工 Story Revision 的保护规则以 [`spec/storage/0001-prisma-repository/part-01-domain-model.md`](../spec/storage/0001-prisma-repository/part-01-domain-model.md) 为准。
+- Story 的人工编排已包括主归属移动、Revision 更新、merge、split、Entry–Story 关联和 split 后用户状态迁移；`StoryRevision` 的 `timeRange`、`keyFacts` 与 producer 参与当前合同。Topic 已支持人工创建、Revision、merge、成员角色维护和可恢复移除；Entity、Entry relation、Board/Section/Block 与手工 Spotlight placement 也有当前存储与 API 合同。
+- `Entry.storyId` 在数据库中可为空；“每个 Entry 有主 Story”在当前切片中是 ingest projection/领域目标，不是数据库层强制约束。merge 的旧标识通过 Story alias 解析，split 历史壳与后继通过 Story replacement 表达，两者不能混为同一关系。
+- 当前没有可据此宣称已交付的 Workspace/Artifact 产品模型、自动 Topic 维护、Topic relation/层级、自动推荐与 ranking、自动 Spotlight policy/Trend/TTL、Feed impression/read-state、完整 Agent 预算与权限策略、Publication/Delivery 或 Knowledge/Research workflow；这些仍按下文及分册标为设计目标或后置切片。实际 API 读写范围以 [`spec/interfaces/0002-product-api-http/part-03-content-query.md`](../spec/interfaces/0002-product-api-http/part-03-content-query.md) 为准。
+
 ## 1. 本轮结论
 
 此前 `Feature` 同时承担了事件聚类、长期话题、Agent 维护、生成文件、交互任务和热点展示，已经成为没有稳定边界的“万能容器”。本轮把它拆成三层：
@@ -41,7 +50,7 @@
 展示决策层：Timeline View / Spotlight / Feed / Board
 ```
 
-核心决定：
+核心决定（长期设计合同；不等同于当前全部已实现能力）：
 
 1. `Entry` 是用户可读的最小来源内容；`Observation` 是内部不可变采集证据。
 2. `Story` 是每个 Entry 的上层规范内容单元，通过稳定核心 `kind` 和受管理、可扩展 `subtype` 区分形态，例如 `media.comic`、`media.anime`；event kind 的成员判定必须严格。
@@ -131,3 +140,4 @@
 | 2026-09-15 | [`part-05-10.md`](0002-information-model/part-05-10.md) §4.6 中 split 后用户状态的语义 | 补充：split 后用户状态仍不自动扇出（§11 不变量 24 不变），但现在有显式的家族内迁移命令，反向调用即撤销 | ADR-0012 的 Revisit Gate 首项（用户状态的显式迁移、批量与撤销）已处理，稳定结论见 ADR [`0020`](../adr/0020-story-split-user-state-migration-v1.md)；§5.4「可逆操作或补偿记录」在 split 场景的落地即该命令。分册正文不改写。 |
 | 2026-09-15 | [`part-05-10.md`](0002-information-model/part-05-10.md) §4.6 的历史壳写边界 | 补充：迁移用户状态是历史壳上唯一允许的写操作；改 Revision、merge、再次 split 仍被拒绝 | 同 ADR [`0020`](../adr/0020-story-split-user-state-migration-v1.md) 决定 7：迁移是 ORG-020 要求的补偿操作，不是对壳内容的改写。分册正文不改写。 |
 | 2026-09-24 | [`part-02-04.md`](0002-information-model/part-02-04.md) §5.4 末段的「字段级保护 + 候选 Revision」 | 补充落地口径：**判据是写入者身份**（`StoryRevision.producer`，服务端按写入方赋值），v1 保护粒度是**整条当前 Revision**（含 `Story.kind`），自动结果**按写入方分两类降级**——确定性投影（ingest 的 Entry→Story 投影）跳过并记事件，派生分析（Knowledge Workflow）只能产生候选 Revision；字段级掩码与接受/拒绝界面仍属 ORG-019 | 分册正文只写了「可以形成字段级保护」，没有判据、没有数据、也没有测试，而 Phase 2 已经存在一条会覆盖人工编辑的自动写入路径。稳定决定见 ADR [`0028`](../adr/0028-user-truth-protection-v1.md)（Proposal [`user-truth-protection-v1`](../proposals/user-truth-protection-v1.md) accepted），§11 不变量 22 不变、只被细化。分册正文不改写。 |
+| 2026-10-29 | [`part-12-14.md`](0002-information-model/part-12-14.md) §13 第4项「显式 state migration command」 | 显式 Story user-state migration 已有合同、API 与行为测试；仍需单独完成批量、撤销、真实运行压力和端到端验收，故“已实现”与“待验证”并存 | 当前切片已交付命令边界，但分册该条保留的是后置压力问题；主文当前实现切片列出已交付合同，不能把存在测试文件等同于本次执行通过。分册正文不改写。 |

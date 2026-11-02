@@ -58,6 +58,28 @@ describe("documentation governance check", () => {
         expect(result.checkedFiles).toBe(fixture.paths.length);
     });
 
+    it.each(["#100%", "existing.md#100%", "#bad\\fragment"])(
+        "keeps legacy path-only validation for fragment %s",
+        async (url) => {
+            const fixture = await createFixture({
+                "docs/source.md": `[fragment](${url})\n`,
+                "docs/existing.md": "# Existing\n",
+            });
+            expect(checkDocumentation(fixture.root, fixture.paths).failures).toEqual([]);
+        },
+    );
+
+    it("still rejects invalid paths when legacy fragments are ignored", async () => {
+        const fixture = await createFixture({
+            "docs/source.md": "[encoding](bad%ZZ.md#100%)\n[missing](missing.md#100%)\n[escape](../../outside.md#100%)\n",
+        });
+        expect(checkDocumentation(fixture.root, fixture.paths).failures).toEqual([
+            expect.stringContaining("相对链接 URL 编码无效：docs/source.md -> bad%ZZ.md#100%"),
+            expect.stringContaining("相对链接目标不存在：docs/source.md -> missing.md#100%"),
+            expect.stringContaining("相对链接越出仓库：docs/source.md -> ../../outside.md#100%"),
+        ]);
+    });
+
     it("does not treat append-only original requirements as navigation", async () => {
         const fixture = await createFixture({
             "docs/requirements/0001-original-requirements.md": String.raw`[local input](C:\Users\person\private.md)`,
@@ -264,7 +286,7 @@ describe("documentation governance check", () => {
 async function createFixture(
     additionalFiles: Readonly<Record<string, string>> = {},
 ): Promise<{ root: string; paths: string[] }> {
-    const parent = resolve(process.cwd(), ".agent", "tmp");
+    const parent = resolve(process.cwd(), ".agent", "tmp", "G19-P3-2-doc-check-33cfaf90");
     await mkdir(parent, { recursive: true });
     const root = await mkdtemp(join(parent, `docs-check-${randomUUID()}-`));
     temporaryRoots.push(root);

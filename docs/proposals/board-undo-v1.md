@@ -184,7 +184,7 @@ grep `撤销|恢复|undo|Undo|revert` 于 `docs/adr/0010-board-section-block-v1.
 | **Q4** | 「删除」与「隐藏」的语义边界要不要重划？隐藏已做到「不删行、可恢复」，与撤销高度重叠 | ADR-0010 决定 1 只并列二者，**从未定义用户可见差别** |
 | **Q5** | 范围只覆盖删除，还是「改错一步」的全部看板误操作？ | P4-3 的「现状」列了七个操作，「影响」句只讲删除；维护者原话是「改错一步」。范围本身就是要本 Proposal 回答的 |
 | **Q6** | 与 Phase 5 的 Board/Query snapshot、Publication 的关系？ | ADR-0010 决定 6 把 Publication 列为后置，且 Revisit Gate 不含可逆性 → 该问题**永远不会被自动触发** |
-| **Q7** | 撤销失败/不可撤销时 UI 怎么告知？ | `ui-copy-review-v1.md:91` 的 R4「风险动作要说明可逆性」仍处 **`reviewing`**，不是生效合同 |
+| **Q7** | 撤销失败/不可撤销时 UI 怎么告知？ | [UI 文案判据](ui-copy-review-v1.md#判据本-proposal-的核心产出)中的 R4「风险动作要说明可逆性」仍处 **`reviewing`**，不是生效合同 |
 
 ## 决策记录
 

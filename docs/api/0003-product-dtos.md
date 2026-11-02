@@ -53,4 +53,4 @@
 
 分册封口后只读，对已归档 DTO 的落地更正登记在此。
 
-- 2026-09-20：[`part-02-04.md`](0003-product-dtos/part-02-04.md) §4 的 `CollectionPlan`／`TriggerBinding` DTO 是**目标合同**；v1 的落地范围与限制（计划与采集目标一对一、`overlapPolicy` 写路径只接受 `forbid`、`discoveryContext` 不新增持久字段、`scope`／`sourceOperationRef` 是目标的只读投影、计划的媒体预算字段叫 `mediaPolicy` 而不是 `budget: WorkflowBudget`）见 ADR [`0023`](../adr/0023-collection-plan-v1.md) 与 [`0002-product-service-api.md`](0002-product-service-api.md) §4.3。
+- 2026-09-20：[`part-02-04.md`](0003-product-dtos/part-02-04.md) §4 的 `CollectionPlan`／`TriggerBinding` DTO 是**目标合同**；v1 的落地范围与限制（计划与采集目标一对一、`overlapPolicy` 写路径只接受 `forbid`、`discoveryContext` 不新增持久字段、`scope`／`sourceOperationRef` 是目标的只读投影、计划的媒体预算字段叫 `mediaPolicy` 而不是 `budget: WorkflowBudget`）见 ADR [`0023`](../adr/0023-collection-plan-v1.md) 与 [`0002-product-service-api.md`](0002-product-service-api/part-02-04.md#43-collectionplan) §4.3。

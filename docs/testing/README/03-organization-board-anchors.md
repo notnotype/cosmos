@@ -1,0 +1,27 @@
+---
+parent: ../README.md
+range: "原 README.md L29-L43；Topic、Entity、用户组织、看板、搜索与 Phase 2 验收锚点"
+sealed_at: 2026-11-02
+tags: [testing, topic, entity, organization, board, search]
+tokens_est: 2806
+---
+
+# 组织与看板测试锚点
+
+[返回测试入口](../README.md)。适用读者：核对 Topic、Entity、用户组织、看板、搜索及相关内容回归的维护者；迁移与隔离共同约束见[测试层与浏览器合同](01-layers-browser-contracts.md)。
+
+Topic 域模型 v1（ADR-0007）的迁移为全新表（`20260908000000_topic_domain_v1`），无旧数据 backfill，仍按门禁跑 fresh + 旧库 upgrade 两态。Topic 语义（TopicRevision 指纹、membership revision/tombstone、merge 去重、Story merge 的 membership 迁移）由 `packages/storage-prisma/src/topic-domain.test.ts` 使用隔离库 seed 覆盖；角色枚举的写入校验/读取降级由 `packages/contracts/src/index.test.ts` 覆盖；API 错误映射由 `apps/api/src/app.controller.story-domain.test.ts` 覆盖；Web 组件由 `apps/web/src/component-lab/registry.test.ts` 登记。
+
+Entity/关系 v1（ADR-0008）的迁移为全新表（`20260908120000_entity_relation_v1`），无旧数据 backfill，仍按门禁跑 fresh + 旧库 upgrade 两态。Entity 语义（EntityRevision 指纹/no-op、Story↔Entity 幂等 link/unlink 与 provenance、Entity↔Entity 类型化关系与唯一约束、Story merge 的 StoryEntity 迁移 move/collision）由 `packages/storage-prisma/src/entity-relation-domain.test.ts` 使用隔离库 seed 覆盖；类型枚举写入校验/读取降级与命令 schema 由 `packages/contracts/src/index.test.ts` 覆盖；API 错误映射与 transport client 由 `apps/api/src/app.controller.story-domain.test.ts`、`packages/transport-http/src/index.test.ts` 覆盖；Web EntityPanel/StoryPanel 关联入口由 `apps/web/src/component-lab/registry.test.ts` 登记。
+
+用户组织 v1（ADR-0009）子切片 A（Label/Collection/Favorite）的迁移为全新表（`20260908140000_user_organization_v1`），无旧数据 backfill，仍按门禁跑 fresh + 旧库 upgrade 两态。Label 唯一命名与多态附加、Collection 成员幂等与 `containsStory` 投影、Favorite 幂等与 Story 详情投影、Story merge 的 `CollectionItem`/`Favorite`/`LabelAssignment` 迁移由 `packages/storage-prisma/src/user-organization-domain.test.ts` 使用隔离库 seed 覆盖；`targetTypes`/`favoriteTargetTypes` 受管枚举由 `packages/domain/src/index.test.ts` 覆盖，命令 schema 与读取侧放宽由 `packages/contracts/src/index.test.ts` 覆盖；transport client 路径由 `packages/transport-http/src/index.test.ts` 覆盖；API 回执与 404/409 映射由 `apps/api/src/app.controller.user-organization.test.ts` 覆盖。子切片 B（Annotation）的迁移为全新表（`20260908160000_annotation_v1`），批注的创建/编辑/删除、`targetRevisionId` 写入捕获与 Story merge 的 targetId 重定向由同一 storage 测试文件覆盖，命令 schema 与读取侧放宽由 contracts 测试覆盖。子切片 C（Saved View）的迁移为全新表（`20260908180000_saved_view_v1`），SavedView CRUD 与 `search` 的 `labelIds`/`topicIds` any-of 过滤（含移除成员后不再命中）由同一 storage 测试文件覆盖；命令 schema 与 `SearchQuery` 扩展由 contracts 测试覆盖，transport 路径与 API 回执由 `packages/transport-http/src/index.test.ts`、`apps/api/src/app.controller.user-organization.test.ts` 覆盖。
+
+可配置看板 v1（ADR-0010）子切片 A 的迁移为全新表（`20260909100000_board_section_block_v1`），子切片 B 的 Spotlight 迁移同样为全新表（`20260909120000_spotlight_placement_v1`），均无旧数据 backfill，仍按门禁跑 fresh + 旧库 upgrade 两态。默认 Board 幂等 seed、Board 唯一名与缺失错误、按类型 config 白名单（未知 type 拒绝、非法 config 抛 ZodError）、跨 Section move 重排与 visible 切换、duplicate 原位副本、删除 Block 不删除被绑定 SavedView、Spotlight 幂等 pin/解除与目标标题解析、Story merge 的 placement 重定向（含同 Board 冲突丢弃）由 `packages/storage-prisma/src/board-domain.test.ts` 使用隔离库覆盖；`blockTypes`/`spotlightTargetTypes` 枚举由 `packages/domain/src/index.test.ts` 覆盖，命令/读取侧 schema、`blockConfigSchemaFor` 与 pin 目标枚举由 `packages/contracts/src/index.test.ts` 覆盖；transport 路径由 `packages/transport-http/src/index.test.ts` 覆盖，API 端点与错误映射由 `apps/api/src/app.controller.user-organization.test.ts` 覆盖；Web `BoardView`（含编辑模式与 Spotlight 区块）由 `apps/web/src/component-lab/registry.test.ts` 登记，浏览器侧由 `e2e/browser/ingest.spec.ts` 覆盖隐藏/恢复与固定/解除流程。
+
+阅读流区块独立取数（ADR-0010 决定 5 的 2026-09-15 收窄，Task 14 追加切片）无 Prisma/schema/合同变更，是 Web 内部取数位置与布局的改动，因此没有新增 unit：浏览器侧由 `e2e/browser/phase2-organization.spec.ts` 新增用例覆盖——未绑定的阅读流区块渲染最新内容流（而非占位）、再绑定一个匹配不到内容的 Saved View 后两个区块各取各的数据（绑定的显示「没有匹配的内容」而未绑定的不受影响），同时断言搜索与已保存视图位于页面级 section 而不是某个区块内；组件实验室的 `board-view` fixture 给 `feed` 一个固定响应，使自取数区块在实验室里渲染内容而不是失败占位。
+
+搜索文本按字面处理（2026-09-15 修复，Task 02 Bug：把用户输入直接交给 FTS5 `MATCH` 会让含语法字符的词返回 500）由 `packages/storage-prisma/src/search-query.test.ts` 使用隔离库 + 真实 ingest 路径覆盖：语法字符（`-`、引号、括号）当普通字符、带连字符的词可被搜到、多词保持 AND、`OR`/`*` 不再是运算符、只有 `-`/`()`/空白的输入退回「无文本条件」且 rank 为 0。该文件把语义固定在「字面关键词、不是 FTS5 查询语言」上——要恢复操作符能力需要连同本测试一起重新评审。真实 HTTP 表面由 `e2e/browser/phase2-organization.spec.ts` 的新用例覆盖（带连字符的词打接口返回 200、UI 搜索路径正常渲染）。
+
+区块拖拽排序（ADR-0010 决定 7，Task 14 追加切片）无 Prisma/schema/公共合同/API 变更——服务端 `moveBlock` 早已支持分区内重排与跨分区移动，本轮只补编辑模式界面。落点解析是纯函数，由 `apps/web/src/components/cosmos/board-drag.test.ts` 覆盖：`resolveDropTarget` 把 dnd-kit 的 `over` 翻成 `moveBlock` 参数（原地不动/未知区块返回 null、跨分区取目标区块所属分区、隐藏区块仍占数组下标），并有一条**不变量用例**断言「对任意 12 组（被拖区块，落点区块），本地落定结果都等于 arrayMove 预览」——这条不变量是本切片两次返工的根因护栏：曾经提交用的是自算的指针几何、预览用的是 dnd-kit 碰撞结果，导致预览 `[A,C,B,D]` 而落库 `[A,C,D,B]`、向上拖时被算成 no-op。`applyLocalMove` 覆盖同分区重排后 `position` 连续化、跨分区移动并重排两边、缺省目标分区、越界下标收敛到末尾、未知区块/分区原样返回（乐观更新与服务端语义必须一致，否则会出现"先跳回旧顺序再跳到新顺序"的闪烁）。拖拽组件本身（键盘传感器、拖动按钮、拖动浮层、一次 `moveBlock` 写回）由组件实验室新增的 `board-sortable-blocks` 登记提供渲染护栏；「把 A 移到 B 下方落在 B 与 C 之间」以及刷新后顺序保持、拖动入口指向正确区块、上移/下移按钮仍可用由 `e2e/browser/phase2-organization.spec.ts` 覆盖（纯 `moves` 命令调用，不依赖指针坐标）。
+
+Phase 2 验收补完（分类/Topic 浏览、Story 时间线、相关内容）不新增 Prisma 模型、migration、合同或 API 端点，只把既有读能力接出 Web 入口：时间线投影（多来源成员 Revision/Observation 展平排序、TemporalValue 退化与无时间回退）由 `apps/web/src/lib/story-timeline.test.ts` 覆盖，相关内容组合（共享分类/共享实体的去重、排除当前 Story、5 条上限、单信号失败降级）由 `apps/web/src/lib/related-stories.test.ts` 覆盖；分类/Topic 筛选与 Saved View 条件回填属于 `apps/web/src/components/cosmos/feed-browser.tsx` 与 `apps/web/src/app/page.tsx` 的行为，浏览器侧由 `e2e/browser/phase2-organization.spec.ts` 覆盖（分类筛选 + 保存/套用带分类条件的视图、时间线事件、相关内容共享分类、Topic/Entity/收藏/收藏夹/批注流程与 Topic 成员改角色/移除/恢复）。

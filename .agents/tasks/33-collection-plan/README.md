@@ -44,7 +44,7 @@ Non-goals（ADR-0023 已裁定后置）：
 - ADR [`0023`](../../../docs/adr/0023-collection-plan-v1.md)（采集计划 v1）
 - 架构 [`part-04.md`](../../../docs/architecture/0001-cosmos-foundation/part-04.md) §4.6／§4.7；主文档 §19 决定 85、§21 不变量 63
 - PRD AUT-010／AUT-009／EXT-007／ING-012（[`part-07-1.md`](../../../docs/requirements/0002-product-requirements/part-07-1.md)、[`part-07-3.md`](../../../docs/requirements/0002-product-requirements/part-07-3.md)）与勘误台账 [`ERRATA.md`](../../../docs/requirements/0002-product-requirements/ERRATA.md)
-- API Draft [`0002`](../../../docs/api/0002-product-service-api.md) §4.3／§4.4、[`0003`](../../../docs/api/0003-product-dtos.md) 的 CollectionPlan DTO、[`0006`](../../../docs/api/0006-scenarios-and-conformance.md) 的双计划场景
+- API Draft [`0002`](../../../docs/api/0002-product-service-api/part-02-04.md#43-collectionplan) §4.3／§4.4、[`0003`](../../../docs/api/0003-product-dtos.md) 的 CollectionPlan DTO、[`0006`](../../../docs/api/0006-scenarios-and-conformance.md) 的双计划场景
 - 既有 ADR：[`0017`](../../../docs/adr/0017-connection-secret-state-v1.md)（Connection／State）、[`0018`](../../../docs/adr/0018-trigger-sdk-v1.md)（TriggerBinding 与 manifest 命名空间）、[`0014`](../../../docs/adr/0014-per-source-media-policy-v1.md)（媒体预算字段语义）、[`0004`](../../../docs/adr/0004-source-instance-identity-and-revision.md)（来源身份与 revision CAS）
 
 ## Current State

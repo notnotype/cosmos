@@ -32,10 +32,12 @@ jobs:
         timeout-minutes: 30
         steps:
             - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: ${{ env.BUN_VERSION }}
-            - run: bun run docs:check
+            - run: bun run docs:check:ci
             - run: python3 scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new
             # 代码类三轨门禁（字节/token/行数）。放在本 job 是因为它与文档门禁同依赖（只要 python3），
             # 不必把 quality job 拉进来。行数参数把本批限定为「只拦红线」：警戒线默认值仍是提案的

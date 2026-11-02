@@ -51,7 +51,7 @@ PRD Phase 2 的完成标准第一句是“用户能打开一个多来源 Story�
 
 - `packages/domain/src/index.ts:3`：`storyKinds = ["event", "document", "media", "thread"]`；`:118` `MinimalStoryProjection` 只有 8 个字段（含固定 `story:${entryId}` 派生 id）；`:248-268` `projectEntryToStory` 按 contentKind 推导 kind、缺省 document、subtype/summary 为 null。domain 没有 Story 修改、move、merge 或 revision 规则。
 - `packages/storage-prisma/prisma/schema.prisma:249-270`：`Story`（id、kind、subtype、currentRevisionId、entries）与 `StoryRevision`（storyId、title、summary、createdAt）已存在；`Entry.storyId`（:199、:207）是唯一主归属外键，`onDelete: SetNull`。`StoryRevision` 没有 revision 编号、fingerprint 或 actor 字段；无 alias、无 merge/redirect 表、无 membership 审计。
-- `packages/storage-prisma/src/index.ts` `persistIngestItemInternal`：在 ingest 事务内 upsert Story 与 current StoryRevision（spec `docs/spec/domain/0001-normalized-content.md` 状态转换 1/5、`docs/spec/storage/0001-prisma-repository.md`）；repository 另有 Entry/Story 读取投影。
+- `packages/storage-prisma/src/index.ts` `persistIngestItemInternal`：在 ingest 事务内 upsert Story 与 current StoryRevision（spec [规范化内容的状态转换](../spec/domain/0001-normalized-content/02-behavior-input-output.md#状态转换) 1/5、`docs/spec/storage/0001-prisma-repository.md`）；repository 另有 Entry/Story 读取投影。
 - `packages/contracts/src/index.ts:358-369`：`storyDetailSchema` 已存在（单 Story + Entry 列表语义待核对）；transport-http 提供详情读取；没有 Story 写命令 schema。
 - Web：Story 面板展示单 Entry Story → Entry/Revision/Asset（Task 02 断网与媒体验收已覆盖）；没有“归并/编辑/merge”入口。
 - 相关验收证据：domain Story projection 测试、Prisma repository 集成测试、浏览器 ingest E2E（打开 Story）以及组件实验室 StoryPanel fixture。

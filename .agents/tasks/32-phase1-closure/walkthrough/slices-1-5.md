@@ -138,7 +138,7 @@ Test Files  1 passed (1)
 
 | 文件 | 同步内容 |
 |---|---|
-| [`docs/spec/domain/0001-normalized-content.md`](../../../../docs/spec/domain/0001-normalized-content.md) | `NormalizedIngestItem.discoveryChannel`（含"不进 fingerprint"）、`discoveryChannels` 锚点 |
+| [`docs/spec/domain/0001-normalized-content.md`](../../../../docs/spec/domain/0001-normalized-content/01-concepts.md#内容发布者和采集-item) | `NormalizedIngestItem.discoveryChannel`（含"不进 fingerprint"）、`discoveryChannels` 锚点 |
 | [`docs/spec/contracts/0001-public-contracts.md`](../../../../docs/spec/contracts/0001-public-contracts.md) | `ObservationSnapshot.discoveryChannel`（可选，升级前数据按 unknown） |
 | [`docs/spec/interfaces/0002-product-api-http.md`](../../../../docs/spec/interfaces/0002-product-api-http.md) | `GET /search` 的三个新参数与语义（单值等值、彼此 AND、assetStatus 命中"当前 Revision 存在该状态"） |
 | [`docs/spec/interfaces/0005-web-client.md`](../../../../docs/spec/interfaces/0005-web-client.md) | 表单三个新控件、chip 回显、与 Saved View 的边界（拒绝保存而不是静默丢条件） |

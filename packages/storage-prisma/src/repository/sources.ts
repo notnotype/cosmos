@@ -7,6 +7,7 @@ import { type Prisma } from "@prisma/client";
 import { directorySize, fileSize, parsePlanRevisionId, parseSourceRevisionId } from "../storage-root.js";
 import { appendDomainEvent } from "./repository-internals.js";
 import { PrismaCosmosRepositoryHelpers4 } from "./helpers-4.js";
+import { firstRunPerSource, latestRunRowsPerSource, mergeRunDiagnostics, projectSourceSnapshot, requireSourceManifest } from "./source-projection.js";
 
 export class PrismaCosmosRepositorySources extends PrismaCosmosRepositoryHelpers4 {
     async createSource(input: CreateSourceCommand): Promise<SourceSnapshot> {
@@ -64,7 +65,43 @@ export class PrismaCosmosRepositorySources extends PrismaCosmosRepositoryHelpers
             where: { deletedAt: null },
             orderBy: { createdAt: "asc" },
         });
-        return Promise.all(sources.map((source) => this.toSourceSnapshot(source)));
+        if (sources.length === 0) {
+            return [];
+        }
+        const sourceIds = sources.map((source) => source.id);
+        // 批量投影：每个来源各查计划与两类运行会让查询量随来源数线性增长（N 个来源 1 + 4N 次），
+        // 列表是产品面的常驻读，这里按来源 id 一次取回再在内存里归并，与来源数无关。
+        const [plans, legacyRuns, workflowRuns] = await Promise.all([
+            this.prisma.collectionPlan.findMany({
+                where: { sourceId: { in: sourceIds } },
+                include: { triggerBindings: true, connection: true },
+            }),
+            // 运行行只取每个来源最新一条：只把查询次数变成常数还不够，整批读回历史会让
+            // 读到的行数随每个来源的历史长度线性增长，等于把债务换个维度。
+            latestRunRowsPerSource(this.prisma, "Run", sourceIds),
+            latestRunRowsPerSource(this.prisma, "WorkflowRun", sourceIds),
+        ]);
+        const planBySource = new Map(plans.map((plan) => [plan.sourceId, plan]));
+        const legacyBySource = firstRunPerSource(legacyRuns);
+        const workflowBySource = firstRunPerSource(workflowRuns);
+        return sources.map((source) => {
+            // 校验放在批量查询之后：来源定义非法时这几次批量读已经付过代价，但那只发生在
+            // 错误路径，换来的是一条查询服务全部来源。
+            const manifest = requireSourceManifest(this.catalog, source);
+            const plan = planBySource.get(source.id);
+            if (!plan) {
+                throw new Error(`Source has no collection plan: ${source.id}`);
+            }
+            return projectSourceSnapshot({
+                source,
+                manifest,
+                plan,
+                latest: mergeRunDiagnostics(
+                    legacyBySource.get(source.id) ?? null,
+                    workflowBySource.get(source.id) ?? null,
+                ),
+            });
+        });
     }
 
     async getSource(sourceId: string): Promise<SourceSnapshot | null> {

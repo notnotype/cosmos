@@ -294,6 +294,9 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 - 当前 `master` 没有持久 `WorkflowWorkerRegistration`、Registry/能力投影 Prisma 模型、TTL 注册生命周期、版本化注册表 evidence 或 `GET /api/v1/workflow-workers`；`Worker Admin.status()` 的 `registrationGeneration` 固定为 `null`。
 - Worker Admin 的 capability 输出是本地 executable evidence，不是跨进程发现、Run owner、准入状态或调度依据。`assessWorkflowWorkerCapability()`、`aggregateWorkflowWorkerAvailability()`、`no_capable_worker` 和 cleanup consumer 当前均未实现。
 - 上述注册表、能力评估、投影和查询能力曾出现在归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`，但该提交不在当前 `master` 祖先链；对应 Round 78–97 只保留为历史 WIP 记录，未来恢复时必须在当前基线上重新实现和验收。
+- Source 列表读已做批量投影：计划（含触发器与连接）与两类运行行都以来源 id 集合
+  批量读取，查询次数与来源数无关；运行行按来源只取最新一条，读到的行数上界等于
+  来源数。单条读与列表读共用同一投影。
 
 ### 仍缺
 
@@ -329,8 +332,9 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 - fetch page/item 当前在 Job result、Invocation result、Step output 和后续
   Action input 中重复持久化；大 Feed/媒体前需要 value/reference 与 journal
   retention。
-- `listSources()` 当前按 Source 分别查询 legacy Run 与 Workflow Run，查询量为
-  `1 + 2N`；Phase 1 小规模可接受，扩展采集计划前应改为批量 projection。
+- `listCollectionPlans()` 仍按计划逐条查询 legacy Run 与 Workflow Run（每个计划
+  各一次）；Phase 1 小规模可接受，扩展采集计划前应改为与来源列表相同的批量
+  projection。来源列表的逐来源查询已消除。
 
 ## 8. 验证要求
 

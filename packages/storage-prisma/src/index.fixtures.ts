@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 import { type LoggerPort } from "@cosmos/application";
 import type { SourceSnapshot } from "@cosmos/contracts";
 import { PrismaCosmosRepository } from "./index.js";
@@ -69,7 +69,11 @@ export function captureLogger(): {
 export async function withRepository(
     name: string,
     body: (repository: PrismaCosmosRepository, prisma: PrismaClient) => Promise<void>,
-    options: { schemaPath?: string } = {},
+    /**
+     * `clientOptions` 只给需要观测客户端行为的用例：客户端由本夹具独占创建，
+     * 事件订阅（例如统计 query 次数）只能通过构造参数打开，事后挂不上。
+     */
+    options: { schemaPath?: string; clientOptions?: Prisma.PrismaClientOptions } = {},
 ): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), `cosmos-${name}-`));
     temporaryRoots.push(root);
@@ -77,6 +81,7 @@ export async function withRepository(
     prepareDatabase(root, options.schemaPath);
 
     const prisma = new PrismaClient({
+        ...options.clientOptions,
         datasources: { db: { url: sqliteUrl(databasePath) } },
     });
     const repository = new PrismaCosmosRepository({ dataRoot: root, prisma });

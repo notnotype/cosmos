@@ -27,285 +27,7 @@
 | [rounds-0094-0098.md](walkthrough/rounds-0094-0098.md) | Round 94–98 | 20.4 KB | checkedAt Registry…最新主线收敛基线与 Ingest p |
 | [rounds-0099-0104.md](walkthrough/rounds-0099-0104.md) | Round 99–104 | 22.0 KB | 固定 Ingest Workflow…Migration squash、最 |
 | [rounds-0105-0106.md](walkthrough/rounds-0105-0106.md) | Round 105–106 | 15.3 KB | Project quality au…`nb-workflow` Kern |
-
-## Round 107 — Product Service、Worker Admin、Worker Gateway 与 DTO 草案
-
-日期：2026-08-11
-
-### 目标
-
-用户确认：
-
-1. 远程 Worker v1 使用 HTTPS request/response + bounded long-poll；
-2. `ActionDefinition.executionPlacement` 使用
-   `host`、`trusted_worker`、`remote_worker`；
-3. 下一步深入检查原始需求和系统能力，单独形成完整 API/DTO 草案；
-4. 草案允许后续实现调整；
-5. 草案完成后派发多个子代理从不同链路审查和查漏补缺。
-
-本 Round 只修改文档，不修改代码、Prisma schema、migration 或测试。目标不是把
-所有 Planned API 一次实现，而是让后续 schema、Nest Controller、Worker Admin、
-Gateway fake 和 conformance 有一套可审查输入。
-
-### 工作区基线
-
-```text
-worktree:
-C:\Users\notnotype\Documents\CodeRepository\GithubProjects\cosmos\
-  .worktree\t04-ingest-workflow-convergence
-
-branch: feat/t04-ingest-workflow-convergence
-HEAD: dc78f0519e0320afbb27191b0d573be6cd62aedd
-merge-base origin/master: 45ae918bfcfcf5dfaf90480183608007a48ee170
-staged files: 0
-```
-
-开始时 worktree 已有前序 Spike 的 87 个 dirty 文件，涉及代码、migration squash、
-文档和 Playwright 文件。本 Round 没有清理、覆盖或暂存这些用户/前序改动；只编辑
-API 及其同步文档。
-
-### 原始需求与能力调查
-
-重新对照：
-
-- `docs/requirements/0001-original-requirements.md`；
-- `docs/requirements/0002-product-requirements.md`；
-- 两份总体/信息模型架构；
-- ADR-0001/0002；
-- Task 04/05/06；
-- 当前 contracts、Transport、Nest Controller、Worker Runtime、Prisma schema、
-  Docker/Compose 和环境配置。
-
-从用户场景反推的公共能力不只包括当前 Source/Feed 路由，而是：
-
-```text
-System / Capability / Protocol
-Catalog / Plugin / SourceDefinition / ActionDefinition / WorkflowDefinition
-Connection / Source / CollectionPlan / Trigger
-WorkflowRun / Activity / Step / Job / Attempt / Receipt / Signal
-Observation / Entry / Revision / Asset / Blob
-Story / Topic / Entity / Relation / Proposal
-KnowledgeSignal / ResearchRequest
-Feed / Related / Interaction / ReadState / Spotlight
-Workspace / Artifact / Agent Conversation
-Board
-Publication / Subscription / Delivery
-Storage / Backup / Restore / Export / Delete / Integrity
-```
-
-同时确认三个 API 面：
-
-```text
-Product Service API
-  -> Web / CLI / Desktop / Knowledge Manager tools
-
-Worker Admin API
-  -> health / readiness / status / capability / metrics / drain
-
-Worker Gateway API
-  -> Session / long-poll claim / Attempt heartbeat / Receipt / Result
-```
-
-Product Service 与 Gateway 初期可由同一 NestJS 宿主承载，但模块、路径和版本独立；
-Worker Admin 使用单独内部端口。Admin 不提供同步 Job execute，Gateway 不持有第二
-份 Job terminal。
-
-### v0.1 独立草案
-
-新增：
-
-```text
-docs/api/README.md
-docs/api/0001-common-contracts.md
-docs/api/0002-product-service-api.md
-docs/api/0003-product-dtos.md
-docs/api/0004-worker-admin-api.md
-docs/api/0005-worker-gateway-api.md
-docs/api/0006-scenarios-and-conformance.md
-docs/api/0007-review-findings.md
-```
-
-v0.1 约 3,800 行，覆盖 Header、Page、ServiceError、Idempotency、ETag、SSE、
-ValueRef、全部 Product 资源、Worker Admin、Gateway Session/claim/lease/
-Receipt/Value/Secret/result/replacement/drain，以及产品、故障和 Transport 场景。
-
-同步新增：
-
-- ADR-0003：固定三个 API 面、long-poll、Direct/Gateway 混合和 placement；
-- PRD v0.16：增加 Product/Admin/Gateway、remote Worker 和 placement 需求；
-- 总体架构 v0.20；
-- Task 06 Step 5 的 API/Host convergence 边界；
-- 原始需求 append-only 追加本轮用户原话；
-- `CONTEXT.md`、文档索引、项目状态和 README 入口。
-
-### 五个隔离只读审查代理
-
-先前一次前台尝试因单次命令 60 秒上限未产出，已清理且不计入结果。随后使用五个
-隐藏、ephemeral、read-only `codex exec`，分别读取限定文件并写独立结果：
-
-| 范围 | 结果 | 状态 |
-| --- | --- | --- |
-| 产品需求覆盖 | `product.final.md` | 成功 |
-| Workflow/恢复 | `runtime.final.md` | 成功 |
-| Gateway/分布式 | `gateway.final.md` | 成功 |
-| 运维/安全/隐私 | `operations.final.md` | 成功 |
-| DTO/Zod/兼容 | `dto.final.md` | 成功 |
-
-实际成功数：5/5。代理均未修改仓库文件。结果文件和 SHA-256 记录在
-[`docs/api/0007-review-findings.md`](../../../docs/api/0007-review-findings.md)。
-
-### 主审与 v0.2 修订
-
-主代理没有直接接受代理结论，而是逐条回查 PRD、架构和代码。主要修订：
-
-#### 1. 实现成熟度与产品 Phase 分离
-
-`Current/Convergence/Planned/Reserved` 是实现成熟度，不是产品 Phase。Phase 1
-最小闭环已完成，但完整 Phase 1 仍缺 Source 删除、默认定时 CollectionPlan、
-Source health/checkpoint、完整 Run/Step、真实 RSS/Docker/长时间恢复。
-
-这些项目标为 `Planned · Phase 1 remainder`，不因此全部扩进 Task 06。
-
-#### 2. Product DTO 补齐
-
-- 最小 Story Current 与完整 Story/Topic Planned 分开；
-- Run 增加不可变 Trigger reason/input/fingerprint/definition/mapping/evidence；
-- CollectionPlan 增加 discovery context；
-- KnowledgeSignal 使用 append-only disposition，不增加可变 status；
-- ResearchRequest 增加 trigger input/depth，运行细节通过 runId 查询 Runtime；
-- 协作修改统一 `MutationAuditSnapshot`；
-- Story merge/split 增加用户状态 migration preview/apply/revert；
-- Ranking/Spotlight 增加 policy/version/signal/adjustment/threshold；
-- Workspace 增加 maintenance binding、current Step、recent result、input/budget；
-- Artifact 使用严格 sandbox render profile，不再用 `executable: boolean`；
-- Subscription 增加 schedule/timezone/misfire/channel capability；
-- Detail 的集合改为有界 preview，完整历史走分页子资源；
-- 删除会退化为纯 `unknown` 的 `ValueEnvelope | unknown`。
-- 主审补充 Search/Feed/Run/List Query DTO，以及 Connection/Plan/Trigger、
-  Story/Topic、Workspace/Board、Publication/Delivery 和数据运维 mutation Command
-  基线，避免只靠自然语言生成 Zod/OpenAPI。
-
-#### 3. Gateway owner 与恢复收口
-
-v0.1 存在真实双 owner 矛盾：旧 Session 可继续 Attempt，新 Session 又可用同 token
-resume。v0.2 固定：
-
-```text
-Attempt owner
-= (attemptId, ownerSessionId, ownerEpoch, leaseToken, leaseExpiresAt)
-```
-
-- replacement 只停止旧 Session 新 claim；
-- resume 通过 TaskStore CAS 转移 owner、递增 epoch、轮换 token；
-- 旧 owner 立即失去 heartbeat/Receipt/Result 权限；
-- 没有 resume 时，旧 Session 仍只能完成自己的原 owner tuple。
-
-#### 4. external late evidence
-
-lease 丢失后不能再使用 lease Receipt API。external claim 获得短期、
-Attempt-scoped late-evidence capability；它只能追加 `external_effect_unknown`
-并触发 reconcile，不能续租、提交 Result、恢复 Secret、写 checkpoint/Event 或
-领域状态。
-
-#### 5. 容量、backpressure 与 Receipt CAS
-
-- TaskStore 原子保留 Session/lane slot；Worker `available` 只是提示；
-- long-poll 有每 Session in-flight 上限；
-- claim 使用 Idempotency-Key 保存 batch replay，响应丢失不再领取第二批；
-- Receipt 使用 revision/baseRevision、submission fingerprint 和 server receivedAt；
-- heartbeat expiry 被 Run/Action/drain deadline 截断；
-- draining Session 继续 heartbeat，但不能 claim。
-
-#### 6. Value、Secret 和身份
-
-- JSON hash 使用 RFC 8785 canonical UTF-8；
-- text/blob 使用实际原始字节；
-- body limit 在 JSON 解析前执行；
-- upload 增加 finalize/abort/hash/size；
-- Secret material 不使用可持久化 ValueEnvelope；
-- Secret resolution 保持 Reserved；
-- Gateway bootstrap 固定 provider-neutral identity claims，具体 mTLS/OIDC/token
-  provider 后置。
-
-#### 7. 部署和实现 gate
-
-审查确认当前实现有以下真实风险：
-
-- Product API 无认证并可绑定 `0.0.0.0`，Compose 发布 4310；
-- CORS 不能作为认证；
-- fixture `fixturePath` 可读取绝对路径；
-- Source/Job/Asset public projection 尚未证明移除内部 config/result/storageKey；
-- 还没有 `/healthz`/`readyz` 分离、Worker Admin 或真实 Gateway。
-
-v0.2 明确当前未认证模式只适用于本机/受信网络；公网、远程 Product API、Admin、
-Gateway、Secret 和文件 transfer 都需要独立 release gate。本 Round 不扩张到实现
-完整认证平台。
-
-### 调整或未采纳的建议
-
-- 不把全部 Phase 1 项标成 Task 06 `Convergence`；
-- 不把 KnowledgeSignal 改成可变 status；
-- 不因 DTO 有 Attempt 就提前强制独立 Prisma Attempt 表；先要求独立语义、
-  projection 和 conformance，无法证明再迁移；
-- 不在 ResearchRequest 复制第二份 Activity/Job 状态；
-- 不把当前代码单 Entry Story projection 误报成 v0.1 草案错误；草案已有多成员
-  Membership，当前代码属于实现迁移；
-- 不在本轮实现完整公网认证、Secret 平台或不可信插件沙箱。
-
-### 同步文件
-
-v0.2 修订同步到：
-
-- `docs/api/` 全部草案与审查记录；
-- ADR-0003；
-- 总体架构 v0.21；
-- Task 06 fake Gateway/conformance gate；
-- `PROJECT-STATUS.md`；
-- 根 `README.md`。
-
-PRD 已有 Trigger/Research/Story/推荐/Artifact/运行恢复需求，不为每个协议字段再
-制造一批重复技术型 ID。原始需求文件只保留此前 append-only 追加。
-
-### 当前未实现
-
-- v0.2 Zod schema 和 package 拆分；
-- Product Controller/Application Port/HTTP Client 迁移；
-- canonical route、Header、Page、ETag、ServiceError 和 SSE wire 收敛；
-- Worker Admin HTTP Server；
-- Gateway fake、owner CAS、late evidence、Receipt CAS、slot reservation、
-  backpressure 和 claim replay；
-- bootstrap provider、Secret Broker、PostgreSQL/S3 多主机；
-- Connection/CollectionPlan/Knowledge/Research/Workspace/Publication 产品实现；
-- 公网认证、Docker 生产安全模板和完整数据生命周期。
-
-### 验证
-
-已运行：
-
-- `git diff --check`：通过；
-- 全仓 48 个 Markdown：相对链接错误 0、未闭合围栏 0、EOF 缺失 0、尾随空白
-  0、conflict marker 0；
-- PRD 定义型需求 ID：164 个、重复 0；
-- 原始需求相对 HEAD：新增 22 行、删除 0 行；当前 SHA-1
-  `74f785a572ecedf150e2ad12ecf0f758f7278671`，HEAD SHA-1
-  `c94f7a89f97640dbde5a9bffeee948d6a04a1aec`；
-- 8 份 API 文档共 5,158 行，37 个 TypeScript 围栏合并后以 strict/noEmit 做
-  syntax + semantic 检查：0 diagnostics；
-- Product DTO TypeScript：敏感 lease/session/storage/path 字段 0，
-  `ValueEnvelope | unknown` 退化联合 0，mutation Command 无 owner `unknown` 0；
-- Product API 自动提取 185 个 method/path key，文件内重复 0；Worker Admin
-  9 个，重复 0；
-- 旧 `Flow` 只保留在总体架构 3 处明确迁移/历史说明；
-- staged files 0，五个审查进程均已退出；
-- branch/HEAD/merge-base 仍分别为
-  `feat/t04-ingest-workflow-convergence`、
-  `dc78f0519e0320afbb27191b0d573be6cd62aedd`、
-  `45ae918bfcfcf5dfaf90480183608007a48ee170`。
-
-本轮没有运行代码测试、typecheck、build、Node production、migration、browser、
-Docker、真实来源、长时间恢复、Gateway 多主机、真实认证、Secret Broker 或
-Harness/Agent。既有 Spike 证据仍是历史基线，不能替代 API v0.2 后续实现的
-schema/Transport/conformance 验收。
+| [rounds-0107.md](walkthrough/rounds-0107.md) | Round 107 | 11.5 KB | Product Service…Gateway 与 DTO 草案 |
 
 ## Round 108：Worker Registry 主线/归档边界纠偏
 
@@ -378,3 +100,50 @@ leader 判定：当前主线状态已与代码一致；若未来恢复 Worker Re
 **合并（2026-09-24）**：分支 `feat/t04-user-truth-protection` 已 `--no-ff` 合入 `master`（合并提交 `f66ee27`）并推送 `origin`；合并后按仓库教训先 `bun run db:generate` 再重跑门禁全绿——typecheck 0、单元 126 文件／731 用例、`docs:check` 776 文件 0 失败、size 门禁 PASS、`git diff --check` 干净。worktree 与分支已清理：`git worktree remove` 注销成功但目录残留，原因是浏览器验收时从该 worktree 启动的 opencli daemon（`node_modules/@jackwener/opencli/.../daemon.js`）仍持有句柄，结束该进程后目录删除成功。**未做**：`20260924100000_story_revision_producer` 未对真实数据根执行（迁移属数据生命周期变更，需单独授权）；推送只到 `origin`，未推 `upstream`。
 
 **下一步**：ORG-019 落地时按 ADR-0028 的 Revisit Gate 把判据细化为字段掩码，并在第一个派生分析写入方落地时实现候选 Revision 降级。
+
+## Round 110：`listSources()` 批量投影（来源列表读）
+
+日期：2026-11-02。分支 `fix/t04-list-sources-batch-projection`，base `354e9f9`（本地 `master`；`git fetch origin` 失败于代理不可达，未与 `origin/master` 的 `b07286b` 同步）。
+
+### 目标
+
+偿还 README §7「仍缺」里的 `listSources()` 债务：来源列表读的查询量随来源数线性增长。触发点是 P3-3 的文档治理演练——该 Task 是开发者指定的对象，切片本身是仓库自认的待办，不是为演练制造的需求。
+
+### 实施
+
+- `packages/storage-prisma/src/repository/sources.ts`：`listSources()` 改四批读——来源、计划（含触发器与连接）、legacy `Run`、`WorkflowRun`，内存归并后调纯投影；`getSource()` 仍走单条读。
+- `packages/storage-prisma/src/repository/source-projection.ts`（新建）：`requireSourceManifest`、`mergeRunDiagnostics`、`firstRunPerSource`、`projectSourceSnapshot`、`latestRunRowsPerSource`。单条读与列表读共用同一投影，同一事实不会有两个答案。
+- `packages/storage-prisma/src/repository/helpers-4.ts`：`latestRunDiagnostics`／`toSourceSnapshot` 改调共享实现，删掉搬走的重复代码。
+- `packages/storage-prisma/src/index.fixtures.ts`：`withRepository` 第三参可传 `clientOptions`（构造参数打开 `query` 事件），`datasources` 仍由夹具独占决定，避免用例改错库。
+
+**行数上界**（`latestRunRowsPerSource`）：`ROW_NUMBER() OVER (PARTITION BY sourceInstanceId ORDER BY createdAt DESC)` 在 SQL 层分组，返回行数上界等于来源数。`findMany` 的 `take` 是整批全局上限、`distinct` 不在 SQL 层分组（整批读回内存再挑），两者都做不到，注释里写明了理由。`EXPLAIN QUERY PLAN` 实测走 `Run_sourceInstanceId_createdAt_idx`；`WorkflowRun.sourceInstanceId` 可空由 `IN (…)` 与 `firstRunPerSource` 的 null 判断双重排除；并列 `createdAt` 与旧 `findFirst` 同样未定义，不造新语义。
+
+### 验证
+
+- `bunx vitest run packages/storage-prisma/src/source-list-projection.test.ts packages/storage-prisma/src/source-deletion.test.ts` → 9/9（主代理独立复跑，EXIT=0）。
+- `bun run --cwd packages/storage-prisma typecheck` → 0；`git diff --check` → 干净。
+- `bunx vitest run packages/storage-prisma/src`（带 `TMPDIR` 指 worktree）→ 68 文件通过／1 失败：`prisma-cli.test.ts` 3 例，因临时目录被指进 worktree 使测试先命中 worktree 的 `node_modules/prisma`；用系统临时目录单跑该文件 7/7 通过，不是代码回归。
+- 新用例 6 条钉两件事：查询次数与来源数无关（5 个来源仍等于 1 个来源，且 ≤6）；运行行读取行数有界——两来源历史不对称（40 条 / 3 条且更近），无界实现与「全局 take N 行」的假修复都会失败（后者让长历史来源丢掉最新一条）。
+
+### 偏差与代价
+
+- 旧实现实测是 `1 + 4N`（无连接）／`1 + 5N`（含连接）：每来源除 Run、WorkflowRun、计划外，SQLite 下 `include: { triggerBindings }` 还被 Prisma 拆成一条。README 与封口分册里的 `1 + 2N` 从来不准。
+- 来源定义非法时，列表读会先付批量查询的代价再抛错；只影响错误路径，换来的是一条查询服务全部来源。
+- `listCollectionPlans()` 的逐计划查询**未**在本轮处理，债务保留在 README §7，只有来源列表这一半被偿还。
+- 行数上界用例靠「SQL 参数里出现 `-1`」判无界；将来若有人写出不带 `LIMIT` 但语义上整批读回的裸 SQL，这条启发式抓不到，目前靠「不对称历史 + 每来源最新一条仍被选中」的语义断言兜底（局限已写在测试注释里）。
+- Round 107 已按上一轮的触发线移入 `walkthrough/rounds-0107.md`，只在分册索引表登记，未在原位留占位行——与 105–106 等既有分册一致。
+
+### 文档影响
+
+代码实现中主代理发现两处文档失真，按「代码代理只提建议、主代理审核、另派文档代理落笔」处理：
+
+- `.agents/tasks/04-workflow-runtime/README.md`：删掉来源列表的 `1 + 2N` 债务，改记计划侧未偿还；「已存在」补一条来源列表批量投影（不写死固定次数，精确数字指向测试）。
+- `docs/spec/storage/0001-prisma-repository.md` 及其 `ERRATA.md`：`part-01-domain-model.md:38` 只写了 legacy `Run` 一路、漏记 `WorkflowRun` 合并，且该分册已封口；按「勘误不改历史分册」登记到同级台账，主文加分册勘误登记小节与索引行。
+
+### 未运行
+
+全仓测试、`bun run build`、浏览器／组件实验室、E2E、Node production、真实来源验收、远端 CI。本切片不触碰连接器、Worker 运行路径与外部来源；合并前应补全仓门禁。
+
+### 下一步
+
+合并前：`bun run db:generate` 后跑全仓 typecheck／test／build 与文档门禁；`listCollectionPlans()` 的计划侧批量投影可另起切片。`docs/spec/storage/0001-prisma-repository/part-01-domain-model.md` 的正文保持封口原样，后续如需重写只能出新版本分册。

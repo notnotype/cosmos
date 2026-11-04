@@ -7,7 +7,7 @@ import { type Prisma } from "@prisma/client";
 import { directorySize, fileSize, parsePlanRevisionId, parseSourceRevisionId } from "../storage-root.js";
 import { appendDomainEvent } from "./repository-internals.js";
 import { PrismaCosmosRepositoryHelpers4 } from "./helpers-4.js";
-import { firstRunPerSource, latestRunRowsPerSource, mergeRunDiagnostics, projectSourceSnapshot, requireSourceManifest } from "./source-projection.js";
+import { firstRunPerPlan, firstRunPerSource, latestRunRowsPerPlan, latestRunRowsPerSource, mergeRunDiagnostics, projectSourceSnapshot, requireSourceManifest } from "./source-projection.js";
 
 export class PrismaCosmosRepositorySources extends PrismaCosmosRepositoryHelpers4 {
     async createSource(input: CreateSourceCommand): Promise<SourceSnapshot> {
@@ -126,7 +126,25 @@ export class PrismaCosmosRepositorySources extends PrismaCosmosRepositoryHelpers
             include: { triggerBindings: true, source: { select: { revision: true } } },
             orderBy: { createdAt: "asc" },
         });
-        return Promise.all(plans.map((plan) => this.toCollectionPlanSnapshot(plan)));
+        if (plans.length === 0) {
+            return [];
+        }
+        const planIds = plans.map((plan) => plan.id);
+        // 与 listSources 同理：逐计划查两类运行会让查询量随计划数线性增长（实测 3 + 2N），
+        // 而计划列表是产品面的常驻读。这里按计划 id 一次取回每个计划各自最新的一条，
+        // 窗口函数保证行数上界等于计划数，不随历史长度增长。
+        const [legacyRuns, workflowRuns] = await Promise.all([
+            latestRunRowsPerPlan(this.prisma, "Run", planIds),
+            latestRunRowsPerPlan(this.prisma, "WorkflowRun", planIds),
+        ]);
+        const legacyByPlan = firstRunPerPlan(legacyRuns);
+        const workflowByPlan = firstRunPerPlan(workflowRuns);
+        return plans.map((plan) => toCollectionPlanSnapshot(
+            plan,
+            plan.triggerBindings,
+            plan.source.revision,
+            mergeRunDiagnostics(legacyByPlan.get(plan.id) ?? null, workflowByPlan.get(plan.id) ?? null),
+        ));
     }
 
     async getCollectionPlan(planId: string): Promise<CollectionPlanSnapshot | null> {

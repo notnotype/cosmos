@@ -157,3 +157,34 @@ leader 判定：当前主线状态已与代码一致；若未来恢复 Worker Re
 `bun run test` 首次带隔离 `TMPDIR` 跑时，209 文件／1,191 用例中 3 个失败全在 `packages/storage-prisma/src/prisma-cli.test.ts`：该测试从临时目录向上找 `node_modules`，当 `TMPDIR` 指进仓库时会先命中仓库自己的 `node_modules/prisma`。去掉 `TMPDIR`、用系统临时目录重跑全仓 `bun run test` 后 209 文件／1,191 用例全部通过，故这 3 个失败是环境登记口径问题，不是本切片的回归。工作区注入 `TMPDIR` 会给实现用例提隔离数据根，重跑全仓前要先取消它。
 
 未运行：浏览器／组件实验室、E2E、Node production、真实来源验收、远端 CI（`git fetch origin` 失败于代理不可达，本地 `master` 仍领先未同步）。
+
+## Round 111：`listCollectionPlans()` 批量投影（计划列表读）
+
+日期：2026-11-04。分支 `fix/t04-plan-list-projection`，base `7e79222`（本地 `master`，与 `origin/master` 同步）。
+
+### 目标
+
+偿还 README §7「仍缺」里 `listCollectionPlans()` 的同类债务：计划列表读逐计划查 legacy `Run` 与 `WorkflowRun`。触发点是 P3-3 演练后的第 6 步，仍是仓库自认的待办。
+
+### 实施
+
+- `packages/storage-prisma/src/repository/source-projection.ts`：把窗口函数查询与「每组取首条」抽成按归属列参数化的私有实现，公开 `latestRunRowsPerSource`／`firstRunPerSource`（行为不变）与新增 `latestRunRowsPerPlan`／`firstRunPerPlan`；归属列是字面量联合类型，不来自外部输入。
+- `packages/storage-prisma/src/repository/sources.ts`：`listCollectionPlans()` 改为「计划表一批 + 两类运行行各一批」，运行诊断在内存归并后交给既有纯函数 `toCollectionPlanSnapshot`；`getCollectionPlan()` 仍走单条读，两条路径共用 `mergeRunDiagnostics`，并列时 legacy 胜的口径一致。
+
+### 验证
+
+- 新增 `packages/storage-prisma/src/collection-plan-list-projection.test.ts` 四条：查询数不随计划数增长（1 个与 5 个计划相等且 ≤6）、运行行按计划分组取最新（两计划历史 40／3 条不对称）、列表与单条读结果逐字段相同、`planId` 为空的运行行被丢弃。
+- RED（实现前同命令）：`expected 13 to be 5`、运行表查询 `4` 条而非 `2` 条，其余两条此时已通过。GREEN：4/4。
+- 关联回归 `source-list-projection`、`collection-plan-repository`、`source-deletion`、新增文件共 23 用例通过；`bun run --cwd packages/storage-prisma typecheck` exit 0。
+
+### 偏差与代价
+
+`packages/storage-prisma/src/repository/sources.ts` 因此增至 737 行 / 36.1 KB（红线 800 行 / 50 KB），余量已很薄；下一条债务落在同一文件前应先拆分。代码大小门禁里 `sources.ts` 本就在基线登记（31,120 B），增长只报 warning，不阻塞。
+
+### 文档影响
+
+`.agents/tasks/04-workflow-runtime/README.md` 的 §7「已存在」与「仍缺」两处已同步改写：不再声称计划列表各查一次，也不再把它列为待偿还项。
+
+### 未运行
+
+产品全量测试、构建、浏览器／组件实验室、真实来源验收、远端 CI。

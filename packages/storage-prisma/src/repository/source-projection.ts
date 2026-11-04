@@ -57,51 +57,84 @@ export function mergeRunDiagnostics(
  * 批量读的运行行：查询按 `createdAt desc` 排序，每组的第一行就是最新一条。
  * 归属为空的行（WorkflowRun 的 sourceInstanceId 可空）直接丢弃。
  */
-export function firstRunPerSource<Row extends SourceRunDiagnosticsRow & { sourceInstanceId: string | null }>(
-    rows: readonly Row[],
-): ReadonlyMap<string, Row> {
+function firstRunPerOwner<Row, Key extends keyof Row>(rows: readonly Row[], column: Key): Map<string, Row> {
     const latest = new Map<string, Row>();
     for (const row of rows) {
-        if (row.sourceInstanceId !== null && !latest.has(row.sourceInstanceId)) {
-            latest.set(row.sourceInstanceId, row);
+        const owner = row[column];
+        if (typeof owner === "string" && !latest.has(owner)) {
+            latest.set(owner, row);
         }
     }
     return latest;
+}
+
+export function firstRunPerSource<Row extends SourceRunDiagnosticsRow & { sourceInstanceId: string | null }>(
+    rows: readonly Row[],
+): ReadonlyMap<string, Row> {
+    return firstRunPerOwner(rows, "sourceInstanceId");
+}
+
+export function firstRunPerPlan<Row extends SourceRunDiagnosticsRow & { planId: string | null }>(
+    rows: readonly Row[],
+): ReadonlyMap<string, Row> {
+    return firstRunPerOwner(rows, "planId");
 }
 
 export type RunHistoryTable = "Run" | "WorkflowRun";
 
 export type LatestRunRow = SourceRunDiagnosticsRow & { sourceInstanceId: string };
 
+export type LatestPlanRunRow = SourceRunDiagnosticsRow & { planId: string };
+
+/** 运行行的归属列：来源列表按来源归并，计划列表按计划归并。 */
+type RunOwnerColumn = "sourceInstanceId" | "planId";
+
 /**
- * 每个来源的最新一条运行行。
+ * 每个归属者（来源或计划）的最新一条运行行。
  *
- * 不能用 `findMany({ where: { sourceInstanceId: { in } }, orderBy, take })`：`take` 是整批的
+ * 不能用 `findMany({ where: { [column]: { in } }, orderBy, take })`：`take` 是整批的
  * 全局上限，而这里每组各要一条；Prisma 也不用 `distinct` 在 SQL 层分组，整批历史会被读回内存
- * 再挑，行数于是随历史长度线性增长。窗口函数把分组交给 SQLite，返回行数上界就等于来源数。
- * `@@index([sourceInstanceId, createdAt])` 让分区与排序都走索引，不必扫全表。
+ * 再挑，行数于是随历史长度线性增长。窗口函数把分组交给 SQLite，返回行数上界就等于归属者数。
+ * `@@index([<column>, createdAt])` 让分区与排序都走索引，不必扫全表。
  *
- * 表名来自字面量联合类型而非外部输入，因此可以直接拼进 SQL；id 仍走占位符参数。
+ * 归属列与表名都来自字面量联合类型而非外部输入，因此可以直接拼进 SQL；id 仍走占位符参数。
  * DateTime 列由 Prisma 解码成 `Date`（原始 SQL 也一样），调用方不必再转换。
  */
+async function latestRunRowsGrouped<Row extends SourceRunDiagnosticsRow>(
+    client: Pick<Prisma.TransactionClient, "$queryRawUnsafe">,
+    table: RunHistoryTable,
+    column: RunOwnerColumn,
+    ownerIds: readonly string[],
+): Promise<readonly Row[]> {
+    if (ownerIds.length === 0) {
+        return [];
+    }
+    const placeholders = ownerIds.map(() => "?").join(", ");
+    return client.$queryRawUnsafe<Row[]>(
+        `SELECT ${column}, createdAt, finishedAt, errorMessage FROM (
+            SELECT ${column}, createdAt, finishedAt, errorMessage,
+                ROW_NUMBER() OVER (PARTITION BY ${column} ORDER BY createdAt DESC) AS rowNumber
+            FROM "${table}"
+            WHERE ${column} IN (${placeholders})
+        ) WHERE rowNumber = 1`,
+        ...ownerIds,
+    );
+}
+
 export async function latestRunRowsPerSource(
     client: Pick<Prisma.TransactionClient, "$queryRawUnsafe">,
     table: RunHistoryTable,
     sourceIds: readonly string[],
 ): Promise<readonly LatestRunRow[]> {
-    if (sourceIds.length === 0) {
-        return [];
-    }
-    const placeholders = sourceIds.map(() => "?").join(", ");
-    return client.$queryRawUnsafe<LatestRunRow[]>(
-        `SELECT sourceInstanceId, createdAt, finishedAt, errorMessage FROM (
-            SELECT sourceInstanceId, createdAt, finishedAt, errorMessage,
-                ROW_NUMBER() OVER (PARTITION BY sourceInstanceId ORDER BY createdAt DESC) AS rowNumber
-            FROM "${table}"
-            WHERE sourceInstanceId IN (${placeholders})
-        ) WHERE rowNumber = 1`,
-        ...sourceIds,
-    );
+    return latestRunRowsGrouped<LatestRunRow>(client, table, "sourceInstanceId", sourceIds);
+}
+
+export async function latestRunRowsPerPlan(
+    client: Pick<Prisma.TransactionClient, "$queryRawUnsafe">,
+    table: RunHistoryTable,
+    planIds: readonly string[],
+): Promise<readonly LatestPlanRunRow[]> {
+    return latestRunRowsGrouped<LatestPlanRunRow>(client, table, "planId", planIds);
 }
 
 export function projectSourceSnapshot(input: {

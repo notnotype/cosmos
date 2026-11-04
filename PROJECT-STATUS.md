@@ -1,8 +1,8 @@
 # Cosmos Project Status
 
-> 当前基线（2026-10-29）：HEAD `354e9f9936c7bdb7fda9acd6b4e018deae8b779c`；`master` 比 `origin/master` 超前 16 个提交（`b07286b`）。**状态未经当前 HEAD 整体验证，均为“未验证/待确认”；`710c2b1` 仅为 Task 36 历史验收基线。** Phase 1 无未闭合项；Phase 2 十四条切片和平台面四块已交付，需求表有 1 项未闭合：LIB-004（延后 Phase 3）。G01–G08 暂停，Phase 1 后置债按 2026-09-07 保留。
+> 当前基线（2026-11-04）：HEAD `839e874`；`master` 比 `origin/master` 超前 3 个提交。**代码树同 `5e760e2`：类型检查、构建、全仓 1,245 用例、文档门禁通过；浏览器、真实来源、远端 CI 未验证。`710c2b1` 仅为 Task 36 历史验收基线。** Phase 1 无未闭合项；Phase 2 十四条切片和平台面四块已交付，需求表有 1 项未闭合：LIB-004（延后 Phase 3）。G01–G08 暂停，Phase 1 后置债按 2026-09-07 保留。
 >
-> **Task [`36`](.agents/tasks/36-reading-layout-and-object-details/README.md) 已完成并合并：`9fccfcb`（实现）＋ `2257480`（切片 C/D/E 专属浏览器用例）以 `--no-ff` 合并为 `710c2b1` 并推送（2026-10-05）；该 SHA 是历史验收基线，不代表当前代码基线，维护者验收通过。分支与 worktree 尚未清理。
+> **Task [`36`](.agents/tasks/36-reading-layout-and-object-details/README.md) 已完成并合并：`9fccfcb`（实现）＋ `2257480`（切片 C/D/E 专属浏览器用例）以 `--no-ff` 合并为 `710c2b1` 并推送（2026-10-05）；该 SHA 是历史验收基线，不代表当前代码基线，维护者验收通过。本地分支与 worktree 已清理；远端分支 `origin/feat/t36-reading-layout-and-object-details` 仍在。
 
 ## 历史分册索引
 

@@ -136,3 +136,27 @@ Otirik 依据本页与 Task 04 Round 110 的证据判定第②③项通过：演
 合并后在主工作区 `D:/Otirik/Workstation/cosmos` 复跑全仓门禁：`bun run typecheck` exit 0、`bun run build` exit 0、`bun run docs:check` exit 0（1,228 文件、0 失败）、文档大小门禁 PASS、聚焦两项测试 9 passed。全仓 `bun run test` 首次带隔离 `TMPDIR` 时有 3 个失败全在 `prisma-cli.test.ts`（该测试从临时目录向上找 `node_modules`，`TMPDIR` 指进仓库会先命中仓库自己的 prisma）；去掉 `TMPDIR` 重跑为 209 文件／1,191 用例全部通过，故判为环境口径问题。随后以 `0f49bf4` 把这次门禁结果补记到 Task 04 Round 110。未 push、未清理 worktree、未关闭 Task 04 的 `listCollectionPlans()` 债务。
 
 文档工作边界：`PROJECT-STATUS.md` 未登记这条债（`grep 'listSources\|1 + 2N'` 无命中），本切片也不改变模块状态或外部合同，故按准入决策表不更新它；该文件已 8,958 token，接近 9,000 健康上限，追加会越线。
+## 2026-11-04：治理分支合入与八步收尾
+
+### 治理分支合入（承上节「合并进 master」）
+
+上节末句「P3 整体仍缺治理分支合入 master 与记录提交」在写下时成立，现已作废。治理分支 `docs/no-ref-document-governance` 先以 `4fda5e0` 提交 G19 记录（含 P3-3 第①项勘误、两份归档分册），再以 `--no-ff` 合入 master 为 `7e79222`，并于同日推送 `origin`（`b07286b..7e79222`）。合并前按用户裁决处理基线口径：以治理分支的 3 条为底，逐条复核 master 独有条目，实测 `docs/api/0002-product-service-api.md` 3,282 B、`docs/proposals/ui-copy-review-v1.md` 24,830 B、`docs/proposals/ui-surface-ownership-v1.md` 25,574 B、`docs/spec/domain/0001-normalized-content.md` 4,496 B、`docs/testing/README.md` 5,353 B 均低于警戒线，无需补登。
+
+合并后全仓门禁：`bun run typecheck` exit 0、`bun run build` exit 0、`bun run test` 211 文件／1,241 用例全通过、`bun run docs:check` exit 0（1,261 文件）、文档大小门禁 PASS。代码大小门禁仍报 3 项合并前既有违规（`connection-panel.tsx`、`workflow-host-runtime.test.ts`、`activity-store.ts`），经 `git diff --exit-code HEAD` 核实本次未改，未修存量、未加豁免。
+
+### 八步收尾
+
+用户按依赖序确认八步，主代理逐项完成后停下汇报：
+
+1. Otirik 验收 P3-3 第②③项，结果并入本页「验收」节。
+2. 提交 G19 记录（`4fda5e0`，7 文件 +243/−83）。
+3. 合入治理分支（`7e79222`，0 冲突）。
+4. 推送 origin（`b07286b..7e79222`）。
+5. 清理 worktree 与分支：删除 `.worktrees/fix-t04-list-sources` 与 `.worktrees/docs-governance`，`git branch -d` 删除对应分支（均非 `-D`）。清理时 `.worktrees/fix-t04-list-sources` 残留 `node_modules` 内含 14 个 junction，逐个核对 Target 均在该 worktree 内后用 `[IO.Directory]::Delete` 摘链再删目录；未动 `fix/t39-provider-feedback`（内有 4 个未跟踪文件）。
+6. Task 04 第二切片：`listCollectionPlans()` 由 `3 + 2N` 改为常数查询（实现 `fa6f617`、合并 `5e760e2`）。实测旧实现 1／3／5 计划分别为 5／9／13 次查询，每计划两条 `WHERE planId = ? LIMIT 1`；改为按计划批量取 Run 与 WorkflowRun 后用 `ROW_NUMBER() OVER (PARTITION BY planId ...)` 归并。新增测试先 RED（`expected 13 to be 5`）后 GREEN，关联回归 23 用例通过。代价是 `sources.ts` 增至 737 行（红线 800 行），故把归并逻辑放在 `source-projection.ts`。
+7. Task 04 文档真实性清理（`839e874`）：migration 计数 4→42、11 个代码 0 命中符号改为真实实现名或「从未实现」、`source.checkpoint.superseded.v1` 更正为 `collection-plan.checkpoint.superseded.v1`、typed-tree codec 更正为 canonical JSON + `ValueRef`；归档标签经四处探测确认不存在，按用户裁决直接改为正确记录，封口分册正文不动、勘误落两份新建 `ERRATA.md`。
+8. `PROJECT-STATUS.md` 基线更新（`baefdac`）：等长替换为当前 HEAD 与领先提交数，并把验证结论挂在代码树实际所在的 `5e760e2`；该文件已 8,990 token，再作实质追加须先归档历史段。
+
+### 验证边界
+
+上述每步均在改动后 fresh 跑 `bun run docs:check`、文档大小门禁与 `git diff --check`。产品全量测试在合并后跑过一次全绿；第 6–8 步只改 Markdown 与 Prisma 仓储代码，未重跑浏览器、真实来源与远端 CI。本地 master 现领先 `origin/master` 4 个提交，均未推送；worktree 与分支按用户指示待全部合并后统一清理。

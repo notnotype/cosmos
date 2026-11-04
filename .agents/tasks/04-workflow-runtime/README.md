@@ -236,12 +236,12 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 - Phase 1 固定 `cosmos.ingest@1` Workflow 与兼容 Probe/legacy Job。
 - Prisma/SQLite、FTS、Blob、Observation/Entry/Revision/Asset 和最小 Story projection。
 - API/Worker 的基础 Job lease、heartbeat、retry、checkpoint 和 SSE。
-- API 手动 Source Run 与 schedule 通过 Prisma atomic
-  `WorkflowCommandRepository` 创建版本化 Ingest Run；默认
-  `COSMOS_WORKER_WORKFLOW_CONCURRENCY=1`，Worker 注册并执行
+- API 手动 Source Run 与 schedule 通过 `IngestWorkflowControlService` 入队
+  版本化 Ingest Run（同一 `idempotencyKey` 复用 envelope）；Worker 由
+  `COSMOS_WORKFLOW_HOST_ENABLED` 控制是否启动 workflow host，注册并执行
   `source.fetch@1 → library.ingest@1[] → source.checkpoint@1`。
 - 固定 Ingest 的 Observation、Entry/Revision、Asset、最小 Story、FTS、
-  DomainEvent/Outbox 与 checkpoint 写入同时验证 Workflow Run lease 和 Action
+  DomainEvent 与 checkpoint 写入同时验证 Workflow Run lease 和 Action
   Job lease；两个 Prisma Runtime 的接管测试证明旧 Worker 不能继续提交。
 - URL-free fallback identity 已包含 `sourceLocator`；Observation discovery
   context 保存 manual/schedule、Workflow ref 和 Action command key。缺少条目级
@@ -252,18 +252,25 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 - 固定 Ingest Run 保存独立 `SourceExecutionSnapshot`、cursor、checkpoint revision
   和 trigger；`source.fetch@1` 不再读取当前 Source。相同幂等键重放复用首次快照，
   排队后修改 Source 配置不会改变该 Run 的外部读取。
-- Source checkpoint 保存单调 revision，Run 输入快照 expected revision；并发旧
-  Run 记录 `source.checkpoint.superseded.v1`，不覆盖较新 cursor。
+- checkpoint 按采集计划寻址：`Checkpoint.revision` 单调递增，Run 入队时把
+  expected revision 写进输入快照；并发旧 Run 提交时只记
+  `collection-plan.checkpoint.superseded.v1`，不覆盖较新 cursor。该逻辑在
+  `packages/storage-prisma/src/repository/media.ts`，与计划级 checkpoint CAS 同处。
 - retryable Action 在 `nextAttemptAt` 前不会让父 Run 被 Worker 反复领取。
-- Workflow journal 使用版本化 typed-tree codec 保存 `Uint8Array` 等运行时值，
-  marker-shaped 用户对象不会被误转；旧 `__cosmosType` 数据仍可读取。
-- 尚未进入 `origin/master` 的 Workflow spike migrations 已压缩为单个
-  `20260810170000_workflow_runtime`；当前最终树共 4 条 migration。历史 Round 中
-  的 8–26 条计数描述压缩前的 spike 过程，不是当前部署清单。
+- Run 状态整体以 canonical JSON 存在 `WorkflowRun.stateJson`
+  （`packages/storage-prisma/src/workflow-state-codec.ts` 的 `toCreateData`／
+  `toUpdateData`），事件 payload 同样走 canonical JSON；二进制内容不进状态，
+  而由 `BlobWorkflowValueStore` 存成 blob 后以 `ValueRef` 引用。
+- Workflow 迁移清单当前为 42 条（`packages/storage-prisma/prisma/migrations/`），
+  没有 `20260810170000_workflow_runtime` 目录；历史 Round 中的 8–26 条计数
+  描述的是当时的 spike 过程，不是当前部署清单。
 - 脚本式 Workflow Runtime spike：Run orchestration、Action Invocation、Action Job、Signal、checkpoint、child wait/start、child terminal StepRun propagation、journal replay 和 Run/Job lease fencing。
-- `apps/worker` 已通过统一 `WorkerPollerSupervisor` 接入 Workflow Run lane，
-  默认并发为 `1`，也可显式设为 `0` 关闭；每个 slot 使用稳定 owner，宿主 stop
-  signal 会传播到 Runtime/Action，abort 后保留 lease 让后续 Worker 接管。
+- `apps/worker` 通过 `apps/worker/src/workflow-host.ts` 的 `createWorkflowHost()`
+  组装 `PrismaWorkflowHostStore`、`WorkflowRunLane`、`WorkflowActivityWorker` 与
+  `WorkflowCompletionDispatcher`；`apps/worker/src/runtime.ts` 的 `pollOnce()` 按
+  schedule → run → activity → completion → legacy 顺序串行推进，没有并行 slot
+  配置项。`COSMOS_WORKFLOW_HOST_ENABLED=false` 可关闭整个 workflow host，关闭后
+  Ingest 回落到 legacy Job 路径。
 - 真实 Prisma/SQLite Store 已通过同一个 Worker Run lane 验证：持久 Run 能由
   lane dispatch；宿主 lane abort 后，过期 Run/Action Job 能由新 lane reclaim
   并成功收口。
@@ -279,21 +286,18 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
   lane 生效，并在同一 SQLite 中写入 `ready` heartbeat；通过显式 IPC test
   control 已验证 `worker.stopped`、资源关闭和 `stopped` heartbeat，但
   Windows OS 子进程 `SIGTERM` 仍未作为通过项。
-- Prisma Workflow Store spike：WorkflowRun、WorkflowStepRun、Action Invocation、持久 DomainEvent、Outbox message、per-Consumer delivery、Consumer cursor 和基本 claim/ack/fail。
-- Generic Outbox Consumer Runner spike：单次 claim → handler → ack/fail tick，带错误分类和 lease-lost 结果。
-- Consumer Registry/Binding spike：Definition 不可变、Binding revision/CAS 和从持久配置解析 Runner。
-- `WorkflowCommandService` spike：统一 catalog、Binding 和 Run enqueue 的应用层
-  控制入口；command id 会产生 system-scoped DomainEvent/Outbox，Run enqueue
-  具备 durable idempotency。
-- `WorkflowCommandRepository` 已增加 Prisma atomic 实现：catalog、Binding 和
-  Run enqueue 可以把状态变更、DomainEvent 与 Outbox 放在同一个 transaction；
-  同一 commandId 的并发请求只保留一个结果。固定 Ingest 的 API、schedule 和
-  Worker 生产组装已经注入该 repository；其它未来 Command 仍需逐条固定事务
-  边界。
+- Workflow 持久化由 `PrismaWorkflowHostStore` 承担，按 envelope、Run 生命周期、
+  lease、activity、completion 投递分文件实现（`packages/storage-prisma/src/workflow-host-store/`）。`WorkflowCompletion` 承载
+  completion 的 claim/heartbeat/requeue/dead-letter；仓库没有独立的 Outbox message
+  表、Consumer 注册表或 Consumer cursor。
+- Run 入队的应用层入口是 `IngestWorkflowControlService`
+  （`packages/application/src/workflow-control.ts`）：固定 Ingest 的 API、schedule
+  与 Worker 组装都注入它，同一 `idempotencyKey` 重复提交复用同一 envelope，冲突
+  则拒绝。
 - 当前 `master` 的 Worker host 保留固定 Ingest 的 Run/Activity lane；`packages/worker-admin` 只提供进程内的 health、status、capabilities、metrics 和 drain 管理面。
 - 当前 `master` 没有持久 `WorkflowWorkerRegistration`、Registry/能力投影 Prisma 模型、TTL 注册生命周期、版本化注册表 evidence 或 `GET /api/v1/workflow-workers`；`Worker Admin.status()` 的 `registrationGeneration` 固定为 `null`。
 - Worker Admin 的 capability 输出是本地 executable evidence，不是跨进程发现、Run owner、准入状态或调度依据。`assessWorkflowWorkerCapability()`、`aggregateWorkflowWorkerAvailability()`、`no_capable_worker` 和 cleanup consumer 当前均未实现。
-- 上述注册表、能力评估、投影和查询能力曾出现在归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`，但该提交不在当前 `master` 祖先链；对应 Round 78–97 只保留为历史 WIP 记录，未来恢复时必须在当前基线上重新实现和验收。
+- 上述注册表、能力评估、投影和查询能力据称曾出现在归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`；该标签与提交在当前仓库不可核实——本地 `git tag -l`、`git cat-file -e`、`git ls-remote --tags origin`、`git ls-remote --tags upstream` 四处均查不到，`git log --all -S` 在代码路径上是 0 次提交。Round 78–97 只保留为历史 WIP 记录，未来恢复时必须在当前基线上重新实现和验收。
 - Source 列表与计划列表的读都已做批量投影：计划（含触发器与连接）与两类运行行分别
   按来源 id、计划 id 集合批量读取，查询次数与来源数、计划数无关；运行行按归属者
   只取最新一条，读到的行数上界等于归属者数。单条读与列表读共用同一套归并规则。
@@ -317,11 +321,11 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 - Connection/Secret/State、多采集计划和 Adapter manifest。
 - Knowledge/Research、Outbox 外部发布、通用 Trigger Consumer、Consumer Registry
   的 API/Transport 接入、Harness/`nb-memory` Adapter。
-- 固定 Ingest 的 API/Worker command wiring 已使用 Prisma atomic repository；
+- 固定 Ingest 的 API/Worker 入队已包在 Prisma 事务内；
   其它未来 Command 和测试用 InMemory adapter 仍需逐条确认原子边界。
-- 当前主线没有 Worker capability discovery/Registry、版本化持久 evidence、权威 availability projection、scheduler/consumer 消费或 `no_capable_worker`；归档标签 `b8a1701` 的 WIP 代码不属于当前实现，未来若恢复该方向必须在当前基线上重新实现并验收。
-- Outbox 的 per-Consumer delivery 已完成最小 spike，但旧 message-level 状态字段仍保留，尚未完成生产迁移和清理。
-- Outbox 已有最小 bounded retry/backoff policy，但 Consumer policy 持久化、dead-letter、`snapshot_required` 和外部副作用幂等尚未完成。
+- 当前主线没有 Worker capability discovery/Registry、版本化持久 evidence、权威 availability projection、scheduler/consumer 消费或 `no_capable_worker`；这些能力从未在本仓库实现过，未来若恢复该方向必须在当前基线上重新实现并验收。
+- 仓库没有 Outbox 表、per-Consumer delivery 或 Consumer cursor；事件目前只以
+  `DomainEvent` 持久化，外部发布、bounded retry 策略和 dead-letter 均未实现。
 - 固定 Ingest 只表达 manual/schedule provenance；关注账号、推荐流、搜索、
   公告监控和 Research 仍需由未来采集计划提供完整 discovery context。
 - 内容寻址 Blob 在领域事务前预写，极端中断会留下不可见 orphan bytes；Blob GC
@@ -352,6 +356,11 @@ manifest-only API、独立 Migrator 和 Agent Extension 也尚未全部实现。
 未运行的代码、Docker、浏览器、真实来源、长时间恢复和真实 Agent 验收不得由文档检查替代。
 
 ## 64. Round 71：Workflow admission diagnostics
+
+> 历史记录：Round 71–73 描述的 diagnostic 查询、Registry 类、`WorkerPollerSupervisor`
+> 与 `COSMOS_WORKER_WORKFLOW_*` 配置在当前仓库都查不到——`packages`/`apps`/`plugins`
+> 的 `.ts`/`.tsx`/`.prisma` 中 0 命中，代码路径上 `git log -S` 也是 0 次提交。
+> 以下三节保留为当时的 WIP 记录，不代表当前可实现能力。
 
 ### 64.1 目标
 

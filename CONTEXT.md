@@ -248,7 +248,7 @@ Connection / CollectionPlan
 
 - `packages/worker-admin` 当前提供进程内 `WorkerCapabilitySnapshot`，包含 lane、通用能力和 manifest evidence；这些信息来自本进程配置，不是持久注册或跨进程 owner。
 - 当前 `master` 没有持久 `WorkflowWorkerRegistration`、Registry/能力投影 Prisma 模型、TTL 注册生命周期、`GET /api/v1/workflow-workers` 或 `no_capable_worker` evaluator/projection。`Worker Admin.status().registrationGeneration` 固定为 `null`。
-- 完整注册表与能力投影曾存在于归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`，但该提交不在当前 `master` 祖先链中；归档 Round 78–97 只能作为历史 WIP 证据，不能作为当前实现能力。
+- 完整注册表与能力投影在本仓库找不到实现：`packages`/`apps`/`plugins` 的代码里 0 命中，`git log --all -S` 在代码路径上也是 0 次提交；仓库既无 `WorkflowWorkerRegistration` 模型，也无对应 migration。归档 Round 78–97 只是当时的文字记录，不能作为实现证据，未来恢复该方向必须在当前基线上重新实现和验收。
 - 当前实现合同以 [`docs/spec/runtime/0003-worker-admin.md`](docs/spec/runtime/0003-worker-admin.md) 为准；未来恢复 Worker Registry 时，必须在当前主线上重新建立持久模型、API 和行为验收。
 
 ### Entry、Story 与知识 Pipeline

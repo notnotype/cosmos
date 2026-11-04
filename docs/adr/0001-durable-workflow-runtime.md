@@ -108,8 +108,8 @@ Workflow Worker Registry 只保存 slot capability discovery projection。它可
 
 本节保留已接受的目标合同，不代表当前主线已经交付。2026-09-01 核对的当前
 `master` 没有持久 `WorkflowWorkerRegistration`、Registry migration、能力投影或
-`GET /api/v1/workflow-workers`；相关完整实现只存在于归档标签
-`archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`，不在当前主线祖先链中。
+`GET /api/v1/workflow-workers`；本仓库代码里也找不到该类实现（`packages`/`apps`/
+`plugins` 零命中，代码路径上 `git log --all -S` 零提交）。
 
 Worker 的 admission refresh 只提交正向的、与本地 Definition/Action、持久
 catalog 和 Run definition snapshot 精确匹配的 `ready` 证据。单个 Worker 缺少

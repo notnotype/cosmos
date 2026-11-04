@@ -44,7 +44,7 @@
 
 ## 19. 当前决定
 
-以下条目是长期设计合同；只有分册“当前实现与设计合同”明确列出的部分属于当前代码切片。固定 Ingest、API manifest-only、Worker executable、Worker Admin 和本地 SQLite/Data Root 见 [`0001-cosmos-foundation/part-01-03.md`](0001-cosmos-foundation/part-01-03.md)；Gateway、多主机、独立 Migrator、Knowledge/Research、完整 Agent/Harness、Workspace/Artifact 与自动策展仍是目标或待验证。封口分册若保留早期切片口径，以本主文、架构入口及 spec/代码为准，正式更正走勘误流程。
+以下条目是长期设计合同；只有分册“当前实现与设计合同”明确列出的部分属于当前代码切片。固定 Ingest、API manifest-only、Worker executable、Worker Admin 和本地 SQLite/Data Root 见 [`0001-cosmos-foundation/part-01-03.md`](0001-cosmos-foundation/part-01-03.md)；Gateway、多主机、独立 Migrator、Knowledge/Research、完整 Agent/Harness、Workspace/Artifact 与自动策展仍是目标或待验证。封口分册若保留早期切片口径，以本主文、架构入口及 spec/代码为准，正式更正走同级 [`ERRATA.md`](0001-cosmos-foundation/ERRATA.md)。
 
 以下决定进入当前 v0.19 基线，但后续需求仍可通过记录理由调整：
 

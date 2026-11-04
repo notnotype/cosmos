@@ -39,7 +39,7 @@
 
 - 当前 `master` 核对基线为 `9c6f513`；主线没有 `WorkflowWorkerRegistration`、对应 Prisma migration、`GET /api/v1/workflow-workers`、capability evaluator 或独立 capability projection 源文件。
 - 当前 `packages/worker-admin` 只提供 Worker 进程内的管理/观测服务；`WorkerStatusSnapshot.registrationGeneration` 固定为 `null`，当前 Prisma schema 只有 `WorkerHeartbeat`，没有持久 Worker Registry。
-- 完整注册表、TTL/heartbeat、能力投影和查询实现存在于归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`；`b8a1701` 不在当前 `master` 祖先链中。
+- 完整注册表、TTL/heartbeat、能力投影和查询实现存在于归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 的 `b8a1701`；`b8a1701` 不在当前 `master` 祖先链中。（更正，2026-11-04：本仓库没有该标签，`b8a1701` 也不是可解析的提交；该断言无法核实，见 Round 112。）
 - 当前实现规格 [`docs/spec/runtime/0003-worker-admin.md`](../../../docs/spec/runtime/0003-worker-admin.md) 已准确描述进程内 Worker Admin；归档 Round 78–97 保留为历史 WIP，不作为当前实现证据。
 
 实际修改：
@@ -50,8 +50,8 @@
 验证命令与结果：
 
 - `git show master:packages/storage-prisma/src/workflow-worker-registry.ts`：当前主线不存在该文件。
-- `git show b8a1701:packages/storage-prisma/src/workflow-worker-registry.ts`：归档提交包含该文件；同一归档提交也包含 registration migration 和 Runtime registration 测试。
-- `git merge-base --is-ancestor b8a1701 master`：不成立；归档实现未进入当前主线。
+- `git show b8a1701:packages/storage-prisma/src/workflow-worker-registry.ts`：归档提交包含该文件；同一归档提交也包含 registration migration 和 Runtime registration 测试。（更正，2026-11-04：本仓库无 `b8a1701`，此命令无法执行，见 Round 112。）
+- `git merge-base --is-ancestor b8a1701 master`：不成立；归档实现未进入当前主线。（更正，2026-11-04：`b8a1701` 不存在，该判定无意义；真实结论是该实现从未进入本仓库，见 Round 112。）
 - 当前工作区代码与文档搜索确认：注册相关命中只剩进程内 Worker Admin 类型/字段及文档中的目标或历史说明。
 
 偏差：发现活跃状态文档曾把归档 WIP 的验证结果写成当前主线证据，已在本轮纠正。
@@ -188,3 +188,41 @@ leader 判定：当前主线状态已与代码一致；若未来恢复 Worker Re
 ### 未运行
 
 产品全量测试、构建、浏览器／组件实验室、真实来源验收、远端 CI。
+
+## Round 112：Task 04 文档真实性清理
+
+日期：2026-11-04。分支 `master`（本地 `5e760e2`，未推送）。
+
+### 目标
+
+第 7 步：核对 README 里「已存在／仍缺」两份清单与代码，纠正把从未存在或已被替换的实现写成当前能力的条目。
+
+### 核实结果
+
+- `packages/storage-prisma/prisma/migrations/` 实际 42 条，不存在 README 曾写的 `20260810170000_workflow_runtime`；「4 条 migration」不成立。
+- 以下符号在 `packages`/`apps`/`plugins` 的 `.ts`/`.tsx`/`.prisma` 中 0 命中，`git log --all -S<sym> -- '*.ts' '*.tsx' '*.prisma'` 也是 0 次提交（历史命中全在文档提交）：`OutboxMessage`、`ConsumerRegistry`、`WorkflowStepRun`、`WorkflowCommandService`、`WorkflowCommandRepository`、`inspectWorkflowAdmissions`、`PrismaWorkflowDefinitionRegistry`、`workflow_admission_diagnostic`、`WorkerPollerSupervisor`、`COSMOS_WORKER_WORKFLOW_REGISTRY`、`COSMOS_WORKER_WORKFLOW_CONCURRENCY`、`__cosmosType`。
+- 真实实现：Run 入队走 `packages/application/src/workflow-control.ts` 的 `IngestWorkflowControlService`；持久化走 `packages/storage-prisma/src/workflow-host-store/` 的 `PrismaWorkflowHostStore`；Worker 组装在 `apps/worker/src/workflow-host.ts` 的 `createWorkflowHost()`，开关是 `COSMOS_WORKFLOW_HOST_ENABLED`；`apps/worker/src/runtime.ts` 的 `pollOnce()` 串行推进各 lane，没有并发 slot 配置。
+- 事件名：`source.checkpoint.superseded.v1` 在 `559f356`（切到采集计划寻址）后不存在，现名 `collection-plan.checkpoint.superseded.v1`（`packages/storage-prisma/src/repository/media.ts:389`，同一位置的 `:438` 是 `collection-plan.checkpoint.committed.v1`）。
+- 状态编码：`WorkflowRun.stateJson` 用 canonical JSON（`packages/storage-prisma/src/workflow-state-codec.ts`），事件 payload 同样；二进制走 `BlobWorkflowValueStore` 的 blob + `ValueRef`。仓库没有 typed-tree codec。
+- 归档标签 `archive/t04-workflow-runtime-spike-wip-20260818` 与 `b8a1701`：本地 `git tag -l`（0 个 tag）、`git cat-file -e`、`git ls-remote --tags origin`、`git ls-remote --tags upstream` 均查不到，Round 108 的 `git show b8a1701:...` 因此不可复现。
+
+### 修改
+
+- `.agents/tasks/04-workflow-runtime/README.md` §7：改 migration 计数、把 5 条 spike 条目替换为 `PrismaWorkflowHostStore`／`IngestWorkflowControlService` 的真实描述、把「各消一次」的入队与 Worker 描述对齐代码、把 Outbox 两条改成「仓库没有 Outbox 表」、把 typed-tree codec 改成 canonical JSON + `ValueRef`、把归档标签声明标为不可核实；§64 前加历史注记覆盖 Round 71–73。
+
+### 未修改
+
+- `CONTEXT.md`、`docs/adr/0001-durable-workflow-runtime.md`、`docs/architecture/0001-cosmos-foundation/part-13-17.md`、`PROJECT-STATUS/history-*.md` 里同样的归档标签断言；属跨文件勘误，需另行决定是否走 ERRATA。
+
+### 未运行
+
+产品全量测试、构建、浏览器、真实来源验收、远端 CI。
+### 跨文件更正（同日，用户裁决后追加）
+
+上文「未修改」一节写于本轮前半段。用户随后裁决：既然归档标签在当前仓库查不到，就按错误记录直接改正。据此追加以下更正，原文与历史记录不改写。
+
+- 核实：`git tag -l` 为 0 个；`git rev-parse --verify 'b8a1701^{commit}'` 报 `fatal: Needed a single revision`；`git show-ref` 仅 10 个 ref；`origin`（Otirik-handi/cosmos）与 `upstream`（notnotype/cosmos）的 `ls-remote --tags` 都没有该标签。`WorkflowWorkerRegistration`、`workflow-worker-registry`、`no_capable_worker` 在 `packages`/`apps`/`plugins` 的 `.ts`/`.tsx`/`.prisma` 里 files=0、代码路径 `git log --all -S` commits=0。把该说法写进 7 个文件的是 `58b6315 docs: correct Worker Registry implementation status`（2026-09-01），它的依据只是一次文档提交。
+- 更正：`CONTEXT.md`、`docs/adr/0001-durable-workflow-runtime.md`、`.agents/tasks/04-workflow-runtime/README.md` 三处改为「本仓库找不到实现（零命中、零提交）」；`walkthrough.md` 第 42／53／54 行原位追加「更正，2026-11-04」标注而不改原句。
+- 封口分册 `docs/architecture/0001-cosmos-foundation/part-13-17.md`、`PROJECT-STATUS/history-2026-08-reviews.md`、`PROJECT-STATUS/history-2026-09-phase1.md` 正文一字节未改，勘误写入新建的同级 `ERRATA.md`（`docs/architecture/0001-cosmos-foundation/ERRATA.md`、`PROJECT-STATUS/ERRATA.md`），并从两份主文档正文加链接以便发现。
+- 体积取舍：两份主文档不在基线内，须守住 ≤9,000 token 警戒线，故未在索引表新增 ERRATA 行（会越线），改为正文行内链接。
+- 验证：`bun run docs:check` exit 0（1,264 文件、0 失败）；文档大小门禁 exit 0（429 文件、3 基线、1 豁免，唯一 warning 是基线内 `CONTEXT.md`）；`git diff --check` 干净。未提交、未推送。

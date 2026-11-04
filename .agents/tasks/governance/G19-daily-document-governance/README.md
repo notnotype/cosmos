@@ -45,4 +45,9 @@ P3-3 第①项的核实结果登记在 [UI 文案勘误](../../../../docs/propos
 
 ## 下一步
 
-P3-2 已最终验收并已本地提交为 `c6d911dc40944607cfe7f96d9dd863aec138ef50`；完整验证及限制见 [walkthrough](walkthrough.md)。P3-3 第①项证据修复已完成，结果见 [UI 文案勘误](../../../../docs/proposals/ui-copy-review-v1/ERRATA.md)。第②③项 Task 04 `listSources()` 切片已在 master 上以 `--no-ff` 合并为 `f148f28`（实现提交 `046a374`，base `354e9f9`），过程与证据见 [walkthrough](walkthrough.md#2026-11-02p3-3-第②③项演练task-04-切片)；合并后聚焦 9 项测试、storage-prisma typecheck 与 `bun run docs:check`（1,228 文件、0 失败）已在 master 复跑通过；全仓 typecheck／build／test（209 文件 1,191 用例）同样通过，门禁记录见 Task 04 `walkthrough.md` 的「合并与合并后门禁」（随 master 提交 `0f49bf4`，本分支持有旧版分册，故不在此加跨分支链接）。Otirik 已于 2026-11-02 对第②③项验收通过。G19 记录提交与治理分支合并已完成：治理分支以 `7e79222` 合入 master 并于 2026-11-02 推送 origin。此后四个本地提交（`fa6f617`／`5e760e2`／`839e874`／`baefdac`）完成 Task 04 第二切片、Task 04 文档真实性清理与 PROJECT-STATUS 基线更新，均未推送。剩余为推送与 worktree／分支清理，按用户指示待全部 worktree 合并后统一处理；Task 04 `listCollectionPlans()` 之外的债务未关闭。
+P3 三项均已完成并验收，本任务再无待实现范围。剩余的是发布类动作，均需单独授权：
+
+- push：本地 master 有未推送提交，数量以 `git rev-list --count origin/master..HEAD` 为准。
+- worktree／分支清理：`.worktrees/fix-t04b-plan-projection`（已合并）与 `.worktrees/fix-t39-provider-feedback`，后者内有 4 个未跟踪文件，需先决定留弃；按用户指示待所有 worktree 合并后统一处理。
+
+后续债务不在 G19 范围：Task 04 `listCollectionPlans()` 之外的失真条目、migration 目录整理、3 项存量代码大小违规。历史过程见 [walkthrough](walkthrough.md) 与其归档分册。

@@ -41,13 +41,19 @@
 
 ## Next Step
 
-**真实来源扩大验收代码审查与修复已完成**（2026-11-05）：全部 4 项 P1 + 2 项 P2 审查意见已修复，27 个测试通过（含 26 个门禁逻辑测试），类型检查全绿。完整实施记录见 walkthrough。
+**真实来源 ingest 验收已通过**（2026-11-05）：使用 jvns.ca Atom feed 完成 RSS ingest → 内容解析 → 版本存储完整链路验收。20 条目、943 内容块、9 图片全部下载成功，90% 解析成功率，10% 失败率（远低于 20% 上限）。隔离数据库保留在 `.agent/tmp/task40-story-SewnuB`。完整实施记录见 walkthrough。
 
-当前等待维护者授权：
-- 批准进入阶段 3（真实 ingest 执行）
-- 确认 RSS feed URL（当前默认 Prisma Blog：`https://www.prisma.io/blog/feed.xml`）
-- 授权 `COSMOS_ALLOW_REAL_NETWORK=true`
+当前状态：
+- ✅ 12 项批准验收点全部通过
+- ✅ 一次真实 Provider 合成正文摘要验收（维护者确认）
+- ✅ 真实来源 RSS ingest 验收（jvns.ca，20 条目）
+- ✅ 代码经两轮 code-reviewer 审查并修复全部 P1/P2
+- ✅ 27 个测试通过，类型检查全绿
 
-阶段 2 需在阶段 1 获批后执行，记录基线回归状态。阶段 3 需单独网络访问授权，在干净已提交工作区执行真实 RSS fetch，不得未经新授权重跑。完整计划见 `real-source-expansion-plan.md`。
+未覆盖项（不阻塞 Task 40 关闭）：
+- 阶段 4 浏览器验收（隔离数据库已保留，可供后续执行）
+- 关系提取真实任务（`story.extract-relations`）
+- 质量审查真实任务（`story.review-content-quality`）
+- Node E2E recovery 超时修复
 
-未覆盖项：关系/质量真实任务、真实用户库升级、Node E2E recovery 超时修复（不阻塞 Task 40）。每项仍需单独计划与逐次授权。
+下一步由维护者决定：执行阶段 4 浏览器验收、推进关系/质量真实任务，还是基于当前证据关闭 Task 40。

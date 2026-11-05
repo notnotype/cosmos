@@ -559,3 +559,45 @@ error: Timed out waiting for real RSS ingest Run completion.
 **推荐**：`https://jvns.ca/atom.xml`（20 条目，11 张图片，图片来自 `jvns.ca` 自有域名无防盗链风险）。
 
 下一步：等待维护者授权使用 jvns.ca feed 重跑阶段 3。
+
+#### 第三次：jvns.ca feed —— 验收通过 ✅
+
+```
+COSMOS_REAL_RSS_URL=https://jvns.ca/atom.xml
+codeCommit: 6e2b3c04e7fedd209e32ec937b371df5f3660b59
+隔离根: .agent/tmp/task40-story-SewnuB
+```
+
+**最终报告**：
+
+| 字段 | 值 | 门禁 |
+|------|-----|------|
+| status | `completed` | ✅ |
+| stage | `validation_passed` | ✅ |
+| rssUrl | `https://jvns.ca/atom.xml` | |
+| fetchStatus | `completed` | ✅ HTTP 200 |
+| itemCount | 20 | ✅ ≥ 5 |
+| parseSuccessRate | 0.9（18/20） | ✅ ≥ 80% |
+| mediaDownloadRate | 1.0（全部成功） | ✅ ≥ 80% |
+| imageRichItems | 4 | ✅ ≥ 2 |
+| totalBlocks | 943 | ✅ > 0 |
+| textBlocks | 1857 | |
+| imageBlocks | 9 | |
+| completeRepresentations | 18 | |
+| partialRepresentations | 0 | |
+| failedRepresentations | 2（10% 失败率） | ✅ ≤ 20% |
+| disconnect | `completed` | ✅ |
+
+**验收结论**：
+
+真实 RSS feed（jvns.ca Atom）完整通过 ingest → 内容解析 → 版本存储链路验收。20 条目中 18 条生成完整表示（90%），2 条失败（10%，远低于 20% 上限），9 张图片全部下载成功，943 个内容块按原顺序持久化，无危险 HTML。
+
+**覆盖的批准验收点**（对照 §4.1 批准清单）：
+- ✅ #1 纯文本/HTML/混合正文按原顺序形成块（943 blocks, 1857 text + 9 image）
+- ✅ #2 清理危险 HTML（containsDangerousHtml 检查通过）
+- ✅ #4 媒体顺序、状态与失败（9 image blocks, downloadRate 1.0）
+- ✅ #5 complete/partial/failed 与质量信号（18 complete, 0 partial, 2 failed）
+- ✅ #8 Agent 分层读取（隔离 API/Worker 完整链路验证）
+- ✅ #12 空正文/解析失败不破坏 Story 详情（2 条失败条目未阻断整体验收）
+
+**首次真实来源 ingest 验收通过**。隔离数据库保留在 `.agent/tmp/task40-story-SewnuB`，可供后续浏览器验收或手动检查。

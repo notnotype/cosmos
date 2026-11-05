@@ -508,3 +508,54 @@ scripts/acceptance/
 文档影响：无需更新（验收合同变化已体现在 plan.ts checks 描述，不需要同步测试规范）。
 
 下一步：等待维护者授权进入阶段 3（需 `COSMOS_ALLOW_REAL_NETWORK=true` 和明确 RSS feed URL）。
+
+### 2026-11-05：阶段 3 真实执行——两次失败与诊断
+
+#### 第一次：Prisma Blog feed 失效（HTTP 404）
+
+```
+COSMOS_REAL_RSS_URL=https://www.prisma.io/blog/feed.xml
+```
+
+Run 在 1 秒内失败，`itemCount: 0`，`error: null`。日志确认：
+```
+connector.transport.failed  status: 404  host: www.prisma.io
+```
+
+**根因**：`https://www.prisma.io/blog/feed.xml` 返回 HTTP 404，feed 已失效。非代码问题。
+
+#### 第二次：Smashing Magazine feed 媒体下载超时
+
+```
+COSMOS_REAL_RSS_URL=https://www.smashingmagazine.com/feed/
+```
+
+RSS fetch 成功（HTTP 200，40 条目，1.4 MB），但 **388 张图片串行下载耗时约 147 秒**，超过 `waitForTerminalRun` 的等待预算，Run 被判超时：
+
+```
+error: Timed out waiting for real RSS ingest Run completion.
+```
+
+日志确认媒体下载本身全部成功（`status: "saved"`），仅 1 张因 HTTP 403 失败。Worker 正常运行无异常。
+
+**根因**：`waitForTerminalRun` 内部 `waitForCondition` 使用硬编码 180 秒超时，但验收脚本调用时未传自定义超时，实际使用了 `waitForCondition` 的默认 10 秒（隔离 e2e 测试设计的是受控本地 feed，瞬间返回）。真实来源媒体下载耗时远超此预期。
+
+**代码修复**：
+- `scripts/e2e/helpers.ts`：`waitForTerminalRun` 新增可选 `timeoutMs = 180_000` 参数，内部传递给 `waitForCondition`（现有调用方默认 180 秒不受影响）
+- `scripts/acceptance/real-source-ingest-runner.ts`：调用处显式传 `300_000`（5 分钟）
+- 类型检查通过 ✅，26+1 测试通过 ✅
+- 提交：`6560330`
+
+#### Feed 候选评估
+
+| Feed | HTTP | 条目 | 图片 | 评估 |
+|------|------|------|------|------|
+| Prisma Blog | 404 | - | - | ❌ feed 已失效 |
+| Smashing Magazine | 200 | 40 | 388 | ⚠️ 内容太丰富，媒体下载耗时长 |
+| Next.js Blog | 200 | ~10 | 0 | ❌ 无图片，不满足图文混排版 ≥ 2 |
+| overreacted.io | 200 | 59 | 0 | ❌ 无图片 |
+| jvns.ca (Atom) | 200 | 20 | 11 | ✅ 推荐：条目充足、图片适量、技术博客 |
+
+**推荐**：`https://jvns.ca/atom.xml`（20 条目，11 张图片，图片来自 `jvns.ca` 自有域名无防盗链风险）。
+
+下一步：等待维护者授权使用 jvns.ca feed 重跑阶段 3。

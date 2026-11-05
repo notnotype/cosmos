@@ -344,6 +344,7 @@ export async function waitForTerminalRun(
     apiBaseUrl: string,
     runId: string,
     label: string,
+    timeoutMs = 180_000,
 ): Promise<Record<string, unknown>> {
     let completed: Record<string, unknown> | null = null;
     await waitForCondition(
@@ -357,7 +358,7 @@ export async function waitForTerminalRun(
                 || result.body.status === "failed"
             );
         },
-        180_000,
+        timeoutMs,
         500,
     );
     const terminal: Record<string, unknown> | null = completed;

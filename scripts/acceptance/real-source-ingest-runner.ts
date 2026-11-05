@@ -232,7 +232,7 @@ export async function runRealSourceIngestAcceptance(options: {
         report.stage = "run_execution";
         
         // 等待 Run 完成
-        const terminal = await waitForTerminalRun(apiBaseUrl, runId, "real RSS ingest");
+        const terminal = await waitForTerminalRun(apiBaseUrl, runId, "real RSS ingest", 300_000);
         assertRunSucceeded("real RSS ingest", runId, terminal);
 
         report.fetchStatus = "completed";

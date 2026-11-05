@@ -17,6 +17,7 @@ test-results/
 !/.local/README.md
 var/
 cache/
+.archify/
 # Agent 工具的本地会话状态（临时面板 HTML、PID、日志），不是项目产物。
 .superpowers/
 # 人工评审时的全文草稿，单个文件可达 160 KB，超出单文件规模红线。

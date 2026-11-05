@@ -33,6 +33,16 @@ COSMOS_ALLOW_REAL_NETWORK=true COSMOS_OPENCLI_PATH=<path> bun run test:real:bili
 
 真实来源脚本使用隔离 API/Worker/SQLite，要求 Run 成功、item count 在 bounded 范围内并通过日志脱敏检查。缺变量、联网许可或 OpenCLI/Browser Bridge 前置时立即失败；这些命令不进入默认 CI，也不把网络错误解释为离线 Worker 回归。
 
+Task 40 真实来源扩大验收使用独立入口 [`real-source-ingest-acceptance.ts`](../../../scripts/acceptance/real-source-ingest-acceptance.ts)：
+
+```text
+COSMOS_REAL_RSS_URL=<url> bun run scripts/acceptance/real-source-ingest-acceptance.ts
+```
+
+先用 `--plan` 只读打印完整请求；此模式不读凭据、不建库、不联网。默认使用 Prisma Blog RSS，可通过环境变量覆盖并支持多个 URL（逗号分隔）。
+
+入口使用隔离 API/Worker/SQLite，验证完整的 RSS ingest → 内容解析 → 版本存储链路。要求 Run 成功、item count ≥ 5、图文混排 ≥ 2、媒体下载率 ≥ 80%，并通过日志脱敏检查。缺变量或联网许可时立即失败；此命令不进入默认 CI。
+
 ### 受控 Story Agent 验收
 
 [`story-agent-acceptance.ts`](../../../scripts/acceptance/story-agent-acceptance.ts) 是需另获逐次授权的终端入口，不进入 CI，也不自动读取用户配置。先用 `bun run scripts/acceptance/story-agent-acceptance.ts --plan` 只读打印完整请求；此模式不读凭据、不建库、不联网。入口离线回归为 `bun run vitest run scripts/acceptance/story-agent-runner.test.ts`，使用真实 SDK 与 durable Host、合成 SSE，不能代替真实 Provider 或产品浏览器验收。

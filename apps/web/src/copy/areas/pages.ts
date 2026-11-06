@@ -113,7 +113,7 @@ export const pages = {
     },
     models: {
         title: "模型",
-        description: "服务商、它的凭证与模型；连接在这里选模型",
+        description: "服务商、它的凭证与模型；账号在这里选模型",
         providers: "服务商",
     },
     layout: {

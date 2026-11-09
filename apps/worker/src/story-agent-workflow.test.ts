@@ -14,11 +14,13 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         await repository.prisma.storyRevision.create({ data: { id: "base", storyId: "story", title: "Original" } });
         await repository.prisma.story.update({ where: { id: "story" }, data: { currentRevisionId: "base" } });
         const candidates = new PrismaStoryAgentCandidateRepository(repository.prisma);
-        const connections = { resolve: vi.fn(async (id: string) => id === "connection" ? {
-            connectionId: id, providerId: "synthetic-provider", api: "openai-completions" as const,
-            baseUrl: "https://synthetic.invalid/v1", modelId: "synthetic-model", modelName: "Synthetic",
-            contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
-        } : null) };
+        const modelId = "configured-model-id";
+        const model = {
+            modelId: "synthetic-model", modelName: "Synthetic", providerId: "synthetic-provider", api: "openai-completions" as const,
+            baseUrl: "https://synthetic.invalid/v1", contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
+            inputPricePerMillion: 1, outputPricePerMillion: 1,
+        };
+        const models = { resolve: vi.fn(async (id: string | null) => id === modelId ? model : null) };
         const complete = vi.fn(async () => ({
             role: "assistant" as const, content: [{ type: "text" as const, text: JSON.stringify({
                 task: "story.summarize", title: "Suggested", summary: "Suggested summary", keyFacts: [],
@@ -31,7 +33,7 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         const options = {
             prisma: repository.prisma, blobs: repository.blobs,
             definitions: [application.createStoryAgentWorkflowDefinition()],
-            actions: [createWorkerAgentInvocationV2Action({ connections, secrets: {
+            actions: [createWorkerAgentInvocationV2Action({ models, secrets: {
                 read: async () => "synthetic-key", put: async () => { throw new Error("Unexpected write"); }, delete: async () => false,
             }, client: { complete } }), application.createStoryAgentSaveAction({ saveGenerated: async (candidate, fence) => {
                 persisted = { candidate, fence };
@@ -40,15 +42,15 @@ it("queues once, resumes through the durable Worker and requires a human decisio
             leaseMs: 60_000,
         };
         const host = createWorkflowHost({ ...options, owner: "enqueue-host" });
-        const control = new application.StoryAgentWorkflowControl({ store: host.store, connections,
+        const control = new application.StoryAgentWorkflowControl({ store: host.store,
             stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
             content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected full content read"); } }),
         });
-        const request = { storyId: "story", connectionId: "connection", task: "story.summarize" as const, idempotencyKey: "request-1" };
+        const request = { storyId: "story", modelId, task: "story.summarize" as const, idempotencyKey: "request-1" };
         const queued = await control.enqueue(request);
         expect(queued).toMatchObject({ status: "queued", candidateId: null });
         expect(await control.enqueue(request)).toEqual(queued);
-        await expect(control.enqueue({ ...request, connectionId: "other" })).rejects.toMatchObject({ code: "conflict" });
+        await expect(control.enqueue({ ...request, modelId: "other-model" })).rejects.toMatchObject({ code: "conflict" });
         expect(complete).not.toHaveBeenCalled();
         expect(await repository.prisma.storyAgentCandidate.count()).toBe(0);
         const recovered = createWorkflowHost({ ...options, owner: "recovered-worker" });
@@ -77,12 +79,10 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         expect(await control.read("story", cancelled.runId)).toMatchObject({ status: "cancelled", candidateId: null });
         await drainWorkflow(recovered, cancelled.runId);
         expect(complete).toHaveBeenCalledTimes(2);
-        connections.resolve.mockResolvedValueOnce(null);
-        await expect(control.enqueue({ ...request, idempotencyKey: "request-invalid" })).rejects.toMatchObject({ code: "conflict" });
     });
 });
 
-it("fails closed after enqueue on revoked connection, provider failure, invalid proposal or cancellation", async () => {
+it("fails closed after enqueue on revoked model, provider failure, invalid proposal or cancellation", async () => {
     await withRepository("story-agent-failures", async (repository) => {
         await repository.prisma.story.create({ data: { id: "story", kind: "document" } });
         await repository.prisma.storyRevision.create({ data: { id: "base", storyId: "story", title: "Original" } });
@@ -92,9 +92,13 @@ it("fails closed after enqueue on revoked connection, provider failure, invalid 
             let allowed = true;
             let cancel = async () => {};
             let time = Date.now();
-            const connections = { resolve: async () => allowed ? { connectionId: "connection", providerId: "synthetic-provider",
-                api: "openai-completions" as const, baseUrl: "https://synthetic.invalid/v1", modelId: "synthetic-model",
-                modelName: "Synthetic", contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref" } : null };
+            const modelId = "configured-model-id";
+            const model = {
+                modelId: "synthetic-model", modelName: "Synthetic", providerId: "synthetic-provider", api: "openai-completions" as const,
+                baseUrl: "https://synthetic.invalid/v1", contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
+                inputPricePerMillion: 1, outputPricePerMillion: 1,
+            };
+            const models = { resolve: async (id: string | null) => allowed && id === modelId ? model : null };
             const complete = vi.fn(async () => {
                 if (mode === "provider") throw new Error("SYNTHETIC-PRIVATE-ERROR");
                 if (mode === "cancel") await cancel();
@@ -107,7 +111,7 @@ it("fails closed after enqueue on revoked connection, provider failure, invalid 
             const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: `worker-${mode}`,
                 now: () => new Date(time), leaseMs: 60_000,
                 definitions: [application.createStoryAgentWorkflowDefinition()],
-                actions: [createWorkerAgentInvocationV2Action({ connections, secrets: {
+                actions: [createWorkerAgentInvocationV2Action({ models, secrets: {
                     read: async () => "synthetic-key", put: async () => { throw new Error("Unexpected write"); }, delete: async () => false,
                 }, client: { complete } }), application.createStoryAgentSaveAction({ saveGenerated: async (candidate, fence) => {
                     const record = await candidates.saveGenerated(candidate, fence);
@@ -115,11 +119,11 @@ it("fails closed after enqueue on revoked connection, provider failure, invalid 
                     return record;
                 } })],
             });
-            const control = new application.StoryAgentWorkflowControl({ store: host.store, connections,
+            const control = new application.StoryAgentWorkflowControl({ store: host.store,
                 stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
                 content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }),
             });
-            const queued = await control.enqueue({ storyId: "story", task: "story.summarize", connectionId: "connection", idempotencyKey: mode });
+            const queued = await control.enqueue({ storyId: "story", task: "story.summarize", modelId, idempotencyKey: mode });
             if (mode === "revoked") allowed = false;
             cancel = async () => { await host.store.cancelWorkflowRun({ runId: queued.runId }); };
             for (let step = 0; step < 60; step += 1) {

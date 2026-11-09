@@ -29,23 +29,24 @@ describe("structured content endpoint", () => {
         readRebuildSource.mockResolvedValueOnce({ currentRepresentationId: "rep-1", locked: true, source: null });
         await expect(controller.rebuildRevisionContent("revision-1", {})).rejects.toMatchObject({ status: 409 });
     });
-    it("queues generation with a required connection and stable client idempotency key", async () => {
+    it("queues generation with an optional model and stable client idempotency key", async () => {
         const control = new StoryAgentWorkflowControl({ store: {} as never,
-            connections: { resolve: async () => null }, stories: { readStory: async () => null },
+            stories: { readStory: async () => null },
             content: new ContentQuery({ readContentSource: async () => null }) });
         const queued = { runId: "run-1", storyId: "story-1", task: "story.summarize" as const,
-            connectionId: "connection-1", status: "queued" as const, candidateId: null, errorCode: null };
+            status: "queued" as const, candidateId: null, errorCode: null };
         const enqueue = vi.spyOn(control, "enqueue").mockResolvedValue(queued);
         const read = vi.spyOn(control, "read").mockResolvedValue(queued);
         const controller = new AppController({} as never, {} as never, undefined, undefined, undefined,
             undefined, undefined, undefined, undefined, undefined, control);
-        const body = { task: "story.summarize", connectionId: "connection-1" };
+        const body = { task: "story.summarize" };
         await expect(controller.proposeStoryAgentCandidate("story-1", { ...body, provider: "attacker" }, "key")).rejects.toBeInstanceOf(BadRequestException);
-        await expect(controller.proposeStoryAgentCandidate("story-1", { task: body.task }, "key")).rejects.toBeInstanceOf(BadRequestException);
+        await expect(controller.proposeStoryAgentCandidate("story-1", { ...body, connectionId: "connection-1" }, "key")).rejects.toBeInstanceOf(BadRequestException);
         await expect(controller.proposeStoryAgentCandidate("story-1", body, "")).rejects.toBeInstanceOf(BadRequestException);
         expect(enqueue).not.toHaveBeenCalled();
-        await expect(controller.proposeStoryAgentCandidate("story-1", body, "key")).resolves.toEqual(queued);
-        expect(enqueue).toHaveBeenCalledWith({ ...body, storyId: "story-1", idempotencyKey: "key" });
+        const modelRequest = { task: body.task, modelId: "configured-model-1" };
+        await expect(controller.proposeStoryAgentCandidate("story-1", modelRequest, "key")).resolves.toEqual(queued);
+        expect(enqueue).toHaveBeenCalledWith({ ...modelRequest, storyId: "story-1", idempotencyKey: "key" });
         await expect(controller.storyAgentGeneration("story-1", "run-1")).resolves.toEqual(queued);
         expect(read).toHaveBeenCalledWith("story-1", "run-1");
         expect(Reflect.getMetadata("__httpCode__", controller.proposeStoryAgentCandidate)).toBe(202);

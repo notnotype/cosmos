@@ -61,6 +61,20 @@ describe("Agent Invocation contracts", () => {
         })).toThrow();
     });
 
+    it("accepts optional costs and defaults their currency", () => {
+        expect(agentInvocationOutputSchema.parse({
+            ...output,
+            cost: { input: 0.1, output: 0.2, total: 0.3 },
+        })).toMatchObject({
+            cost: { input: 0.1, output: 0.2, total: 0.3, currency: "USD" },
+        });
+        expect(agentInvocationOutputSchema.parse(output)).not.toHaveProperty("cost");
+        expect(agentInvocationOutputSchema.safeParse({
+            ...output,
+            cost: { input: -0.1, output: 0, total: 0 },
+        }).success).toBe(false);
+    });
+
     it("keeps output provider metadata and finish reason explicit", () => {
         expect(agentInvocationOutputSchema.parse(output)).toEqual({
             ...output,
@@ -73,30 +87,33 @@ describe("Agent Invocation contracts", () => {
     });
 });
 
-/**
- * `agent.invoke@2`（API 0009「Connection 与 invocation 版本」）：调用方只说"用哪个连接"，
- * 服务商、模型、地址和凭证都由服务端从已保存的配置解析。因此 @2 输入里出现
- * provider/model/baseUrl 任意一项都必须是错误，而不是被忽略——静默忽略会让调用方
- * 以为自己的选择生效了。
- */
+/** @2 callers may optionally select a configured model; otherwise the system default applies. */
 describe("Agent Invocation v2 contracts", () => {
     const v2Input = {
-        connectionId: "connection-1",
         messages: [{ role: "user" as const, content: "Summarize this." }],
         tools: [],
         budget: { maxDurationMs: 5_000, maxToolCalls: 2, maxOutputTokens: 128 },
         metadata: { trace: "t1" },
     };
 
-    it("accepts a connection-scoped invocation and applies defaults", () => {
-        expect(agentInvocationV2InputSchema.parse({ connectionId: v2Input.connectionId,
-            messages: v2Input.messages, budget: v2Input.budget })).toEqual({
-            connectionId: "connection-1", messages: v2Input.messages, tools: [], budget: v2Input.budget, metadata: {},
+    it("accepts an optional model id and applies defaults", () => {
+        expect(agentInvocationV2InputSchema.parse({
+            ...v2Input,
+            modelId: " model-1 ",
+        })).toEqual({ ...v2Input, modelId: "model-1" });
+        expect(agentInvocationV2InputSchema.parse({
+            messages: v2Input.messages,
+            budget: v2Input.budget,
+        })).toEqual({
+            messages: v2Input.messages,
+            tools: [],
+            budget: v2Input.budget,
+            metadata: {},
         });
     });
 
-    it("rejects provider, model, address or credential fields", () => {
-        for (const extra of [{ provider: "fake" }, { model: "test-model" },
+    it("rejects connection id, provider and credential fields", () => {
+        for (const extra of [{ connectionId: "connection-1" }, { provider: "fake" }, { model: "test-model" },
             { baseUrl: "https://example.invalid/v1" }, { apiKey: "sk-x" }, { secretRef: "secret:1" }]) {
             expect(() => agentInvocationV2InputSchema.parse({ ...v2Input, ...extra })).toThrow();
         }

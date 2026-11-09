@@ -17,7 +17,7 @@ const migrationName = "20261015000000_provider_model_configuration";
  * 本测试的「现状」快照包含到此为止的迁移。边界之后一旦出现新迁移就要重新审计——
  * 因为快照复制的是当前 schema.prisma，新迁移如果改了本测试断言的结构，断言会静默失真。
  */
-const auditedThrough = "20261018160000_workflow_activity_dispatch_fence";
+const auditedThrough = "20261106085039_task_41_connection_agent_separation";
 const temporaryParent = join(repositoryRoot, ".agent/tmp");
 const timestamp = "2026-10-15T00:00:00.000Z";
 
@@ -98,16 +98,10 @@ async function verifyStructure(client: PrismaClient): Promise<void> {
     await seedModel(client, "model-b", "provider-b", "namespace/model");
     await expect(seedModel(client, "duplicate", "provider-a", "namespace/model")).rejects.toThrow();
     await expect(seedModel(client, "orphan", "missing", "model")).rejects.toThrow();
-    await client.$executeRawUnsafe(`INSERT INTO "ConnectionInstance"
-        (id,name,connectorId,modelId,updatedAt) VALUES ('model-connection','Synthetic','cosmos.agent','model-a',?)`, timestamp);
-    await expect(client.$executeRawUnsafe(`DELETE FROM "ConfiguredModel" WHERE id='model-a'`)).rejects.toThrow();
+    // Task 41 删除了 ConnectionInstance.modelId：连接不再直接引用模型，
+    // 相关的"模型被连接引用则不可删除"约束已随列删除一起移除。
+    // 仍然验证 Provider 有模型时无法删除（外键保护 ModelProvider ← ConfiguredModel）。
     await expect(client.$executeRawUnsafe(`DELETE FROM "ModelProvider" WHERE id='provider-a'`)).rejects.toThrow();
-    await expect(client.$executeRawUnsafe(`UPDATE "ConnectionInstance" SET modelId='missing'
-        WHERE id='model-connection'`)).rejects.toThrow();
-    await expect(client.$transaction(async (transaction) => {
-        await transaction.$executeRawUnsafe(`UPDATE "ModelProvider" SET name='must-rollback' WHERE id='provider-a'`);
-        await transaction.$executeRawUnsafe(`UPDATE "ConnectionInstance" SET modelId='missing' WHERE id='model-connection'`);
-    })).rejects.toThrow();
     expect(await client.$queryRawUnsafe(`SELECT name,version,state FROM "ModelProvider" WHERE id='provider-a'`))
         .toEqual([{ name: "Synthetic provider", version: 1, state: "active" }]);
     expect(await client.$queryRawUnsafe(`SELECT version FROM "ConfiguredModel" WHERE id='model-a'`))
@@ -135,8 +129,6 @@ async function verifyStructure(client: PrismaClient): Promise<void> {
     ].sort());
     expect(await client.$queryRawUnsafe(`PRAGMA foreign_key_check`)).toEqual([]);
     expect(await client.$queryRawUnsafe(`PRAGMA integrity_check`)).toEqual([{ integrity_check: "ok" }]);
-    const indexes = await client.$queryRawUnsafe<{ name: string }[]>(`PRAGMA index_list('ConnectionInstance')`);
-    expect(indexes.map((index) => index.name)).toContain("ConnectionInstance_modelId_idx");
 }
 
 describe("Provider/model additive migration (retained isolated databases)", () => {
@@ -161,11 +153,11 @@ describe("Provider/model additive migration (retained isolated databases)", () =
             deploy(root, await snapshot(root, true), databaseUrl, "current-deploy");
             if (mode === "legacy") {
                 expect(await client.$queryRawUnsafe(`SELECT id,name,connectorId,account,scopeJson,configJson,status,
-                    secretRef,lastError,lastCheckedAt,createdAt,updatedAt,modelId,version FROM "ConnectionInstance" WHERE id='legacy'`))
+                    secretRef,lastError,lastCheckedAt,createdAt,updatedAt,version FROM "ConnectionInstance" WHERE id='legacy'`))
                     .toEqual([{ id: "legacy", name: "Legacy", connectorId: "synthetic.connector", account: "account",
                         scopeJson: "{}", configJson: "{}", status: "revoked", secretRef: "synthetic:legacy", lastError: "old",
                         lastCheckedAt: new Date(timestamp), createdAt: new Date(timestamp), updatedAt: new Date(timestamp),
-                        modelId: null, version: 1 }]);
+                        version: 1 }]);
                 expect(await client.$queryRawUnsafe(`SELECT id FROM "ModelProvider"`)).toEqual([]);
             }
             await verifyStructure(client);

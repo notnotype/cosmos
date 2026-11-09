@@ -45,8 +45,8 @@ it("verifies that a referenced model blocks both provider and model removal", as
     await writeFile(join(root, "schema/schema.prisma"), isolatedSchema);
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    expect(names).toHaveLength(42);
-    expect(names.at(-1)).toBe("20261018160000_workflow_activity_dispatch_fence");
+    expect(names).toHaveLength(43);
+    expect(names.at(-1)).toBe("20261106085039_task_41_connection_agent_separation");
     const manifest = [
         { path: "source-schema.prisma", sha256: createHash("sha256").update(schema).digest("hex") },
         { path: "schema/schema.prisma", sha256: createHash("sha256").update(isolatedSchema).digest("hex") },
@@ -108,20 +108,23 @@ import { PrismaClient } from "./generated-client/index.js";
 import { PrismaModelProviderRemovalRepository } from "./removal.js";
 import { PrismaConfiguredModelRepository } from "./models.js";
 const client = new PrismaClient({datasources:{db:{url:process.env.DATABASE_URL!}}});
-const removal = new PrismaModelProviderRemovalRepository(client);
+// PrismaClient.$transaction 有数组+回调两种重载；RemovalClient 只声明了回调式，
+// 导致 TS 收窄后认为不兼容。as any 做边界断言，不影响运行时正确性。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const removal = new PrismaModelProviderRemovalRepository(client as any);
 const models = new PrismaConfiguredModelRepository(client);
 const code = (error:unknown): unknown => typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
 try {
     await client.modelProvider.create({data:{id:"provider",name:"Synthetic",api:"openai-completions",baseUrl:"https://example.com/v1",secretRef:"secret-synthetic"}});
     await client.configuredModel.create({data:{id:"model-a",providerId:"provider",modelId:"gpt-a",name:"A",contextWindow:262144,maxOutputTokens:32768}});
     await client.configuredModel.create({data:{id:"model-b",providerId:"provider",modelId:"gpt-b",name:"B",contextWindow:262144,maxOutputTokens:32768}});
-    await client.connectionInstance.create({data:{id:"connection",name:"Agent",connectorId:"cosmos.agent",modelId:"model-a"}});
-
+    // Task 41: ConnectionInstance.modelId 已删除；provider 有子模型时，
+    // ConfiguredModel.providerId 外键仍然阻止删除 provider（in_use 来自子模型行）。
     await assert.rejects(removal.remove({id:"provider",expectedVersion:1}), (error:unknown)=> code(error) === "in_use");
     assert.equal(await client.modelProvider.count({where:{id:"provider"}}),1);
-    await assert.rejects(models.delete({id:"model-a",providerId:"provider",expectedVersion:1}), (error:unknown)=> code(error) === "in_use");
-
-    await client.connectionInstance.delete({where:{id:"connection"}});
+    await client.configuredModel.delete({where:{id:"model-a"}});
+    await assert.rejects(removal.remove({id:"provider",expectedVersion:1}), (error:unknown)=> code(error) === "in_use");
+    await client.configuredModel.delete({where:{id:"model-b"}});
     await assert.rejects(removal.remove({id:"provider",expectedVersion:9}), (error:unknown)=> code(error) === "version_conflict");
     const secretRef = await removal.remove({id:"provider",expectedVersion:1});
     assert.equal(secretRef,"secret-synthetic");

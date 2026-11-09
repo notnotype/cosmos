@@ -17,12 +17,11 @@ export const storyAgentRequestSchema = z.object({
 }).strict();
 
 export const storyAgentGenerationRequestSchema = storyAgentRequestSchema.extend({
-    connectionId: z.string().trim().min(1).max(200),
+    modelId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
 export const storyAgentGenerationSchema = z.object({
     runId: z.string().min(1), storyId: z.string().min(1), task: storyAgentTaskSchema,
-    connectionId: z.string().min(1),
     status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
     candidateId: z.string().nullable(),
     errorCode: z.enum(["generation_failed"]).nullable(),

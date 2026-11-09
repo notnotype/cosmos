@@ -2,13 +2,12 @@ import { z } from "zod";
 import { UuidIdGenerator, type JsonValue } from "@notnotype/nb-workflow";
 import { storyAgentGenerationRequestSchema, storyAgentGenerationSchema, type StoryAgentGeneration,
     type StoryAgentGenerationRequest } from "@cosmos/contracts";
-import type { AgentModelConnectionResolver } from "./agent-invocation-v2.js";
 import type { ContentQuery } from "./content-query.js";
 import type { StoryAgentSnapshotReader } from "./story-agent.js";
 import { prepareStoryAgentRequest, preparedStoryAgentSchema } from "./story-agent-preparation.js";
 import { WorkflowHostConflictError, WorkflowHostError, type WorkflowEnvelope, type WorkflowHostStore } from "./workflow-host.js";
 
-export const storyAgentWorkflowManifestHash = "builtin:cosmos.story-agent@1:connection-v2";
+export const storyAgentWorkflowManifestHash = "builtin:cosmos.story-agent@1:model-v3";
 export const storyAgentWorkflowInputSchema = z.object({
     request: storyAgentGenerationRequestSchema,
     prepared: preparedStoryAgentSchema,
@@ -18,12 +17,12 @@ export const storyAgentWorkflowInputSchema = z.object({
 /** Only approved public projections enter this snapshot; credentials resolve in the Worker. */
 export class StoryAgentWorkflowControl {
     constructor(private readonly options: {
-        store: WorkflowHostStore; connections: AgentModelConnectionResolver;
+        store: WorkflowHostStore;
         stories: StoryAgentSnapshotReader; content: ContentQuery;
     }) {}
 
     async enqueue(input: StoryAgentGenerationRequest & { storyId: string; idempotencyKey: string }): Promise<StoryAgentGeneration> {
-        const request = storyAgentGenerationRequestSchema.parse({ task: input.task, connectionId: input.connectionId, sources: input.sources });
+        const request = storyAgentGenerationRequestSchema.parse({ task: input.task, modelId: input.modelId, sources: input.sources });
         const key = input.idempotencyKey.trim();
         if (!key || !input.storyId.trim()) throw new WorkflowHostError("invalid_state", "Story generation requires Story and idempotency key.");
         const existing = await this.options.store.findWorkflowEnvelopeByIdempotencyKey(key);
@@ -31,10 +30,9 @@ export class StoryAgentWorkflowControl {
             this.assertMatches(existing, input.storyId, request);
             return this.project(existing);
         }
-        if (!await this.options.connections.resolve(request.connectionId)) throw new WorkflowHostConflictError("Selected model connection is unavailable.");
         const prepared = await prepareStoryAgentRequest(this.options.stories, this.options.content,
             { storyId: input.storyId, task: request.task, sources: request.sources }, {
-                connectionId: request.connectionId,
+                modelId: request.modelId,
                 authority: { allowedProfiles: request.sources?.length ? ["summary-only", "structured-content"] : ["summary-only"] },
                 budget: { maxDurationMs: 60_000, maxToolCalls: 0, maxOutputTokens: 2048 },
             });
@@ -76,13 +74,13 @@ export class StoryAgentWorkflowControl {
         const { request, prepared, candidateId } = storyAgentWorkflowInputSchema.parse(envelope.inputSnapshot);
         const status = ["completed", "failed", "cancelled", "queued"].includes(envelope.status) ? envelope.status : "running";
         return storyAgentGenerationSchema.parse({ runId: envelope.runId, storyId: prepared.story.storyId,
-            task: request.task, connectionId: request.connectionId, status,
+            task: request.task, status,
             candidateId: status === "completed" ? candidateId : null, errorCode: status === "failed" ? "generation_failed" : null });
     }
 }
 
 function canonical(request: StoryAgentGenerationRequest): string {
-    return JSON.stringify([request.connectionId, request.task, request.sources ?? []]);
+    return JSON.stringify([request.modelId ?? null, request.task, request.sources ?? []]);
 }
 function json(value: unknown): JsonValue {
     return JSON.parse(JSON.stringify(value)) as JsonValue;

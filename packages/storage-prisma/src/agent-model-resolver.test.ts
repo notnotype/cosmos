@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { PrismaAgentModelConnectionResolver } from "./agent-model-resolver.js";
+import { PrismaAgentModelResolver } from "./agent-model-resolver.js";
+import { PrismaSystemConfigRepository } from "./system-config.js";
 import { withRepository } from "./index.fixtures.js";
 import type { PrismaCosmosRepository } from "./index.js";
 
-/**
- * `agent.invoke@2` 的连接解析（API 0009）：连接、模型与 Provider 必须来自同一次读取，
- * 且只有全部可用时才返回配置。返回 `null` 的每种原因都要能单独复现——否则 Worker
- * 只能笼统报"调用失败"，用户无法判断是连接撤了、模型丢了还是 Provider 在删除。
- */
-describe("agent model connection resolver", () => {
-    async function seed(prisma: PrismaCosmosRepository["prisma"]): Promise<{ connectionId: string; providerId: string }> {
+describe("PrismaAgentModelResolver", () => {
+    async function seed(prisma: PrismaCosmosRepository["prisma"]): Promise<{ modelId: string; providerId: string }> {
         const provider = await prisma.modelProvider.create({
             data: {
                 id: "provider-agent",
@@ -22,83 +18,67 @@ describe("agent model connection resolver", () => {
         });
         const model = await prisma.configuredModel.create({
             data: {
-                id: "model-agent",
+                id: "configured-model-agent",
                 providerId: provider.id,
                 modelId: "namespace/agent-model",
                 name: "Synthetic Agent Model",
                 contextWindow: 8_192,
                 maxOutputTokens: 1_024,
+                inputPricePerMillion: 0.25,
+                outputPricePerMillion: 1.5,
             },
         });
-        const connection = await prisma.connectionInstance.create({
-            data: {
-                id: "connection-agent",
-                name: "Synthetic Agent Connection",
-                connectorId: "cosmos.agent",
-                status: "active",
-                modelId: model.id,
-            },
-        });
-        return { connectionId: connection.id, providerId: provider.id };
+        return { modelId: model.id, providerId: provider.id };
     }
 
-    it("returns the connection, model and provider from one read", async () => {
+    it("resolves a configured model and maps provider configuration and prices", async () => {
         await withRepository("agent-model-resolve", async (repository) => {
-            const { connectionId } = await seed(repository.prisma);
-            const resolved = await new PrismaAgentModelConnectionResolver(repository.prisma).resolve(connectionId);
+            const { modelId } = await seed(repository.prisma);
+            const resolver = new PrismaAgentModelResolver(
+                repository.prisma,
+                new PrismaSystemConfigRepository(repository.prisma),
+            );
 
-            expect(resolved).toEqual({
-                connectionId: "connection-agent",
+            await expect(resolver.resolve(modelId)).resolves.toEqual({
+                modelId: "namespace/agent-model",
+                modelName: "Synthetic Agent Model",
                 providerId: "provider-agent",
                 api: "openai-responses",
                 baseUrl: "https://agent.example.invalid/v1",
-                modelId: "namespace/agent-model",
-                modelName: "Synthetic Agent Model",
                 contextWindow: 8_192,
                 maxOutputTokens: 1_024,
                 secretRef: "secret:provider-agent",
+                inputPricePerMillion: 0.25,
+                outputPricePerMillion: 1.5,
             });
         });
     });
 
-    it("refuses a revoked connection, a foreign connector and a missing model", async () => {
-        await withRepository("agent-model-refuse", async (repository) => {
-            const { connectionId } = await seed(repository.prisma);
-            const resolver = new PrismaAgentModelConnectionResolver(repository.prisma);
+    it("uses the system default when modelId is null and returns null when no default exists", async () => {
+        await withRepository("agent-model-default", async (repository) => {
+            const { modelId } = await seed(repository.prisma);
+            const systemConfig = new PrismaSystemConfigRepository(repository.prisma);
+            const resolver = new PrismaAgentModelResolver(repository.prisma, systemConfig);
 
-            await repository.prisma.connectionInstance.update({
-                where: { id: connectionId }, data: { status: "revoked" },
-            });
-            await expect(resolver.resolve(connectionId)).resolves.toBeNull();
-
-            await repository.prisma.connectionInstance.update({
-                where: { id: connectionId }, data: { status: "active", connectorId: "custom-auth" },
-            });
-            await expect(resolver.resolve(connectionId)).resolves.toBeNull();
-
-            await repository.prisma.connectionInstance.update({
-                where: { id: connectionId }, data: { connectorId: "cosmos.agent", modelId: null },
-            });
-            await expect(resolver.resolve(connectionId)).resolves.toBeNull();
-
-            await expect(resolver.resolve("missing-connection")).resolves.toBeNull();
+            await expect(resolver.resolve(null)).resolves.toBeNull();
+            await systemConfig.setDefaultModelId(modelId);
+            await expect(resolver.resolve(null)).resolves.toMatchObject({ modelId: "namespace/agent-model" });
         });
     });
 
-    it("refuses a provider that is being deleted or lost its credential reference", async () => {
-        await withRepository("agent-model-provider-state", async (repository) => {
-            const { connectionId, providerId } = await seed(repository.prisma);
-            const resolver = new PrismaAgentModelConnectionResolver(repository.prisma);
+    it("returns null for unavailable models, inactive providers, and missing credentials", async () => {
+        await withRepository("agent-model-unavailable", async (repository) => {
+            const { modelId, providerId } = await seed(repository.prisma);
+            const resolver = new PrismaAgentModelResolver(
+                repository.prisma,
+                new PrismaSystemConfigRepository(repository.prisma),
+            );
 
-            await repository.prisma.modelProvider.update({
-                where: { id: providerId }, data: { state: "deleting" },
-            });
-            await expect(resolver.resolve(connectionId)).resolves.toBeNull();
-
-            await repository.prisma.modelProvider.update({
-                where: { id: providerId }, data: { state: "active", secretRef: null },
-            });
-            await expect(resolver.resolve(connectionId)).resolves.toBeNull();
+            await expect(resolver.resolve("missing-model")).resolves.toBeNull();
+            await repository.prisma.modelProvider.update({ where: { id: providerId }, data: { state: "deleting" } });
+            await expect(resolver.resolve(modelId)).resolves.toBeNull();
+            await repository.prisma.modelProvider.update({ where: { id: providerId }, data: { state: "active", secretRef: null } });
+            await expect(resolver.resolve(modelId)).resolves.toBeNull();
         });
     });
 });

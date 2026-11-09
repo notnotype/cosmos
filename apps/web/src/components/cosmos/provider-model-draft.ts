@@ -109,6 +109,9 @@ export type ModelDraftValues = {
     name: string;
     contextWindow: string;
     maxOutputTokens: string;
+    /** USD per million tokens; empty string means "not configured". */
+    inputPricePerMillion: string;
+    outputPricePerMillion: string;
 };
 
 /**
@@ -125,6 +128,8 @@ export function emptyModelDraft(): ModelDraftValues {
         name: "",
         contextWindow: "",
         maxOutputTokens: "",
+        inputPricePerMillion: "",
+        outputPricePerMillion: "",
     };
 }
 
@@ -143,6 +148,8 @@ const modelIssueReasons: Record<string, string> = {
     name: "name",
     contextWindow: "contextWindow",
     maxOutputTokens: "maxOutputTokens",
+    inputPricePerMillion: "inputPricePerMillion",
+    outputPricePerMillion: "outputPricePerMillion",
 };
 
 /** 数字输入框给的是字符串；空串与小数都要在提交前被拒，而不是 Number() 后变成 NaN 或 0。 */
@@ -158,12 +165,30 @@ function toBudgetOrDefault(value: string, fallback: number): number | null {
     return value.trim() === "" ? fallback : toBudget(value);
 }
 
+/** 价格字段：空串表示不配置（undefined），非负小数或整数都有效。 */
+function toPrice(value: string): number | undefined | null {
+    const trimmed = value.trim();
+    if (trimmed === "") return undefined;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null; // null 表示解析失败
+    return parsed;
+}
+
 export function toCreateModelCommand(values: ModelDraftValues): DraftResult<CreateConfiguredModelCommand, ModelFormErrors> {
+    const inputPrice = toPrice(values.inputPricePerMillion);
+    const outputPrice = toPrice(values.outputPricePerMillion);
+
+    // 价格解析失败（null）时直接返回字段错误，不进合同校验
+    if (inputPrice === null) return { ok: false, errors: { inputPricePerMillion: "inputPricePerMillion" } };
+    if (outputPrice === null) return { ok: false, errors: { outputPricePerMillion: "outputPricePerMillion" } };
+
     const parsed = createConfiguredModelCommandSchema.safeParse({
         modelId: values.modelId.trim(),
         name: values.name.trim(),
         contextWindow: toBudgetOrDefault(values.contextWindow, defaultContextWindow),
         maxOutputTokens: toBudgetOrDefault(values.maxOutputTokens, defaultMaxOutputTokens),
+        ...(inputPrice !== undefined ? { inputPricePerMillion: inputPrice } : {}),
+        ...(outputPrice !== undefined ? { outputPricePerMillion: outputPrice } : {}),
     });
     if (parsed.success) return { ok: true, command: parsed.data };
 

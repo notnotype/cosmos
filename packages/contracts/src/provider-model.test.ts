@@ -68,13 +68,21 @@ describe("Provider/model configuration contracts", () => {
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, modelId: "https://provider.example/model" }).success).toBe(false);
         expect(configuredModelSnapshotSchema.safeParse({ ...model, id: "model-1", providerId: "provider-1", version: 1,
             modelId: "https://provider.example/model" }).success).toBe(false);
+        expect(createConfiguredModelCommandSchema.parse({ ...model, inputPricePerMillion: 0.5, outputPricePerMillion: 1.25 }))
+            .toMatchObject({ inputPricePerMillion: 0.5, outputPricePerMillion: 1.25 });
         for (const change of [{ maxOutputTokens: 8193 }, { contextWindow: 0 }, { maxOutputTokens: 1.5 },
             { contextWindow: Number.MAX_SAFE_INTEGER + 1 }, { modelId: "" }, { modelId: "https://provider.example/model" },
+            { inputPricePerMillion: -0.01 }, { outputPricePerMillion: -0.01 },
             { providerId: "another" }, { apiKey: "synthetic-key" }]) {
             expect(createConfiguredModelCommandSchema.safeParse({ ...model, ...change }).success).toBe(false);
         }
         expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, maxOutputTokens: 128 }))
             .toEqual({ expectedVersion: 1, maxOutputTokens: 128 });
+        expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, inputPricePerMillion: 0, outputPricePerMillion: 2 }))
+            .toEqual({ expectedVersion: 1, inputPricePerMillion: 0, outputPricePerMillion: 2 });
+        for (const price of [{ inputPricePerMillion: -1 }, { outputPricePerMillion: -1 }]) {
+            expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, ...price }).success).toBe(false);
+        }
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1 }).success).toBe(false);
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, providerId: "another" }).success).toBe(false);
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, contextWindow: 32, maxOutputTokens: 64 }).success).toBe(false);

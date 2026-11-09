@@ -10,7 +10,7 @@ const binding = { entryRevisionId: "revision-1", representationVersion: 2 };
 const evidence = { entryId: "entry-1", ...binding, blockId: "block-1" };
 const host: StoryAgentHost = {
     authority: { allowedProfiles: ["summary-only", "structured-content"] },
-    connectionId: "connection-1", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1000 },
+    modelId: "configured-model-1", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1000 },
     createCandidateId: () => "candidate-1", now: () => new Date("2026-10-08T12:00:00.000Z"),
 };
 const context = { idempotencyKey: "fixture", signal: new AbortController().signal };
@@ -35,19 +35,24 @@ const summary: StoryAgentProposal = { task: "story.summarize", title: "Suggested
     keyFacts: [{ text: "Fact", evidence: [evidence] }] };
 
 describe("StoryAgent candidate boundary", () => {
-    it("passes only the host connection and preserves the actual invocation identity", async () => {
+    it("passes only the host model selection and preserves the actual invocation identity", async () => {
         const f = fixture({ ...summary, keyFacts: [] });
         const legacyHost = { ...host, provider: "ignored-provider", model: "ignored-model" };
         const candidate = await f.agent.propose({ storyId: "story-1", task: "story.summarize" }, legacyHost, context);
         const [input, invocationContext] = f.invoke.mock.calls[0]!;
-        expect(input).toEqual({ connectionId: "connection-1", budget: host.budget, tools: [],
+        expect(input).toEqual({ modelId: "configured-model-1", budget: host.budget, tools: [],
             messages: expect.any(Array), metadata: { task: "story.summarize", storyId: "story-1", storyRevisionId: "story-revision-1" } });
         expect(invocationContext).toBe(context);
         expect(candidate).toMatchObject({ provider: "fake", model: "fixture" });
     });
-    it.each(["", "   ", "x".repeat(201)])("rejects invalid host connection IDs before reading snapshots: %s", async (connectionId) => {
+    it("omits modelId from invocation when the host delegates to the system default", async () => {
+        const f = fixture({ ...summary, keyFacts: [] });
+        await f.agent.propose({ storyId: "story-1", task: "story.summarize" }, { ...host, modelId: undefined }, context);
+        expect(f.invoke.mock.calls[0]![0].modelId).toBeUndefined();
+    });
+    it.each(["", "   ", "x".repeat(201)])("rejects invalid host model IDs before reading snapshots: %s", async (modelId) => {
         const f = fixture(summary);
-        await expect(f.agent.propose({ storyId: "story-1", task: "story.summarize" }, { ...host, connectionId }, context)).rejects.toThrow();
+        await expect(f.agent.propose({ storyId: "story-1", task: "story.summarize" }, { ...host, modelId }, context)).rejects.toThrow();
         expect(f.readStory).not.toHaveBeenCalled();
         expect(f.readContentSource).not.toHaveBeenCalled();
         expect(f.invoke).not.toHaveBeenCalled();

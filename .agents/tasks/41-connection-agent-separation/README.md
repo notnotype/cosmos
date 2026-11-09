@@ -323,4 +323,127 @@ function calculateCost(
 
 ## Walkthrough
 
-（待实施过程中更新）
+### Phase 1: Schema 变更 ✅
+
+**实施日期**: 2026-11-06
+
+**变更内容**:
+- `ConfiguredModel` 增加 `inputPricePerMillion Decimal? @default(0)` 和 `outputPricePerMillion Decimal? @default(0)`
+- 新增 `SystemConfig` 单例模型（固定 ID = "singleton"）
+- 删除 `ConnectionInstance.modelId`、`model` 关联和 `@@index([modelId])`
+- 删除 `ConfiguredModel.connections` 反向关联
+
+**迁移文件**: `packages/storage-prisma/prisma/migrations/20261106085039_task_41_connection_agent_separation/migration.sql`
+
+**验证**: `npx prisma format`、`npx prisma validate`、`npx prisma generate`、`git diff --check` 均成功
+
+**偏差**: 使用系统临时目录隔离 SQLite 数据库执行 `migrate dev`，未连接项目数据库
+
+---
+
+### Phase 2: 合同变更 ✅
+
+**实施日期**: 2026-11-06
+
+**变更内容**:
+- `agentInvocationV2InputSchema`: 移除 `connectionId`，增加可选 `modelId`
+- `agentInvocationOutputSchema`: 增加可选 `cost` 字段（input/output/total/currency）
+- `createConfiguredModelCommandSchema` 和 `updateConfiguredModelCommandSchema`: 增加非负可选 `inputPricePerMillion` 和 `outputPricePerMillion`
+
+**修改文件**:
+- `packages/contracts/src/agent.ts`
+- `packages/contracts/src/provider-model.ts`
+- 对应测试文件
+
+**验证**:
+- `bun run --cwd packages/contracts build` 成功
+- `bun run --cwd packages/contracts typecheck` 成功
+- `bunx vitest run packages/contracts/src` 通过 116 项测试
+- `git diff --check` 无错误
+
+---
+
+### Phase 3.1: SystemConfig Repository ✅
+
+**实施日期**: 2026-11-06
+
+**范围**: 实现系统配置的存储层
+
+**新增文件**:
+- `packages/storage-prisma/src/system-config.ts` (58 行)
+  - `SystemConfigRepository` 接口
+  - `SystemConfigSnapshot` 类型
+  - `PrismaSystemConfigRepository` 实现（`ensureSingleton()`、`getDefaultModelId()`、`setDefaultModelId()`）
+- `packages/storage-prisma/src/system-config.test.ts` (165 行，10 个测试用例)
+- `packages/storage-prisma/src/index.ts` (增加导出)
+
+**TDD 证据**:
+- RED: 空行为 stub 时 9 fail / 1 pass（SQL setup 成功）
+- GREEN: 实现后 10 pass / 0 fail
+
+**验证**:
+1. `bun test src/system-config.test.ts`: 10 pass, 22 assertions, exit 0
+2. `bun run test -- packages/storage-prisma/src/system-config.test.ts`: Vitest 10 pass, exit 0
+3. 新模块严格类型检查（`tsc --noEmit --strict`): exit 0
+4. `git diff --check`: exit 0，无 tab/行尾空白
+5. 运行时导入验证: `PrismaSystemConfigRepository` 可从 `@cosmos/storage-prisma` 正确导入
+
+**批准偏差**:
+- Windows Prisma 6 不支持 `file::memory:` URL（SQLite error 14）
+- 改用每个测试用例 `mkdtemp` 独占临时 SQLite 文件
+- 真实迁移中提取 `SystemConfig` 的 `CREATE TABLE`
+- `PRAGMA foreign_keys=ON`
+- `disconnect` 后 `finally` 清理
+
+**跨 Phase 阻塞**:
+- 包级 `bun run build` / `bun run typecheck` 因其他模块仍使用 `connectionId` 和 `ConnectionInstance.modelId` 而失败
+- 待 Phase 3.2-3.4 统一修复
+
+**Code Review**: 无阻断/重要问题，可选入口导出建议已通过运行时验证完成
+
+**未运行**: 全仓测试、根 build、E2E、真实库迁移
+
+---
+
+### Phase 3.2: 重构 agent-invocation-v2 / AgentModelResolver / pi-ai 适配器 ✅
+
+**实施日期**: 2026-11-06
+
+**变更内容**:
+- `application/src/agent-invocation-v2.ts`: 删除 `AgentModelConnectionResolver`/`AgentModelConnectionSnapshot`，新增 `AgentModelResolver`/`AgentModelSnapshot`（含价格字段）
+- `storage-prisma/src/agent-model-resolver.ts`: 删除 `PrismaAgentModelConnectionResolver`，新增 `PrismaAgentModelResolver`（通过 modelId 或 SystemConfig 默认值查询）
+- `agent-pi-ai/src/invocation-v2.ts`: 适配器改用 `models: AgentModelResolver`，增加 USD 成本计算；价格未配置时 `cost` 为 undefined
+- 更新对应测试文件
+
+**验证**: 30 项测试通过（agent-pi-ai + application action + story-agent），application 和 agent-pi-ai 的 typecheck/build 均通过
+
+---
+
+### Phase 3.3: Story Agent DTO 迁移 + storage-prisma 修复 ✅
+
+**实施日期**: 2026-11-06
+
+**变更内容**:
+- `contracts/src/story-agent.ts`: `storyAgentGenerationRequestSchema` 从 `connectionId` 改为可选 `modelId`；`storyAgentGenerationSchema` 删除 `connectionId` 字段
+- `application/src/story-agent.ts`: `StoryAgentHost.connectionId` 改为 `modelId?`（可选）
+- `application/src/story-agent-preparation.ts`: 传递可选 `modelId` 给 `agentInvocationV2InputSchema`
+- `application/src/story-agent-workflow-control.ts`: 移除模型连接 resolver 预检，按 `modelId` 做幂等比较，不再输出 `connectionId`；manifest hash 更新为 `builtin:cosmos.story-agent@1:model-v3`
+- `storage-prisma/src/repository/helpers-4.ts`: 不再读取已删除的 `ConnectionInstance.modelId`（投影 null）
+- `storage-prisma/src/repository/sources.ts`: 删除 `ConnectionInstance.modelId` 的 create/update 读写及关联模型校验
+
+**验证**:
+- `packages/storage-prisma` build/typecheck 通过
+- `packages/contracts` build/typecheck 通过
+- `packages/application` build/typecheck 通过
+- story-agent 测试 20 项通过；contracts + application + transport-client 合测 29 项通过
+- API 合同测试 8 项通过（通过仓库 Vitest 运行）
+
+---
+
+### Phase 3.3b: 修复 apps/worker (进行中)
+
+- `apps/worker/src/agent-action-v2.ts`
+- `apps/worker/src/main.ts`
+- 相关测试文件
+
+待完成...

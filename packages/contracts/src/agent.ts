@@ -56,15 +56,9 @@ export const agentInvocationInputSchema = z.object({
 }).strict();
 export type AgentInvocationInput = z.infer<typeof agentInvocationInputSchema>;
 
-/**
- * `agent.invoke@2`（API 0009「Connection 与 invocation 版本」）：调用方只给连接 ID，
- * 服务商、模型、地址与凭证全部由服务端从已保存配置解析。
- *
- * 这里用 `.strict()` 而不是在解析后丢弃多余字段：把 provider/model 静默忽略，调用方
- * 会以为自己指定的模型生效了，而实际用的是连接上的选择。
- */
+/** @2 callers may select a configured model; omission uses the system default. */
 export const agentInvocationV2InputSchema = z.object({
-    connectionId: z.string().trim().min(1).max(200),
+    modelId: z.string().trim().min(1).max(200).optional(),
     messages: agentInvocationMessageSchema.array().min(1),
     tools: agentInvocationToolSchema.array().default([]),
     budget: agentInvocationBudgetSchema,
@@ -89,6 +83,13 @@ export const agentInvocationOutputSchema = z.object({
     content: z.string(),
     toolCalls: agentInvocationToolCallSchema.array(),
     usage: agentInvocationUsageSchema,
+    // Omitted when the selected model has no configured prices.
+    cost: z.object({
+        input: z.number().nonnegative(),
+        output: z.number().nonnegative(),
+        total: z.number().nonnegative(),
+        currency: z.string().default("USD"),
+    }).strict().optional(),
     provider: z.string().trim().min(1),
     model: z.string().trim().min(1),
     finishReason: z.enum(["stop", "tool_call", "length", "cancelled"]),

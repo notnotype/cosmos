@@ -5,6 +5,7 @@
 
 export { ModelProviderQuery, type ModelProviderQueryRepository, type ModelProviderOperationSnapshot } from "./model-provider-query.js";
 export { ConfiguredModels, type ConfiguredModelRepository } from "./configured-models.js";
+export { SystemConfigService, type SystemConfigReader, type SystemConfigRepository } from "./system-config.js";
 export { ModelProviderRemovals, type ModelProviderRemovalRepository } from "./model-provider-removals.js";
 export { ModelProviderCredentials } from "./model-provider-credentials.js";
 export {
@@ -39,7 +40,7 @@ export {
 } from "./agent-invocation.js";
 export {
     createAgentInvocationV2Action, getAgentInvocationV2Definition,
-    type AgentInvocationV2Port, type AgentModelConnectionResolver, type AgentModelConnectionSnapshot,
+    type AgentInvocationV2Port, type AgentModelResolver, type AgentModelSnapshot,
 } from "./agent-invocation-v2.js";
 export {
     ActionExecutionError, ActionRegistry, type ActionExecutionContext,

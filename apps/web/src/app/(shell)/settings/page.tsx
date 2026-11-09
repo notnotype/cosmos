@@ -2,6 +2,7 @@
 
 import { client } from "@/app/home/page-runtime";
 
+import { DefaultModelPanel } from "@/components/cosmos/default-model-panel";
 import { StoragePanel } from "@/components/cosmos/storage-panel";
 import { messages } from "@/copy/messages";
 
@@ -23,6 +24,11 @@ export default function SettingsPage() {
             <section aria-label={messages.pages.settings.storage} className="flex flex-col gap-3">
                 <h2 className="text-[15px] font-medium">{messages.pages.settings.storage}</h2>
                 <StoragePanel client={client} />
+            </section>
+
+            <section aria-label={messages.pages.settings.defaultModel.section} className="flex flex-col gap-3">
+                <h2 className="text-[15px] font-medium">{messages.pages.settings.defaultModel.section}</h2>
+                <DefaultModelPanel client={client} />
             </section>
         </div>
     );

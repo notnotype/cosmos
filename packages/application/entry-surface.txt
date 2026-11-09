@@ -6,8 +6,8 @@ type	ActivityJobTerminalResult
 type	AgentInvocationContext
 type	AgentInvocationPort
 type	AgentInvocationV2Port
-type	AgentModelConnectionResolver
-type	AgentModelConnectionSnapshot
+type	AgentModelResolver
+type	AgentModelSnapshot
 type	CancelWorkflowRunInput
 type	CatalogPort
 type	ClaimActivityJobInput
@@ -120,6 +120,8 @@ type	StoryAgentRequest
 type	StoryAgentSnapshot
 type	StoryAgentSnapshotReader
 type	StructuredContentView
+type	SystemConfigReader
+type	SystemConfigRepository
 type	WorkerJobResult
 type	WorkflowActionReference
 type	WorkflowActivityJob
@@ -218,6 +220,7 @@ value	StoryRevisionConflictError
 value	StorySplitConflictError
 value	StorySubtypeInvalidError
 value	StoryUserStateMigrationConflictError
+value	SystemConfigService
 value	TopicMembershipNotFoundError
 value	TopicMergeConflictError
 value	TopicNotFoundError

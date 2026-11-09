@@ -17,7 +17,9 @@ export { PrismaModelProviderQueryRepository } from "./model-provider-query-repos
 export { PrismaConfiguredModelRepository } from "./configured-model-repository.js";
 export { PrismaProviderDiscoveryReader } from "./provider-discovery-reader.js";
 export { PrismaModelProviderRemovalRepository } from "./model-provider-removal-repository.js";
-export { PrismaAgentModelConnectionResolver } from "./agent-model-resolver.js";
+export { PrismaAgentModelResolver } from "./agent-model-resolver.js";
 export { withModelConfigurationLock } from "./model-configuration-lock.js";
+export type { SystemConfigRepository, SystemConfigSnapshot } from "./system-config.js";
+export { PrismaSystemConfigRepository } from "./system-config.js";
 
 export { type StorageRoots, resolveStorageRoots, createPrismaClient, resolveContainedPath } from "./storage-root.js";

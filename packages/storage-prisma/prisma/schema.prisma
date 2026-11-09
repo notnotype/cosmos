@@ -1,38 +1,38 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "sqlite"
-    url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model SourceInstance {
-    id                  String                  @id @default(cuid())
-    name                String
-    kind                String
-    sourceDefinitionRef String
-    operationId         String
-    configJson          String
-    enabled             Boolean                 @default(false)
-    revision            Int                     @default(1)
-    connectionId        String?
-    // 墓碑（AUT-001）：删除来源只删配置与调度绑定，已录入的 Entry/Observation 必须保留，
-    // 而 Entry.sourceInstanceId 是必填级联外键——硬删会带走全部历史，所以来源行留下、
-    // 从产品面消失（列表/读取/调度都过滤 deletedAt）。
-    deletedAt           DateTime?
-    createdAt           DateTime                @default(now())
-    updatedAt           DateTime                @updatedAt
-    observations        Observation[]
-    runs                Run[]
-    workflowRuns        WorkflowRun[]
-    checkpoint          Checkpoint?
-    entries             Entry[]
-    connection          ConnectionInstance?     @relation(fields: [connectionId], references: [id], onDelete: SetNull)
-    triggerBindings     TriggerBinding[]        @relation("TriggerBindingSource")
-    plan                CollectionPlan?
+  id                  String              @id @default(cuid())
+  name                String
+  kind                String
+  sourceDefinitionRef String
+  operationId         String
+  configJson          String
+  enabled             Boolean             @default(false)
+  revision            Int                 @default(1)
+  connectionId        String?
+  // 墓碑（AUT-001）：删除来源只删配置与调度绑定，已录入的 Entry/Observation 必须保留，
+  // 而 Entry.sourceInstanceId 是必填级联外键——硬删会带走全部历史，所以来源行留下、
+  // 从产品面消失（列表/读取/调度都过滤 deletedAt）。
+  deletedAt           DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  observations        Observation[]
+  runs                Run[]
+  workflowRuns        WorkflowRun[]
+  checkpoint          Checkpoint?
+  entries             Entry[]
+  connection          ConnectionInstance? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  triggerBindings     TriggerBinding[]    @relation("TriggerBindingSource")
+  plan                CollectionPlan?
 
-    @@index([connectionId])
+  @@index([connectionId])
 }
 
 // First-class trigger (ADR-0018): when a source is started, expressed as a
@@ -42,25 +42,25 @@ model SourceInstance {
 // single-binding rule: a plan may hold one binding per kind (schedule plus
 // webhook), so uniqueness is scoped by kind instead of by owner.
 model TriggerBinding {
-    id           String          @id @default(cuid())
-    sourceId     String
-    planId       String?
-    kind         String          @default("schedule")
-    configJson   String
-    enabled      Boolean         @default(true)
-    revision     Int             @default(1)
-    // Webhook 入口（ADR-0024）：只有 kind = webhook 的行使用这两列。webhookToken 是入口
-    // 路径里的不可猜标识（会出现在 URL 与日志里，所以它不是凭证）；凭证字节在
-    // SecretStore 里，这里只留不透明引用。
-    webhookToken String?         @unique
-    secretRef    String?
-    createdAt    DateTime        @default(now())
-    updatedAt    DateTime        @updatedAt
-    source       SourceInstance  @relation("TriggerBindingSource", fields: [sourceId], references: [id], onDelete: Cascade)
-    plan         CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  id           String          @id @default(cuid())
+  sourceId     String
+  planId       String?
+  kind         String          @default("schedule")
+  configJson   String
+  enabled      Boolean         @default(true)
+  revision     Int             @default(1)
+  // Webhook 入口（ADR-0024）：只有 kind = webhook 的行使用这两列。webhookToken 是入口
+  // 路径里的不可猜标识（会出现在 URL 与日志里，所以它不是凭证）；凭证字节在
+  // SecretStore 里，这里只留不透明引用。
+  webhookToken String?         @unique
+  secretRef    String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  source       SourceInstance  @relation("TriggerBindingSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  plan         CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
-    @@unique([sourceId, kind])
-    @@unique([planId, kind])
+  @@unique([sourceId, kind])
+  @@unique([planId, kind])
 }
 
 // 采集计划（ADR-0023）：用户可见的独立采集计划，v1 与采集目标一对一，持有连接、
@@ -68,25 +68,25 @@ model TriggerBinding {
 // 拥有 Run、错误、重试与游标。expand 步只建表与可空列：回填与读取切换之前，按来源
 // 调度与读取的旧路径必须继续可用。
 model CollectionPlan {
-    id              String              @id @default(cuid())
-    name            String
-    sourceId        String              @unique
-    connectionId    String?
-    mediaPolicyJson String?
-    overlapPolicy   String              @default("forbid")
-    enabled         Boolean             @default(false)
-    revision        Int                 @default(1)
-    createdAt       DateTime            @default(now())
-    updatedAt       DateTime            @updatedAt
-    source          SourceInstance      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-    connection      ConnectionInstance? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
-    triggerBindings TriggerBinding[]
-    checkpoint      Checkpoint?
-    runs            Run[]
-    workflowRuns    WorkflowRun[]
-    stateNamespaces ConnectorStateNamespace[]
+  id              String                    @id @default(cuid())
+  name            String
+  sourceId        String                    @unique
+  connectionId    String?
+  mediaPolicyJson String?
+  overlapPolicy   String                    @default("forbid")
+  enabled         Boolean                   @default(false)
+  revision        Int                       @default(1)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  source          SourceInstance            @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  connection      ConnectionInstance?       @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  triggerBindings TriggerBinding[]
+  checkpoint      Checkpoint?
+  runs            Run[]
+  workflowRuns    WorkflowRun[]
+  stateNamespaces ConnectorStateNamespace[]
 
-    @@index([connectionId])
+  @@index([connectionId])
 }
 
 // Reusable user login/authorization on an external platform (ADR-0017). A
@@ -94,94 +94,96 @@ model CollectionPlan {
 // status and an opaque SecretRef; credentials live in the SecretStore, never in
 // config/Job/Event/log.
 model ConnectionInstance {
-    id          String           @id @default(cuid())
-    name        String
-    connectorId String
-    account     String?
-    scopeJson   String?
-    // 适配器的非秘密配置（Proposal connection-login-lifecycle-v1 决定 1）：OpenCLI
-    // profile 这类标识住在这里，与 scopeJson 同形是 JSON 文本。凭证永远不在这里。
-    configJson  String?
-    status      String           @default("active")
-    secretRef   String?
-    lastError   String?
-    // 最近一次登录探测的时间（Proposal connection-login-lifecycle-v1 决定 2）：由探测回写，
-    // 不走公开的更新命令，所以「从没探测过」与「探测过且正常」在库里可区分。
-    lastCheckedAt DateTime?
-    createdAt   DateTime         @default(now())
-    updatedAt   DateTime         @updatedAt
-    sources     SourceInstance[]
-    plans       CollectionPlan[]
-    modelId     String?
-    version     Int              @default(1)
-    model       ConfiguredModel? @relation(fields: [modelId], references: [id], onDelete: Restrict)
-
-    @@index([modelId])
+  id            String           @id @default(cuid())
+  name          String
+  connectorId   String
+  account       String?
+  scopeJson     String?
+  // 适配器的非秘密配置（Proposal connection-login-lifecycle-v1 决定 1）：OpenCLI
+  // profile 这类标识住在这里，与 scopeJson 同形是 JSON 文本。凭证永远不在这里。
+  configJson    String?
+  status        String           @default("active")
+  secretRef     String?
+  lastError     String?
+  // 最近一次登录探测的时间（Proposal connection-login-lifecycle-v1 决定 2）：由探测回写，
+  // 不走公开的更新命令，所以「从没探测过」与「探测过且正常」在库里可区分。
+  lastCheckedAt DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  sources       SourceInstance[]
+  plans         CollectionPlan[]
+  version       Int              @default(1)
 }
 
 model ModelProvider {
-    id                 String            @id @default(cuid())
-    name               String
-    api                String
-    baseUrl            String
-    secretRef          String?           @unique
-    version            Int               @default(1)
-    state              String            @default("active")
-    pendingOperationId String?           @unique
-    createdAt          DateTime          @default(now())
-    updatedAt          DateTime          @updatedAt
-    models             ConfiguredModel[]
+  id                 String            @id @default(cuid())
+  name               String
+  api                String
+  baseUrl            String
+  secretRef          String?           @unique
+  version            Int               @default(1)
+  state              String            @default("active")
+  pendingOperationId String?           @unique
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  models             ConfiguredModel[]
 }
 
 model ConfiguredModel {
-    id              String               @id @default(cuid())
-    providerId      String
-    modelId         String
-    name            String
-    contextWindow   Int
-    maxOutputTokens Int
-    version         Int                  @default(1)
-    createdAt       DateTime             @default(now())
-    updatedAt       DateTime             @updatedAt
-    provider        ModelProvider        @relation(fields: [providerId], references: [id], onDelete: Restrict)
-    connections     ConnectionInstance[]
+  id                    String        @id @default(cuid())
+  providerId            String
+  modelId               String
+  name                  String
+  contextWindow         Int
+  maxOutputTokens       Int
+  inputPricePerMillion  Decimal?      @default(0)
+  outputPricePerMillion Decimal?      @default(0)
+  version               Int           @default(1)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  provider              ModelProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
 
-    @@unique([providerId, modelId])
+  @@unique([providerId, modelId])
 }
 
-// Receipts outlive Provider deletion; refs identify only files owned by this operation.
-// Credential bytes and replayable command payloads must never be stored here.
-model ModelConfigurationOperation {
-    id              String   @id @default(cuid())
-    idempotencyKey  String   @unique
-    kind            String
-    providerId      String
-    state           String   @default("pending")
-    phase           String   @default("registered")
-    generation      Int      @default(1)
-    expectedVersion Int?
-    resourceVersion Int?
-    newSecretRef    String?   @unique
-    oldSecretRef    String?
-    errorCode       String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
+model SystemConfig {
+  id             String   @id @default("singleton")
+  defaultModelId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
 
-    @@index([providerId, state])
+model ModelConfigurationOperation {
+  id              String   @id @default(cuid())
+  idempotencyKey  String   @unique
+  kind            String
+  providerId      String
+  state           String   @default("pending")
+  phase           String   @default("registered")
+  generation      Int      @default(1)
+  expectedVersion Int?
+  resourceVersion Int?
+  newSecretRef    String?  @unique
+  oldSecretRef    String?
+  errorCode       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([providerId, state])
 }
 
 // Namespaced + versioned non-secret connector state (ADR-0017): cursor/ETag/
 // pagination token/rate state. The version is a monotonically increasing CAS
 // token; writes that pass a stale version are rejected.
 model ConnectorState {
-    id        String   @id @default(cuid())
-    namespace String
-    key       String
-    valueJson String
-    version   Int      @default(1)
-    updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  namespace String
+  key       String
+  valueJson String
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
 
-    @@unique([namespace, key])
+  @@unique([namespace, key])
 }
 
 // 命名空间归属（ING-012 的范围隔离，ADR-0026）：抽屉名是宿主按 manifest 模板算出来的
@@ -189,316 +191,315 @@ model ConnectorState {
 // 解析模板现算。刻意不给 ConnectorState.namespace 加指向本表的外键：登记是尽力而为的
 // 元数据，不能成为状态写入的前置条件（登记失败或遗留抽屉会让写入撞 FK 报错）。
 model ConnectorStateNamespace {
-    namespace String         @id
-    planId    String
-    createdAt DateTime       @default(now())
-    updatedAt DateTime       @updatedAt
-    plan      CollectionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  namespace String         @id
+  planId    String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  plan      CollectionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
-    @@index([planId])
+  @@index([planId])
 }
 
 model Checkpoint {
-    id               String          @id @default(cuid())
-    sourceInstanceId String          @unique
-    planId           String?         @unique
-    cursor           String?
-    revision         Int             @default(0)
-    workflowRunId    String?
-    updatedAt        DateTime        @updatedAt
-    sourceInstance   SourceInstance  @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
-    plan             CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
-    workflowRun      WorkflowRun?    @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+  id               String          @id @default(cuid())
+  sourceInstanceId String          @unique
+  planId           String?         @unique
+  cursor           String?
+  revision         Int             @default(0)
+  workflowRunId    String?
+  updatedAt        DateTime        @updatedAt
+  sourceInstance   SourceInstance  @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
+  plan             CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  workflowRun      WorkflowRun?    @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
 }
 
 model Run {
-    id                    String          @id @default(cuid())
-    sourceInstanceId      String
-    planId                String?
-    triggerKind           String
-    status                String
-    createdAt             DateTime        @default(now())
-    startedAt             DateTime?
-    finishedAt            DateTime?
-    itemCount             Int             @default(0)
-    createdEntryCount     Int             @default(0)
-    revisedEntryCount     Int             @default(0)
-    duplicateObservationCount Int         @default(0)
-    errorCode             String?
-    errorMessage          String?
-    sourceInstance        SourceInstance  @relation(fields: [sourceInstanceId], references: [id])
-    plan                  CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
-    steps                 Step[]
-    jobs                  Job[]
-    observations          Observation[]
-    events                DomainEvent[]
+  id                        String          @id @default(cuid())
+  sourceInstanceId          String
+  planId                    String?
+  triggerKind               String
+  status                    String
+  createdAt                 DateTime        @default(now())
+  startedAt                 DateTime?
+  finishedAt                DateTime?
+  itemCount                 Int             @default(0)
+  createdEntryCount         Int             @default(0)
+  revisedEntryCount         Int             @default(0)
+  duplicateObservationCount Int             @default(0)
+  errorCode                 String?
+  errorMessage              String?
+  sourceInstance            SourceInstance  @relation(fields: [sourceInstanceId], references: [id])
+  plan                      CollectionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  steps                     Step[]
+  jobs                      Job[]
+  observations              Observation[]
+  events                    DomainEvent[]
 
-    @@index([sourceInstanceId, createdAt])
-    @@index([planId, createdAt])
+  @@index([sourceInstanceId, createdAt])
+  @@index([planId, createdAt])
 }
 
 model Step {
-    id           String    @id @default(cuid())
-    runId        String
-    position     Int
-    kind         String
-    status       String
-    attempts     Int       @default(0)
-    inputJson    String?
-    outputJson   String?
-    errorMessage String?
-    startedAt    DateTime?
-    finishedAt   DateTime?
-    run          Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
-    jobs         Job[]
+  id           String    @id @default(cuid())
+  runId        String
+  position     Int
+  kind         String
+  status       String
+  attempts     Int       @default(0)
+  inputJson    String?
+  outputJson   String?
+  errorMessage String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  run          Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  jobs         Job[]
 
-    @@unique([runId, position])
+  @@unique([runId, position])
 }
 
 model Job {
-    id             String    @id @default(cuid())
-    runId          String?
-    stepId         String?
-    workflowRunId          String?
-    workflowKernelRevision Int?
-    kind                   String
-    status                 String
-    payloadJson            String?
-    resultJson             String?
-    idempotencyKey         String    @unique
-    attempts               Int       @default(0)
-    maxAttempts            Int       @default(3)
-    leaseOwner             String?
-    leaseToken             String?
-    leaseExpiresAt         DateTime?
-    dispatchAuthorizedAt   DateTime?
-    nextAttemptAt          DateTime?
-    errorCode              String?
-    errorMessage           String?
-    createdAt              DateTime  @default(now())
-    updatedAt              DateTime  @updatedAt
-    run                    Run?      @relation(fields: [runId], references: [id], onDelete: Cascade)
-    step                   Step?     @relation(fields: [stepId], references: [id], onDelete: Cascade)
-    workflowRun            WorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
-    completion             WorkflowCompletion?
+  id                     String              @id @default(cuid())
+  runId                  String?
+  stepId                 String?
+  workflowRunId          String?
+  workflowKernelRevision Int?
+  kind                   String
+  status                 String
+  payloadJson            String?
+  resultJson             String?
+  idempotencyKey         String              @unique
+  attempts               Int                 @default(0)
+  maxAttempts            Int                 @default(3)
+  leaseOwner             String?
+  leaseToken             String?
+  leaseExpiresAt         DateTime?
+  dispatchAuthorizedAt   DateTime?
+  nextAttemptAt          DateTime?
+  errorCode              String?
+  errorMessage           String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  run                    Run?                @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step                   Step?               @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  workflowRun            WorkflowRun?        @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  completion             WorkflowCompletion?
 
-    @@index([status, nextAttemptAt])
-    @@index([workflowRunId, status])
-    @@index([workflowRunId, workflowKernelRevision])
+  @@index([status, nextAttemptAt])
+  @@index([workflowRunId, status])
+  @@index([workflowRunId, workflowKernelRevision])
 }
 
 model WorkerHeartbeat {
-    id         String    @id @default(cuid())
-    instanceId String    @unique
-    status     String
-    version    String
-    startedAt  DateTime  @default(now())
-    lastSeenAt DateTime  @updatedAt
-    stoppedAt  DateTime?
+  id         String    @id @default(cuid())
+  instanceId String    @unique
+  status     String
+  version    String
+  startedAt  DateTime  @default(now())
+  lastSeenAt DateTime  @updatedAt
+  stoppedAt  DateTime?
 }
 
 model DomainEvent {
-    sequence        Int       @id @default(autoincrement())
-    eventId         String    @unique
-    type            String
-    version         String
-    payloadJson     String
-    occurredAt      DateTime  @default(now())
-    aggregateType   String?
-    aggregateId     String?
-    runId           String?
-    workflowRunId   String?
-    idempotencyKey  String?
-    run             Run?      @relation(fields: [runId], references: [id], onDelete: SetNull)
-    workflowRun     WorkflowRun? @relation("WorkflowRunEvents", fields: [workflowRunId], references: [id], onDelete: SetNull)
+  sequence       Int          @id @default(autoincrement())
+  eventId        String       @unique
+  type           String
+  version        String
+  payloadJson    String
+  occurredAt     DateTime     @default(now())
+  aggregateType  String?
+  aggregateId    String?
+  runId          String?
+  workflowRunId  String?
+  idempotencyKey String?
+  run            Run?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+  workflowRun    WorkflowRun? @relation("WorkflowRunEvents", fields: [workflowRunId], references: [id], onDelete: SetNull)
 
-    @@index([occurredAt])
-    @@index([workflowRunId, occurredAt])
-    @@unique([workflowRunId, idempotencyKey])
+  @@unique([workflowRunId, idempotencyKey])
+  @@index([occurredAt])
+  @@index([workflowRunId, occurredAt])
 }
 
 model Observation {
-    id                String         @id @default(cuid())
-    sourceInstanceId  String
-    runId             String?
-    workflowRunId     String?
-    ingestCommandId   String?        @unique
-    ingestResultJson  String?
-    entryId           String?
-    externalId        String?
-    externalKey       String
-    externalRevision  String         @default("0")
-    eventKind         String         @default("create")
-    sourceLocatorJson String
-    discoveryContextJson String?
-    webUrl            String?
-    payloadBlobKey    String?
-    contentSourceBlobKey String?
-    title             String?
-    contentText       String?
-    contentFingerprint String?
-    contentKind       String          @default("article")
-    publisherJson      String?
-    metricsJson        String?
-    publishedAtJson   String?
-    updatedAtJson     String?
-    sourcePublishedAt DateTime?
-    capturedAt        DateTime        @default(now())
-    sourceInstance    SourceInstance  @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
-    run               Run?            @relation(fields: [runId], references: [id], onDelete: SetNull)
-    workflowRun       WorkflowRun?    @relation("WorkflowRunObservations", fields: [workflowRunId], references: [id], onDelete: SetNull)
-    entry             Entry?          @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  id                   String         @id @default(cuid())
+  sourceInstanceId     String
+  runId                String?
+  workflowRunId        String?
+  ingestCommandId      String?        @unique
+  ingestResultJson     String?
+  entryId              String?
+  externalId           String?
+  externalKey          String
+  externalRevision     String         @default("0")
+  eventKind            String         @default("create")
+  sourceLocatorJson    String
+  discoveryContextJson String?
+  webUrl               String?
+  payloadBlobKey       String?
+  contentSourceBlobKey String?
+  title                String?
+  contentText          String?
+  contentFingerprint   String?
+  contentKind          String         @default("article")
+  publisherJson        String?
+  metricsJson          String?
+  publishedAtJson      String?
+  updatedAtJson        String?
+  sourcePublishedAt    DateTime?
+  capturedAt           DateTime       @default(now())
+  sourceInstance       SourceInstance @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
+  run                  Run?           @relation(fields: [runId], references: [id], onDelete: SetNull)
+  workflowRun          WorkflowRun?   @relation("WorkflowRunObservations", fields: [workflowRunId], references: [id], onDelete: SetNull)
+  entry                Entry?         @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
-    evidenceForRevisions EntryRevision[] @relation("RevisionEvidence")
+  evidenceForRevisions EntryRevision[] @relation("RevisionEvidence")
 
-    @@unique([sourceInstanceId, runId, externalKey])
-    @@index([sourceInstanceId, externalKey, capturedAt])
-    @@index([workflowRunId, capturedAt])
+  @@unique([sourceInstanceId, runId, externalKey])
+  @@index([sourceInstanceId, externalKey, capturedAt])
+  @@index([workflowRunId, capturedAt])
 }
 
-
 model Entry {
-    id                  String         @id @default(cuid())
-    sourceInstanceId    String
-    canonicalExternalId String
-    currentRevisionId   String?        @unique
-    storyId             String?
-    metricsJson         String?
-    createdAt           DateTime       @default(now())
-    updatedAt           DateTime       @updatedAt
-    sourceInstance      SourceInstance @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
-    currentRevision     EntryRevision? @relation("EntryCurrentRevision", fields: [currentRevisionId], references: [id])
-    revisions           EntryRevision[] @relation("EntryRevisions")
-    observations        Observation[]
-    story               Story?         @relation(fields: [storyId], references: [id], onDelete: SetNull)
-    storyLinks          EntryStoryLink[]
-    relationsFrom       EntryRelation[] @relation("EntryRelationFrom")
-    relationsTo         EntryRelation[] @relation("EntryRelationTo")
+  id                  String           @id @default(cuid())
+  sourceInstanceId    String
+  canonicalExternalId String
+  currentRevisionId   String?          @unique
+  storyId             String?
+  metricsJson         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  sourceInstance      SourceInstance   @relation(fields: [sourceInstanceId], references: [id], onDelete: Cascade)
+  currentRevision     EntryRevision?   @relation("EntryCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions           EntryRevision[]  @relation("EntryRevisions")
+  observations        Observation[]
+  story               Story?           @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  storyLinks          EntryStoryLink[]
+  relationsFrom       EntryRelation[]  @relation("EntryRelationFrom")
+  relationsTo         EntryRelation[]  @relation("EntryRelationTo")
 
-    @@unique([sourceInstanceId, canonicalExternalId])
+  @@unique([sourceInstanceId, canonicalExternalId])
 }
 
 model EntryRevision {
-    id                 String        @id @default(cuid())
-    entryId            String
-    revision           Int
-    title              String
-    summary            String?
-    contentText        String
-    contentFingerprint String
-    webUrl             String?
-    contentKind        String        @default("article")
-    publisherJson      String?
-    publishedAtJson    String?
-    updatedAtJson      String?
-    sourcePublishedAt  DateTime?
-    createdAt          DateTime      @default(now())
-    entry              Entry         @relation("EntryRevisions", fields: [entryId], references: [id], onDelete: Cascade)
-    currentForEntry    Entry?        @relation("EntryCurrentRevision")
-    assets             Asset[]
-    evidenceObservationId String?
-    evidenceObservation Observation? @relation("RevisionEvidence", fields: [evidenceObservationId], references: [id], onDelete: SetNull)
-    currentRepresentationId String? @unique
-    representationLocked Boolean @default(false)
-    currentRepresentation ContentRepresentation? @relation("CurrentContentRepresentation", fields: [currentRepresentationId], references: [id], onDelete: SetNull)
-    representations ContentRepresentation[] @relation("RevisionContentRepresentations")
+  id                      String                  @id @default(cuid())
+  entryId                 String
+  revision                Int
+  title                   String
+  summary                 String?
+  contentText             String
+  contentFingerprint      String
+  webUrl                  String?
+  contentKind             String                  @default("article")
+  publisherJson           String?
+  publishedAtJson         String?
+  updatedAtJson           String?
+  sourcePublishedAt       DateTime?
+  createdAt               DateTime                @default(now())
+  entry                   Entry                   @relation("EntryRevisions", fields: [entryId], references: [id], onDelete: Cascade)
+  currentForEntry         Entry?                  @relation("EntryCurrentRevision")
+  assets                  Asset[]
+  evidenceObservationId   String?
+  evidenceObservation     Observation?            @relation("RevisionEvidence", fields: [evidenceObservationId], references: [id], onDelete: SetNull)
+  currentRepresentationId String?                 @unique
+  representationLocked    Boolean                 @default(false)
+  currentRepresentation   ContentRepresentation?  @relation("CurrentContentRepresentation", fields: [currentRepresentationId], references: [id], onDelete: SetNull)
+  representations         ContentRepresentation[] @relation("RevisionContentRepresentations")
 
-    @@unique([entryId, revision])
-    @@index([entryId, createdAt])
+  @@unique([entryId, revision])
+  @@index([entryId, createdAt])
 }
 
 model ContentRepresentation {
-    id String @id @default(cuid())
-    entryRevisionId String
-    representationVersion Int
-    parserVersion String
-    status String
-    blocksJson String
-    contentText String
-    qualitySignalsJson String
-    supersedesRepresentationId String?
-    createdAt DateTime @default(now())
-    entryRevision EntryRevision @relation("RevisionContentRepresentations", fields: [entryRevisionId], references: [id], onDelete: Cascade)
-    currentForRevision EntryRevision? @relation("CurrentContentRepresentation")
-    supersedes ContentRepresentation? @relation("RepresentationSupersession", fields: [supersedesRepresentationId], references: [id], onDelete: SetNull)
-    successors ContentRepresentation[] @relation("RepresentationSupersession")
+  id                         String                  @id @default(cuid())
+  entryRevisionId            String
+  representationVersion      Int
+  parserVersion              String
+  status                     String
+  blocksJson                 String
+  contentText                String
+  qualitySignalsJson         String
+  supersedesRepresentationId String?
+  createdAt                  DateTime                @default(now())
+  entryRevision              EntryRevision           @relation("RevisionContentRepresentations", fields: [entryRevisionId], references: [id], onDelete: Cascade)
+  currentForRevision         EntryRevision?          @relation("CurrentContentRepresentation")
+  supersedes                 ContentRepresentation?  @relation("RepresentationSupersession", fields: [supersedesRepresentationId], references: [id], onDelete: SetNull)
+  successors                 ContentRepresentation[] @relation("RepresentationSupersession")
 
-    @@unique([entryRevisionId, representationVersion])
-    @@index([entryRevisionId, createdAt])
+  @@unique([entryRevisionId, representationVersion])
+  @@index([entryRevisionId, createdAt])
 }
 
 model Asset {
-    id              String        @id @default(cuid())
-    entryRevisionId String
-    kind            String
-    status          String
-    sourceUrl       String?
-    storageKey      String?
-    mimeType        String?
-    byteSize        Int?
-    errorMessage    String?
-    /// Machine-readable degradation reason (ADR-0015 decision 2); retry decisions never parse errorMessage.
-    errorCode       String?
-    /// Completed download attempts for this Asset row, including the first (ADR-0015 decision 3).
-    attemptCount    Int           @default(0)
-    lastAttemptAt   DateTime?
-    createdAt       DateTime      @default(now())
-    entryRevision   EntryRevision @relation(fields: [entryRevisionId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  entryRevisionId String
+  kind            String
+  status          String
+  sourceUrl       String?
+  storageKey      String?
+  mimeType        String?
+  byteSize        Int?
+  errorMessage    String?
+  /// Machine-readable degradation reason (ADR-0015 decision 2); retry decisions never parse errorMessage.
+  errorCode       String?
+  /// Completed download attempts for this Asset row, including the first (ADR-0015 decision 3).
+  attemptCount    Int           @default(0)
+  lastAttemptAt   DateTime?
+  createdAt       DateTime      @default(now())
+  entryRevision   EntryRevision @relation(fields: [entryRevisionId], references: [id], onDelete: Cascade)
 
-    @@index([entryRevisionId])
+  @@index([entryRevisionId])
 }
 
 model Story {
-    id                String         @id
-    kind              String
-    subtype           String?
-    currentRevisionId String?        @unique
-    createdAt         DateTime       @default(now())
-    updatedAt         DateTime       @updatedAt
-    currentRevision   StoryRevision? @relation("StoryCurrentRevision", fields: [currentRevisionId], references: [id])
-    revisions         StoryRevision[] @relation("StoryRevisions")
-    entries           Entry[]
-    aliases           StoryAlias[]
-    topicMemberships  TopicMembership[]
-    storyEntities     StoryEntity[]
-    collectionItems   CollectionItem[]
-    entryLinks        EntryStoryLink[]
-    successors        StoryReplacement[] @relation("StoryReplacementShell")
-    splitFrom         StoryReplacement[] @relation("StoryReplacementSuccessor")
-    candidates        StoryAgentCandidate[]
+  id                String                @id
+  kind              String
+  subtype           String?
+  currentRevisionId String?               @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  currentRevision   StoryRevision?        @relation("StoryCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions         StoryRevision[]       @relation("StoryRevisions")
+  entries           Entry[]
+  aliases           StoryAlias[]
+  topicMemberships  TopicMembership[]
+  storyEntities     StoryEntity[]
+  collectionItems   CollectionItem[]
+  entryLinks        EntryStoryLink[]
+  successors        StoryReplacement[]    @relation("StoryReplacementShell")
+  splitFrom         StoryReplacement[]    @relation("StoryReplacementSuccessor")
+  candidates        StoryAgentCandidate[]
 }
 
 model StoryRevision {
-    id              String  @id @default(cuid())
-    storyId         String
-    revision        Int     @default(1)
-    fingerprint     String?
-    /// Who wrote this Revision: `human` (a user command), `system` (the
-    /// deterministic ingest projection) or `agent` (future derived analysis).
-    /// A current Revision with `producer = "human"` is protected from automatic
-    /// overwrite, so every automatic writer must declare itself here
-    /// (ADR-0028). `system` is the default because it claims the least.
-    producer        String  @default("system")
-    actorJson       String?
-    reason          String?
-    title           String
-    summary         String?
-    timeRangeJson   String?
-    keyFactsJson    String?
-    createdAt       DateTime @default(now())
-    story           Story   @relation("StoryRevisions", fields: [storyId], references: [id], onDelete: Cascade)
-    currentForStory Story?  @relation("StoryCurrentRevision")
+  id              String   @id @default(cuid())
+  storyId         String
+  revision        Int      @default(1)
+  fingerprint     String?
+  /// Who wrote this Revision: `human` (a user command), `system` (the
+  /// deterministic ingest projection) or `agent` (future derived analysis).
+  /// A current Revision with `producer = "human"` is protected from automatic
+  /// overwrite, so every automatic writer must declare itself here
+  /// (ADR-0028). `system` is the default because it claims the least.
+  producer        String   @default("system")
+  actorJson       String?
+  reason          String?
+  title           String
+  summary         String?
+  timeRangeJson   String?
+  keyFactsJson    String?
+  createdAt       DateTime @default(now())
+  story           Story    @relation("StoryRevisions", fields: [storyId], references: [id], onDelete: Cascade)
+  currentForStory Story?   @relation("StoryCurrentRevision")
 
-    @@unique([storyId, revision])
+  @@unique([storyId, revision])
 }
 
 model StoryAlias {
-    id               String   @id
-    canonicalStoryId String
-    createdAt        DateTime @default(now())
-    canonicalStory   Story    @relation(fields: [canonicalStoryId], references: [id], onDelete: Cascade)
+  id               String   @id
+  canonicalStoryId String
+  createdAt        DateTime @default(now())
+  canonicalStory   Story    @relation(fields: [canonicalStoryId], references: [id], onDelete: Cascade)
 
-    @@index([canonicalStoryId])
+  @@index([canonicalStoryId])
 }
 
 // Historical shell -> successor edge created by Story split. A Story that has
@@ -506,428 +507,428 @@ model StoryAlias {
 // but is never an alias target, so its id never redirects to a single
 // successor (ADR-0012 decision 1).
 model StoryReplacement {
-    id               String   @id @default(cuid())
-    storyId          String
-    successorStoryId String
-    actorJson        String?
-    reason           String?
-    createdAt        DateTime @default(now())
-    story            Story    @relation("StoryReplacementShell", fields: [storyId], references: [id], onDelete: Cascade)
-    successor        Story    @relation("StoryReplacementSuccessor", fields: [successorStoryId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  storyId          String
+  successorStoryId String
+  actorJson        String?
+  reason           String?
+  createdAt        DateTime @default(now())
+  story            Story    @relation("StoryReplacementShell", fields: [storyId], references: [id], onDelete: Cascade)
+  successor        Story    @relation("StoryReplacementSuccessor", fields: [successorStoryId], references: [id], onDelete: Cascade)
 
-    @@unique([storyId, successorStoryId])
-    @@index([successorStoryId])
+  @@unique([storyId, successorStoryId])
+  @@index([successorStoryId])
 }
 
 model Topic {
-    id                String             @id @default(cuid())
-    currentRevisionId String?            @unique
-    createdAt         DateTime           @default(now())
-    updatedAt         DateTime           @updatedAt
-    currentRevision   TopicRevision?     @relation("TopicCurrentRevision", fields: [currentRevisionId], references: [id])
-    revisions         TopicRevision[]    @relation("TopicRevisions")
-    memberships       TopicMembership[]
-    aliases           TopicAlias[]
+  id                String            @id @default(cuid())
+  currentRevisionId String?           @unique
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  currentRevision   TopicRevision?    @relation("TopicCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions         TopicRevision[]   @relation("TopicRevisions")
+  memberships       TopicMembership[]
+  aliases           TopicAlias[]
 }
 
 model TopicRevision {
-    id              String  @id @default(cuid())
-    topicId         String
-    revision        Int     @default(1)
-    fingerprint     String?
-    actorJson       String?
-    reason          String?
-    title           String
-    purpose         String
-    scope           String?
-    createdAt       DateTime @default(now())
-    topic           Topic   @relation("TopicRevisions", fields: [topicId], references: [id], onDelete: Cascade)
-    currentForTopic Topic?  @relation("TopicCurrentRevision")
+  id              String   @id @default(cuid())
+  topicId         String
+  revision        Int      @default(1)
+  fingerprint     String?
+  actorJson       String?
+  reason          String?
+  title           String
+  purpose         String
+  scope           String?
+  createdAt       DateTime @default(now())
+  topic           Topic    @relation("TopicRevisions", fields: [topicId], references: [id], onDelete: Cascade)
+  currentForTopic Topic?   @relation("TopicCurrentRevision")
 
-    @@unique([topicId, revision])
+  @@unique([topicId, revision])
 }
 
 model TopicMembership {
-    id                String                   @id @default(cuid())
-    topicId           String
-    storyId           String
-    currentRevisionId String?                  @unique
-    createdAt         DateTime                 @default(now())
-    updatedAt         DateTime                 @updatedAt
-    topic             Topic                    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-    story             Story                    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-    currentRevision   TopicMembershipRevision? @relation("TopicMembershipCurrentRevision", fields: [currentRevisionId], references: [id])
-    revisions         TopicMembershipRevision[] @relation("TopicMembershipRevisions")
+  id                String                    @id @default(cuid())
+  topicId           String
+  storyId           String
+  currentRevisionId String?                   @unique
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  topic             Topic                     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  story             Story                     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  currentRevision   TopicMembershipRevision?  @relation("TopicMembershipCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions         TopicMembershipRevision[] @relation("TopicMembershipRevisions")
 
-    @@unique([topicId, storyId])
+  @@unique([topicId, storyId])
 }
 
 model TopicMembershipRevision {
-    id                    String          @id @default(cuid())
-    membershipId          String
-    revision              Int             @default(1)
-    role                  String
-    reason                String?
-    actorJson             String?
-    tombstone             Boolean         @default(false)
-    createdAt             DateTime        @default(now())
-    membership            TopicMembership @relation("TopicMembershipRevisions", fields: [membershipId], references: [id], onDelete: Cascade)
-    currentForMembership  TopicMembership? @relation("TopicMembershipCurrentRevision")
+  id                   String           @id @default(cuid())
+  membershipId         String
+  revision             Int              @default(1)
+  role                 String
+  reason               String?
+  actorJson            String?
+  tombstone            Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  membership           TopicMembership  @relation("TopicMembershipRevisions", fields: [membershipId], references: [id], onDelete: Cascade)
+  currentForMembership TopicMembership? @relation("TopicMembershipCurrentRevision")
 
-    @@unique([membershipId, revision])
+  @@unique([membershipId, revision])
 }
 
 model TopicAlias {
-    id               String   @id
-    canonicalTopicId String
-    createdAt        DateTime @default(now())
-    canonicalTopic   Topic    @relation(fields: [canonicalTopicId], references: [id], onDelete: Cascade)
+  id               String   @id
+  canonicalTopicId String
+  createdAt        DateTime @default(now())
+  canonicalTopic   Topic    @relation(fields: [canonicalTopicId], references: [id], onDelete: Cascade)
 
-    @@index([canonicalTopicId])
+  @@index([canonicalTopicId])
 }
 
 model Entity {
-    id                String             @id @default(cuid())
-    type              String
-    currentRevisionId String?            @unique
-    createdAt         DateTime           @default(now())
-    updatedAt         DateTime           @updatedAt
-    currentRevision   EntityRevision?    @relation("EntityCurrentRevision", fields: [currentRevisionId], references: [id])
-    revisions         EntityRevision[]   @relation("EntityRevisions")
-    aliases           EntityAlias[]
-    storyLinks        StoryEntity[]
-    fromRelations     EntityRelation[]   @relation("EntityRelationFrom")
-    toRelations       EntityRelation[]   @relation("EntityRelationTo")
+  id                String           @id @default(cuid())
+  type              String
+  currentRevisionId String?          @unique
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  currentRevision   EntityRevision?  @relation("EntityCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions         EntityRevision[] @relation("EntityRevisions")
+  aliases           EntityAlias[]
+  storyLinks        StoryEntity[]
+  fromRelations     EntityRelation[] @relation("EntityRelationFrom")
+  toRelations       EntityRelation[] @relation("EntityRelationTo")
 }
 
 model EntityRevision {
-    id                String   @id @default(cuid())
-    entityId          String
-    revision          Int      @default(1)
-    fingerprint       String?
-    actorJson         String?
-    reason            String?
-    name              String
-    type              String
-    createdAt         DateTime @default(now())
-    entity            Entity   @relation("EntityRevisions", fields: [entityId], references: [id], onDelete: Cascade)
-    currentForEntity  Entity?  @relation("EntityCurrentRevision")
+  id               String   @id @default(cuid())
+  entityId         String
+  revision         Int      @default(1)
+  fingerprint      String?
+  actorJson        String?
+  reason           String?
+  name             String
+  type             String
+  createdAt        DateTime @default(now())
+  entity           Entity   @relation("EntityRevisions", fields: [entityId], references: [id], onDelete: Cascade)
+  currentForEntity Entity?  @relation("EntityCurrentRevision")
 
-    @@unique([entityId, revision])
+  @@unique([entityId, revision])
 }
 
 model EntityAlias {
-    id        String   @id @default(cuid())
-    entityId  String
-    name      String
-    createdAt DateTime @default(now())
-    entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  entityId  String
+  name      String
+  createdAt DateTime @default(now())
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-    @@unique([entityId, name])
+  @@unique([entityId, name])
 }
 
 model StoryEntity {
-    id              String   @id @default(cuid())
-    storyId         String
-    entityId        String
-    producer        String   @default("human")
-    producerVersion String?
-    confidence      Float    @default(1)
-    evidence        String?
-    actorJson       String?
-    reason          String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
-    story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-    entity          Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  storyId         String
+  entityId        String
+  producer        String   @default("human")
+  producerVersion String?
+  confidence      Float    @default(1)
+  evidence        String?
+  actorJson       String?
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  entity          Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-    @@unique([storyId, entityId])
+  @@unique([storyId, entityId])
 }
 
 model EntryStoryLink {
-    id              String   @id @default(cuid())
-    entryId         String
-    storyId         String
-    relationType    String
-    producer        String   @default("human")
-    producerVersion String?
-    confidence      Float    @default(1)
-    evidence        String?
-    actorJson       String?
-    reason          String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
-    entry           Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
-    story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  entryId         String
+  storyId         String
+  relationType    String
+  producer        String   @default("human")
+  producerVersion String?
+  confidence      Float    @default(1)
+  evidence        String?
+  actorJson       String?
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  entry           Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
-    @@unique([entryId, storyId])
+  @@unique([entryId, storyId])
 }
 
 model EntityRelation {
-    id              String   @id @default(cuid())
-    fromEntityId    String
-    toEntityId      String
-    relationType    String
-    producer        String   @default("human")
-    producerVersion String?
-    confidence      Float    @default(1)
-    evidence        String?
-    actorJson       String?
-    reason          String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
-    fromEntity      Entity   @relation("EntityRelationFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
-    toEntity        Entity   @relation("EntityRelationTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  fromEntityId    String
+  toEntityId      String
+  relationType    String
+  producer        String   @default("human")
+  producerVersion String?
+  confidence      Float    @default(1)
+  evidence        String?
+  actorJson       String?
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fromEntity      Entity   @relation("EntityRelationFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity        Entity   @relation("EntityRelationTo", fields: [toEntityId], references: [id], onDelete: Cascade)
 
-    @@unique([fromEntityId, toEntityId, relationType])
+  @@unique([fromEntityId, toEntityId, relationType])
 }
 
 /// One current duplicate/syndication relation per unordered Entry pair
 /// (ADR-0022 decision 2). Symmetric types are stored in id order, so the
 /// unique key below is a pair key as long as the writer normalizes first.
 model EntryRelation {
-    id              String   @id @default(cuid())
-    fromEntryId     String
-    toEntryId       String
-    relationType    String
-    producer        String   @default("human")
-    producerVersion String?
-    confidence      Float    @default(1)
-    evidence        String?
-    actorJson       String?
-    reason          String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
-    fromEntry       Entry    @relation("EntryRelationFrom", fields: [fromEntryId], references: [id], onDelete: Cascade)
-    toEntry         Entry    @relation("EntryRelationTo", fields: [toEntryId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  fromEntryId     String
+  toEntryId       String
+  relationType    String
+  producer        String   @default("human")
+  producerVersion String?
+  confidence      Float    @default(1)
+  evidence        String?
+  actorJson       String?
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fromEntry       Entry    @relation("EntryRelationFrom", fields: [fromEntryId], references: [id], onDelete: Cascade)
+  toEntry         Entry    @relation("EntryRelationTo", fields: [toEntryId], references: [id], onDelete: Cascade)
 
-    @@unique([fromEntryId, toEntryId])
-    @@index([toEntryId])
+  @@unique([fromEntryId, toEntryId])
+  @@index([toEntryId])
 }
 
 model Label {
-    id          String            @id @default(cuid())
-    name        String            @unique
-    createdAt   DateTime          @default(now())
-    updatedAt   DateTime          @updatedAt
-    assignments LabelAssignment[]
+  id          String            @id @default(cuid())
+  name        String            @unique
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  assignments LabelAssignment[]
 }
 
 // Polymorphic attach of one label to one story/entry/topic target. There is no
 // FK to the target rows because the target type is not fixed (ADR-0009).
 model LabelAssignment {
-    id         String   @id @default(cuid())
-    labelId    String
-    targetType String
-    targetId   String
-    createdAt  DateTime @default(now())
-    label      Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  labelId    String
+  targetType String
+  targetId   String
+  createdAt  DateTime @default(now())
+  label      Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
-    @@unique([labelId, targetType, targetId])
-    @@index([targetType, targetId])
+  @@unique([labelId, targetType, targetId])
+  @@index([targetType, targetId])
 }
 
 model Collection {
-    id          String           @id @default(cuid())
-    name        String
-    description String?
-    createdAt   DateTime         @default(now())
-    updatedAt   DateTime         @updatedAt
-    items       CollectionItem[]
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  items       CollectionItem[]
 }
 
 model CollectionItem {
-    id           String     @id @default(cuid())
-    collectionId String
-    storyId      String
-    createdAt    DateTime   @default(now())
-    collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-    story        Story      @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  collectionId String
+  storyId      String
+  createdAt    DateTime   @default(now())
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  story        Story      @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
-    @@unique([collectionId, storyId])
-    @@index([storyId])
+  @@unique([collectionId, storyId])
+  @@index([storyId])
 }
 
 model Favorite {
-    id         String   @id @default(cuid())
-    targetType String
-    targetId   String
-    createdAt  DateTime @default(now())
-    updatedAt  DateTime @updatedAt
+  id         String   @id @default(cuid())
+  targetType String
+  targetId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-    @@unique([targetType, targetId])
+  @@unique([targetType, targetId])
 }
 
 // Editable user note attached to a story/entry/topic. Not revisioned: the
 // note has no versioned display-field history (ADR-0009 decision 4).
 model Annotation {
-    id               String   @id @default(cuid())
-    targetType       String
-    targetId         String
-    targetRevisionId String?
-    quote            String?
-    body             String
-    evidence         String?
-    actorJson        String?
-    createdAt        DateTime @default(now())
-    updatedAt        DateTime @updatedAt
+  id               String   @id @default(cuid())
+  targetType       String
+  targetId         String
+  targetRevisionId String?
+  quote            String?
+  body             String
+  evidence         String?
+  actorJson        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-    @@index([targetType, targetId])
+  @@index([targetType, targetId])
 }
 
 // Named persistent query conditions (not a result snapshot): applying a view
 // re-runs the search so results stay fresh (ADR-0009 decision 5).
 model SavedView {
-    id                String   @id @default(cuid())
-    name              String
-    text              String?
-    sourceId          String?
-    publishedAfter    String?
-    publishedBefore   String?
-    labelIdsJson      String
-    topicIdsJson      String
-    createdAt         DateTime @default(now())
-    updatedAt         DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  text            String?
+  sourceId        String?
+  publishedAfter  String?
+  publishedBefore String?
+  labelIdsJson    String
+  topicIdsJson    String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // Configurable dashboard root. Multi-board entity with one application-seeded
 // default; editing a board never touches the content objects it displays
 // (ADR-0010 decisions 1 and 4).
 model Board {
-    id          String              @id @default(cuid())
-    name        String              @unique
-    description String?
-    createdAt   DateTime            @default(now())
-    updatedAt   DateTime            @updatedAt
-    sections    BoardSection[]
-    placements  SpotlightPlacement[]
+  id          String               @id @default(cuid())
+  name        String               @unique
+  description String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  sections    BoardSection[]
+  placements  SpotlightPlacement[]
 }
 
 // Titled block container inside a board. No kind field: the hot/curation/feed
 // difference is carried by the block types inside, not by the section.
 model BoardSection {
-    id        String       @id @default(cuid())
-    boardId   String
-    title     String
-    position  Int
-    createdAt DateTime     @default(now())
-    updatedAt DateTime     @updatedAt
-    board     Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
-    blocks    BoardBlock[]
+  id        String       @id @default(cuid())
+  boardId   String
+  title     String
+  position  Int
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  board     Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  blocks    BoardBlock[]
 
-    @@index([boardId])
+  @@index([boardId])
 }
 
 // Typed widget inside a section. configJson is a whitelist validated per type
 // (contracts blockConfig union); unknown types degrade to a placeholder on
 // read instead of breaking the board (ADR-0010 decision 2).
 model BoardBlock {
-    id         String       @id @default(cuid())
-    sectionId  String
-    type       String
-    configJson String
-    position   Int
-    visible    Boolean      @default(true)
-    createdAt  DateTime     @default(now())
-    updatedAt  DateTime     @updatedAt
-    section    BoardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  id         String       @id @default(cuid())
+  sectionId  String
+  type       String
+  configJson String
+  position   Int
+  visible    Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  section    BoardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
-    @@index([sectionId])
+  @@index([sectionId])
 }
 
 // Manual spotlight pin, bound to one board (ADR-0010 decision 3). Shares the
 // placement contract with the future automatic policy: v1 only writes
 // source=manual and expiresAt=null, and unpin removes the row.
 model SpotlightPlacement {
-    id         String   @id @default(cuid())
-    boardId    String
-    targetType String
-    targetId   String
-    source     String   @default("manual")
-    reason     String?
-    actorJson  String?
-    expiresAt  DateTime?
-    createdAt  DateTime @default(now())
-    updatedAt  DateTime @updatedAt
-    board      Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  boardId    String
+  targetType String
+  targetId   String
+  source     String    @default("manual")
+  reason     String?
+  actorJson  String?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  board      Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
 
-    @@unique([boardId, targetType, targetId])
-    @@index([boardId])
-    @@index([targetType, targetId])
+  @@unique([boardId, targetType, targetId])
+  @@index([boardId])
+  @@index([targetType, targetId])
 }
 
 model StoryAgentCandidate {
-    id             String   @id
-    storyId        String
-    storyRevisionId String
-    candidateJson  String
-    status         String   @default("pending")
-    createdAt      DateTime @default(now())
-    decidedAt      DateTime?
-    decidedBy      String?
-    story          Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  id              String    @id
+  storyId         String
+  storyRevisionId String
+  candidateJson   String
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+  decidedAt       DateTime?
+  decidedBy       String?
+  story           Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
-    @@index([storyId, createdAt])
-    @@index([status, createdAt])
+  @@index([storyId, createdAt])
+  @@index([status, createdAt])
 }
 
 model WorkflowRun {
-    id                 String                @id
-    stateJson          String
-    kernelRevision     Int                   @default(0)
-    status             String
-    resumeRequired     Boolean               @default(false)
-    sourceInstanceId   String?
-    planId             String?
-    errorMessage       String?
-    definitionKey      String
-    definitionVersion  String
-    manifestHash       String
-    idempotencyKey     String?               @unique
-    inputSnapshotJson  String                @default("{}")
-    productRunJson     String                @default("{}")
-    runLeaseOwner      String?
-    runLeaseToken      String?
-    runLeaseExpiresAt  DateTime?
-    startedAt          DateTime?
-    finishedAt         DateTime?
-    createdAt          DateTime
-    updatedAt          DateTime
-    sourceInstance     SourceInstance?      @relation(fields: [sourceInstanceId], references: [id], onDelete: SetNull)
-    plan               CollectionPlan?      @relation(fields: [planId], references: [id], onDelete: SetNull)
-    checkpoints        Checkpoint[]
-    workflowObservations Observation[] @relation("WorkflowRunObservations")
-    jobs               Job[]
-    completions        WorkflowCompletion[]
-    events             DomainEvent[]         @relation("WorkflowRunEvents")
+  id                   String               @id
+  stateJson            String
+  kernelRevision       Int                  @default(0)
+  status               String
+  resumeRequired       Boolean              @default(false)
+  sourceInstanceId     String?
+  planId               String?
+  errorMessage         String?
+  definitionKey        String
+  definitionVersion    String
+  manifestHash         String
+  idempotencyKey       String?              @unique
+  inputSnapshotJson    String               @default("{}")
+  productRunJson       String               @default("{}")
+  runLeaseOwner        String?
+  runLeaseToken        String?
+  runLeaseExpiresAt    DateTime?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime
+  updatedAt            DateTime
+  sourceInstance       SourceInstance?      @relation(fields: [sourceInstanceId], references: [id], onDelete: SetNull)
+  plan                 CollectionPlan?      @relation(fields: [planId], references: [id], onDelete: SetNull)
+  checkpoints          Checkpoint[]
+  workflowObservations Observation[]        @relation("WorkflowRunObservations")
+  jobs                 Job[]
+  completions          WorkflowCompletion[]
+  events               DomainEvent[]        @relation("WorkflowRunEvents")
 
-    @@index([status, updatedAt])
-    @@index([sourceInstanceId, createdAt])
-    @@index([planId, createdAt])
+  @@index([status, updatedAt])
+  @@index([sourceInstanceId, createdAt])
+  @@index([planId, createdAt])
 }
 
 model WorkflowCompletion {
-    id             String      @id
-    workflowRunId  String
-    jobId          String      @unique
-    activityKey    String
-    receipt        String      @unique
-    reference      String
-    fingerprint    String
-    completionJson String
-    status         String
-    attempts       Int         @default(0)
-    maxAttempts    Int         @default(5)
-    availableAt    DateTime
-    leaseOwner     String?
-    leaseToken     String?
-    leaseExpiresAt DateTime?
-    lastError      String?
-    createdAt      DateTime    @default(now())
-    updatedAt      DateTime    @updatedAt
-    workflowRun    WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
-    job            Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id             String      @id
+  workflowRunId  String
+  jobId          String      @unique
+  activityKey    String
+  receipt        String      @unique
+  reference      String
+  fingerprint    String
+  completionJson String
+  status         String
+  attempts       Int         @default(0)
+  maxAttempts    Int         @default(5)
+  availableAt    DateTime
+  leaseOwner     String?
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  lastError      String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  workflowRun    WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  job            Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-    @@index([status, availableAt])
-    @@index([workflowRunId])
+  @@index([status, availableAt])
+  @@index([workflowRunId])
 }

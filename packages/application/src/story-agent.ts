@@ -24,7 +24,7 @@ export interface StoryAgentRequest {
 }
 export interface StoryAgentHost {
     authority: ContentReadAuthority;
-    connectionId: string;
+    modelId?: string;
     budget: AgentInvocationV2Input["budget"];
     createCandidateId(): string;
     now(): Date;

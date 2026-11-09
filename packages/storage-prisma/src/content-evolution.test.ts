@@ -112,7 +112,7 @@ it("retains exact Agent evidence and rejects acceptance after its representation
             usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, content: JSON.stringify({ task: "story.summarize", title: "Old evidence suggestion",
                 summary: "Synthetic derived summary", keyFacts: [{ text: "Old fact", evidence: [evidence] }] }) }) });
         const candidate = await agent.propose({ storyId, task: "story.summarize", sources: [{ entryRevisionId: revisionId, representationVersion: 1 }] },
-            { authority, connectionId: "synthetic-connection", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 100 },
+            { authority, modelId: "synthetic-model", budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 100 },
                 createCandidateId: () => "old-evidence", now: () => new Date("2026-10-26T00:00:00.000Z") },
             { idempotencyKey: "old-evidence", signal: new AbortController().signal });
         const candidates = new PrismaStoryAgentCandidateRepository(prisma);

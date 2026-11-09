@@ -42,9 +42,8 @@ function isDuplicateModel(error: unknown): boolean {
 }
 
 /**
- * `ConnectionInstance.modelId` 是 `onDelete: Restrict` 外键：模型被连接引用时数据库会拒绝删除。
- * 不在这里翻译成 in_use，界面只能拿到兜底的 dependency_unavailable 并提示「稍后重试」，
- * 而只要那条连接还在，重试永远不会成功。
+ * Task 41 后 ConnectionInstance.modelId 已删除，ConfiguredModel 不再被连接引用。
+ * 保留 P2003 翻译作为防御：若未来再有表引用 ConfiguredModel，`in_use` 而非原始 Prisma 错误。
  */
 function isReferencedModel(error: unknown): boolean {
     return typeof error === "object" && error !== null && "code" in error && error.code === "P2003";

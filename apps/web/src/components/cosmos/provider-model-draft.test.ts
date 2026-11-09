@@ -80,7 +80,7 @@ describe("模型页表单", () => {
     });
 
     it("把发现候选补成可保存的模型，并拒绝超出上限的预算", () => {
-        const draft = { modelId: "gpt-x", name: "GPT X", contextWindow: "128000", maxOutputTokens: "4096" };
+        const draft = { ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X", contextWindow: "128000", maxOutputTokens: "4096" };
         expect(toCreateModelCommand(draft)).toEqual({
             ok: true,
             command: { modelId: "gpt-x", name: "GPT X", contextWindow: 128000, maxOutputTokens: 4096 },
@@ -96,7 +96,7 @@ describe("模型页表单", () => {
         expect(empty.maxOutputTokens).toBe("");
 
         // 数据库两列非空，输入框留空只能是「用默认值」，否则提交必然被 schema 拒绝。
-        expect(toCreateModelCommand({ modelId: "gpt-x", name: "GPT X", contextWindow: "", maxOutputTokens: "" }))
+        expect(toCreateModelCommand({ ...empty, modelId: "gpt-x", name: "GPT X", contextWindow: "", maxOutputTokens: "" }))
             .toEqual({
                 ok: true,
                 command: {
@@ -109,11 +109,40 @@ describe("模型页表单", () => {
     });
 
     it("预算越界这类跨字段错误要落在具体输入框上，不能静默地什么都不做", () => {
-        const result = toCreateModelCommand({ modelId: "gpt-x", name: "GPT X", contextWindow: "100", maxOutputTokens: "200" });
+        const result = toCreateModelCommand({ ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X", contextWindow: "100", maxOutputTokens: "200" });
 
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(result.errors.maxOutputTokens).toBe("maxOutputTokens");
+    });
+
+    it("价格字段留空不进请求；非负数字正常提交；非法数字落字段错误", () => {
+        const base = { ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X" };
+
+        expect(toCreateModelCommand(base)).toEqual({
+            ok: true,
+            command: { modelId: "gpt-x", name: "GPT X", contextWindow: defaultContextWindow, maxOutputTokens: defaultMaxOutputTokens },
+        });
+
+        const priced = toCreateModelCommand({ ...base, inputPricePerMillion: "1.5", outputPricePerMillion: "6" });
+        expect(priced).toEqual({
+            ok: true,
+            command: {
+                modelId: "gpt-x", name: "GPT X",
+                contextWindow: defaultContextWindow, maxOutputTokens: defaultMaxOutputTokens,
+                inputPricePerMillion: 1.5, outputPricePerMillion: 6,
+            },
+        });
+
+        const invalidInput = toCreateModelCommand({ ...base, inputPricePerMillion: "-1" });
+        expect(invalidInput.ok).toBe(false);
+        if (invalidInput.ok) return;
+        expect(invalidInput.errors.inputPricePerMillion).toBe("inputPricePerMillion");
+
+        const invalidOutput = toCreateModelCommand({ ...base, outputPricePerMillion: "abc" });
+        expect(invalidOutput.ok).toBe(false);
+        if (invalidOutput.ok) return;
+        expect(invalidOutput.errors.outputPricePerMillion).toBe("outputPricePerMillion");
     });
 
     it("一批多行：逐行校验、行内不合法就整批不提交、同批重复标记在行上", () => {

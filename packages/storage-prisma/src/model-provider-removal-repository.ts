@@ -19,9 +19,6 @@ type RemovalTransaction = {
         findMany(input: { where: { providerId: string }; select: { id: true } }): Promise<{ id: string }[]>;
         deleteMany(input: { where: { providerId: string } }): Promise<{ count: number }>;
     };
-    connectionInstance: {
-        count(input: { where: { modelId: { in: string[] } } }): Promise<number>;
-    };
 };
 
 type RemovalClient = {
@@ -31,8 +28,8 @@ type RemovalClient = {
 /**
  * 删除 Provider 的最小形态：一个事务里判定能否删除并执行删除，凭证文件在事务外单独清理。
  *
- * 引用检查必须和删除在同一个事务里：先查后另事务提交会放过「查完之后新建的连接」，
- * 那些连接随后会指向一个不存在的模型。
+ * Task 41 后连接不再引用模型；provider 下仍有子模型时视为 in_use，拒绝删除。
+ * 检查和删除在同一事务内，防止并发建模型后悄悄删 provider。
  */
 export class PrismaModelProviderRemovalRepository implements ModelProviderRemovalRepository {
     constructor(private readonly client: RemovalClient) {}
@@ -49,12 +46,9 @@ export class PrismaModelProviderRemovalRepository implements ModelProviderRemova
             const models = await transaction.configuredModel.findMany({
                 where: { providerId: input.id }, select: { id: true },
             });
-            if (models.length > 0) {
-                const used = await transaction.connectionInstance.count({
-                    where: { modelId: { in: models.map((model) => model.id) } },
-                });
-                if (used > 0) refuse("in_use");
-            }
+            // Task 41: ConnectionInstance.modelId 已删除，不再检查模型被连接引用。
+            // provider 有子模型本身就是 in_use（子模型引用此 provider）。
+            if (models.length > 0) refuse("in_use");
             await transaction.configuredModel.deleteMany({ where: { providerId: input.id } });
             await transaction.modelProvider.delete({ where: { id: input.id } });
             return provider.secretRef;

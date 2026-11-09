@@ -78,6 +78,9 @@ const modelFields = {
     name: nameSchema,
     contextWindow: positiveIntegerSchema,
     maxOutputTokens: positiveIntegerSchema,
+    // Prices are USD per million tokens; omitted prices mean the cost is unknown.
+    inputPricePerMillion: z.number().nonnegative().optional(),
+    outputPricePerMillion: z.number().nonnegative().optional(),
 };
 const withinContext = (value: { contextWindow?: number; maxOutputTokens?: number }): boolean =>
     value.contextWindow === undefined || value.maxOutputTokens === undefined
@@ -95,6 +98,8 @@ export const updateConfiguredModelCommandSchema = z.object({
     name: nameSchema.optional(),
     contextWindow: positiveIntegerSchema.optional(),
     maxOutputTokens: positiveIntegerSchema.optional(),
+    inputPricePerMillion: z.number().nonnegative().optional(),
+    outputPricePerMillion: z.number().nonnegative().optional(),
 }).strict().refine((value) => Object.entries(value).some(([key, field]) => key !== "expectedVersion" && field !== undefined), {
     message: "At least one update is required.",
 }).refine(withinContext, { message: "Output token limit exceeds context window." });

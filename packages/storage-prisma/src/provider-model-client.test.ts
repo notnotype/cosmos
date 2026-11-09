@@ -13,7 +13,7 @@ import { resolvePrismaCliPath } from "./prisma-cli.js";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const temporaryParent = join(repositoryRoot, ".agent/tmp");
 const source = join(repositoryRoot, "packages/storage-prisma/prisma");
-const boundary = "20261018160000_workflow_activity_dispatch_fence";
+const boundary = "20261106085039_task_41_connection_agent_separation";
 const require = createRequire(import.meta.url);
 
 function run(root: string, label: string, args: string[], environment: NodeJS.ProcessEnv): void {
@@ -64,7 +64,7 @@ async function snapshot(root: string): Promise<string> {
     await copyFile(join(source, "migrations/migration_lock.toml"), join(migrations, "migration_lock.toml"));
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    if (names.length !== 42 || names.at(-1) !== boundary) {
+    if (names.length !== 43 || names.at(-1) !== boundary) {
         throw new Error("Re-audit the migration boundary before executing this suite.");
     }
     const manifest = [{ path: "source-schema.prisma", sha256: createHash("sha256").update(original).digest("hex") },
@@ -98,15 +98,15 @@ try {
         id: "model", providerId: provider.id, modelId: "namespace/synthetic", name: "Synthetic",
         contextWindow: 4096, maxOutputTokens: 64,
     } });
+    // Task 41: ConnectionInstance.modelId 已删除，连接不再持有模型引用。
     const connection = await client.connectionInstance.create({ data: {
-        id: "connection", name: "Synthetic", connectorId: "cosmos.agent", modelId: model.id,
+        id: "connection", name: "Synthetic", connectorId: "cosmos.agent",
         scopeJson: "{}", configJson: "{}", status: "active",
     } });
     assert.equal(connection.version, 1);
     const associated = await client.connectionInstance.findUniqueOrThrow({
-        where: { id: connection.id }, include: { model: { include: { provider: true } } },
+        where: { id: connection.id },
     });
-    assert.equal(associated.model?.provider.id, provider.id);
     assert.equal(associated.secretRef, null);
     const operation = await client.modelConfigurationOperation.create({ data: {
         id: "operation", idempotencyKey: "synthetic-request", kind: "replace", providerId: provider.id,
@@ -143,7 +143,7 @@ try {
     assert.equal((await client.modelProvider.updateMany({
         where: { id: provider.id, version: 1 }, data: { name: "stale" },
     })).count, 0);
-    await assert.rejects(client.configuredModel.delete({ where: { id: model.id } }));
+    // Provider 有子模型时不允许删除（ConfiguredModel.providerId 外键保护）。
     await assert.rejects(client.modelProvider.delete({ where: { id: provider.id } }));
     await client.connectionInstance.delete({ where: { id: connection.id } });
     await client.configuredModel.delete({ where: { id: model.id } });

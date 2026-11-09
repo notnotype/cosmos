@@ -1,11 +1,11 @@
-import { ActionExecutionError, type AgentModelConnectionSnapshot } from "@cosmos/application";
+import { ActionExecutionError, type AgentModelSnapshot } from "@cosmos/application";
 import { describe, expect, it, vi } from "vitest";
 import type { AssistantMessage, ProviderStreamOptions } from "@mariozechner/pi-ai";
 
 import { PiAiAgentInvocationV2Adapter, type PiAiSecretReader } from "./invocation-v2.js";
 
 const input = {
-    connectionId: "connection-agent",
+    modelId: "configured-model-agent",
     messages: [
         { role: "system" as const, content: "Be concise." },
         { role: "user" as const, content: "Hello" },
@@ -17,17 +17,18 @@ const input = {
 
 const context = { idempotencyKey: "agent-v2-1", signal: new AbortController().signal };
 
-function connection(overrides: Partial<AgentModelConnectionSnapshot> = {}): AgentModelConnectionSnapshot {
+function connection(overrides: Partial<AgentModelSnapshot> = {}): AgentModelSnapshot {
     return {
-        connectionId: "connection-agent",
+        modelId: "namespace/agent-model",
         providerId: "provider-agent",
         api: "openai-completions",
         baseUrl: "https://agent.example.invalid/v1",
-        modelId: "namespace/agent-model",
         modelName: "Synthetic Agent Model",
         contextWindow: 8_192,
         maxOutputTokens: 1_024,
         secretRef: "secret:provider-agent",
+        inputPricePerMillion: 2,
+        outputPricePerMillion: 10,
         ...overrides,
     };
 }
@@ -54,8 +55,8 @@ function response(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
 }
 
 function adapter(options: {
-    resolved?: AgentModelConnectionSnapshot | null;
-    resolve?: (connectionId: string) => Promise<AgentModelConnectionSnapshot | null>;
+    resolved?: AgentModelSnapshot | null;
+    resolve?: (modelId: string | null) => Promise<AgentModelSnapshot | null>;
     secret?: string | null;
     complete?: (model: never, context: never, options: ProviderStreamOptions) => Promise<AssistantMessage>;
 }) {
@@ -64,7 +65,7 @@ function adapter(options: {
     return {
         complete,
         instance: new PiAiAgentInvocationV2Adapter({
-            connections: {
+            models: {
                 resolve: options.resolve ?? (async () => (options.resolved === undefined ? connection() : options.resolved)),
             },
             secrets,
@@ -74,7 +75,21 @@ function adapter(options: {
 }
 
 describe("PiAiAgentInvocationV2Adapter", () => {
-    it("builds the model from the resolved connection instead of the call", async () => {
+    it("calculates USD cost from usage and configured per-million prices", async () => {
+        const { instance } = adapter({});
+        await expect(instance.invoke(input, context)).resolves.toMatchObject({
+            usage: { inputTokens: 4, outputTokens: 3, totalTokens: 7 },
+            cost: { input: 0.000008, output: 0.00003, total: 0.000038, currency: "USD" },
+        });
+    });
+
+    it("omits cost when either model price is unavailable", async () => {
+        const { instance } = adapter({ resolved: connection({ outputPricePerMillion: null }) });
+        const output = await instance.invoke(input, context);
+        expect(output.cost).toBeUndefined();
+    });
+
+    it("builds the model from the resolved model instead of the call", async () => {
         const { instance, complete } = adapter({
             resolved: connection({ api: "openai-responses", modelId: "namespace/other" }),
         });

@@ -55,6 +55,8 @@ export const models = {
         name: "显示名称",
         contextWindow: "上下文窗口（token）",
         maxOutputTokens: "单次输出上限（token）",
+        inputPricePerMillion: "输入单价（USD / 百万 token）",
+        outputPricePerMillion: "输出单价（USD / 百万 token）",
         remove: "移除",
         removeConfirm: (name: string) => `移除「${name}」？引用它的账号会失去这个模型。`,
         /** 两个预算在库里非空，所以它们是「留空即用默认值」，输入框只显示 placeholder。 */
@@ -160,6 +162,8 @@ export const models = {
         duplicateModelId: "这一批里已经有相同的模型 ID。",
         contextWindow: "上下文窗口必须是正整数。",
         maxOutputTokens: "输出上限必须是正整数，且不超过上下文窗口。",
+        inputPricePerMillion: "输入单价必须是不小于 0 的数字。",
+        outputPricePerMillion: "输出单价必须是不小于 0 的数字。",
         load: "读取服务商列表失败。",
         loading: "正在读取服务商列表…",
         modelsLoadFailed: "读取模型列表失败。",

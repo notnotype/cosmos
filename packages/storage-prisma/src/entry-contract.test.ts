@@ -7,7 +7,7 @@ import * as entry from "./index.js";
 // (docs/proposals/code-size-governance-v1.md:导出签名 diff 为零)。
 const FROZEN_VALUE_EXPORTS = [
     "FileSecretStore",
-    "PrismaAgentModelConnectionResolver",
+    "PrismaAgentModelResolver",
     "PrismaConfiguredModelRepository",
     "PrismaConnectorStateStore",
     "PrismaContentQueryRepository",
@@ -19,6 +19,7 @@ const FROZEN_VALUE_EXPORTS = [
     "PrismaProviderCredentialRepository",
     "PrismaProviderDiscoveryReader",
     "PrismaStoryAgentCandidateRepository",
+    "PrismaSystemConfigRepository",
     "PrismaWorkflowBackend",
     "PrismaWorkflowEventSink",
     "PrismaWorkflowHostStore",

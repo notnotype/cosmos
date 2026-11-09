@@ -23,7 +23,7 @@ import {
 import { IngestWorkflowControlService } from "@cosmos/application/workflow-control";
 import { createLogger } from "@cosmos/logging";
 import { createBuiltInConnectorRegistry } from "@cosmos/plugin-collectors";
-import { PrismaAgentModelConnectionResolver, PrismaConnectorStateStore, PrismaCosmosRepository, PrismaStoryAgentCandidateRepository } from "@cosmos/storage-prisma";
+import { PrismaAgentModelResolver, PrismaConnectorStateStore, PrismaCosmosRepository, PrismaStoryAgentCandidateRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
 import { createWorkerAdminServer, type ComponentHealth, type WorkerAdminServer } from "@cosmos/worker-admin";
 import type { ConnectorStateHandle, ConnectorStateStorePort, LoggerPort } from "@cosmos/application";
 import type { CatalogPort } from "@cosmos/application/catalog";
@@ -168,10 +168,13 @@ async function bootstrap(): Promise<void> {
                     createStoryAgentWorkflowDefinition(),
                 ],
                 actions: [
-                    // Agent 只有连接作用域一个版本：模型、地址与凭证都在调用时按那条连接解析，
-                    // 没有启动期 profile，所以这里无条件注册。
+                    // Agent Action 始终注册；模型、地址与凭证都在调用时按 modelId 解析，
+                    // 没有启动期固定模型配置。
                     createWorkerAgentInvocationV2Action({
-                        connections: new PrismaAgentModelConnectionResolver(repository.prisma),
+                        models: new PrismaAgentModelResolver(
+                            repository.prisma,
+                            new PrismaSystemConfigRepository(repository.prisma),
+                        ),
                         secrets: repository.secrets,
                     }),
                     ...createIngestActions({

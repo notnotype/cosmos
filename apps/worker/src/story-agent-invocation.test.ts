@@ -5,7 +5,7 @@ import {
     StoryAgentCandidates,
     StoryAgentService,
     type AgentInvocationV2Port,
-    type AgentModelConnectionSnapshot,
+    type AgentModelSnapshot,
     type StoryAgentCandidateRepository,
     type StoryAgentHost,
 } from "@cosmos/application";
@@ -14,34 +14,35 @@ import type { PiAiClientV2 } from "@cosmos/agent-pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkerAgentInvocationV2Action } from "./agent-action-v2.js";
 
-const connection: AgentModelConnectionSnapshot = {
-    connectionId: "model-connection", providerId: "configured-provider", api: "openai-completions",
-    baseUrl: "https://model.example.invalid/v1", modelId: "configured-model", modelName: "Synthetic Model",
-    contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
+const modelId = "configured-model-id";
+const model: AgentModelSnapshot = {
+    modelId: "configured-model-id", modelName: "Synthetic Model", providerId: "configured-provider", api: "openai-completions",
+    baseUrl: "https://model.example.invalid/v1", contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
+    inputPricePerMillion: null, outputPricePerMillion: null,
 };
 const binding = { entryRevisionId: "entry-revision-1", representationVersion: 2 };
 const evidence = { entryId: "entry-1", ...binding, blockId: "paragraph-1" };
 const proposal = { task: "story.summarize", title: "Suggested", summary: "Suggested summary",
     keyFacts: [{ text: "A supplied fact", evidence: [evidence] }] };
 const host: StoryAgentHost = {
-    connectionId: connection.connectionId, authority: { allowedProfiles: ["summary-only", "structured-content"] },
+    modelId, authority: { allowedProfiles: ["summary-only", "structured-content"] },
     budget: { maxDurationMs: 1000, maxToolCalls: 0, maxOutputTokens: 1024 },
     createCandidateId: () => "candidate-1", now: () => new Date("2026-10-26T07:00:00.000Z"),
 };
 
 function fixture() {
-    const resolve = vi.fn(async (): Promise<AgentModelConnectionSnapshot | null> => connection);
+    const resolve = vi.fn(async (): Promise<AgentModelSnapshot | null> => model);
     const read = vi.fn(async (): Promise<string | null> => "synthetic-credential");
     const response: Awaited<ReturnType<PiAiClientV2["complete"]>> = {
         role: "assistant", content: [{ type: "text", text: JSON.stringify(proposal) }],
-        api: "openai-completions", provider: connection.providerId, model: connection.modelId,
+        api: "openai-completions", provider: model.providerId, model: model.modelId,
         usage: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0, totalTokens: 20,
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
         stopReason: "stop", timestamp: 0,
     };
     const complete = vi.fn<PiAiClientV2["complete"]>(async () => response);
     const registry = new ActionRegistry([createWorkerAgentInvocationV2Action({
-        connections: { resolve }, client: { complete },
+        models: { resolve }, client: { complete },
         secrets: { read, put: async () => { throw new Error("Unexpected credential write"); },
             delete: async () => { throw new Error("Unexpected credential deletion"); } },
     })]);
@@ -75,15 +76,18 @@ describe("Story generation through the Worker @2 composition without network", (
         const result = await f.service.propose(f.request, f.context);
         expect(result).toMatchObject({ status: "pending", candidate: {
             storyRevisionId: "story-revision-1", inputSources: [binding], proposal,
-            provider: connection.providerId, model: connection.modelId,
+            provider: model.providerId, model: model.modelId,
         } });
-        expect(f.resolve).toHaveBeenCalledExactlyOnceWith(connection.connectionId);
-        expect(f.read).toHaveBeenCalledExactlyOnceWith(connection.secretRef);
-        expect(f.readContentSource).toHaveBeenCalledExactlyOnceWith(binding);
+        expect(f.resolve).toHaveBeenCalledTimes(1);
+        expect(f.resolve).toHaveBeenCalledWith(model.modelId);
+        expect(f.read).toHaveBeenCalledTimes(1);
+        expect(f.read).toHaveBeenCalledWith(model.secretRef);
+        expect(f.readContentSource).toHaveBeenCalledTimes(1);
+        expect(f.readContentSource).toHaveBeenCalledWith(binding);
         expect(f.complete).toHaveBeenCalledOnce();
-        const [model, payload, options] = f.complete.mock.calls[0]!;
-        expect(model).toMatchObject({ id: connection.modelId, provider: connection.providerId, baseUrl: connection.baseUrl });
-        expect(options).toMatchObject({ maxTokens: connection.maxOutputTokens, metadata: { idempotencyKey: f.context.idempotencyKey } });
+        const [piModel, payload, options] = f.complete.mock.calls[0]!;
+        expect(piModel).toMatchObject({ id: model.modelId, provider: model.providerId, baseUrl: model.baseUrl });
+        expect(options).toMatchObject({ maxTokens: model.maxOutputTokens, metadata: { idempotencyKey: f.context.idempotencyKey } });
         expect(payload.messages).toEqual([expect.objectContaining({
             role: "user", content: expect.stringContaining('"representationVersion":2'),
         })]);
@@ -92,7 +96,7 @@ describe("Story generation through the Worker @2 composition without network", (
         expect(f.save).toHaveBeenCalledOnce();
         expect(f.decide).not.toHaveBeenCalled();
     });
-    it("does not read credentials or save when the selected connection is unavailable", async () => {
+    it("does not read credentials or save when the selected model is unavailable", async () => {
         const f = fixture();
         f.resolve.mockResolvedValueOnce(null);
         await expect(f.service.propose(f.request, f.context)).rejects.toMatchObject({ code: "authentication_required" });

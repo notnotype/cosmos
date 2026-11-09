@@ -56,6 +56,8 @@ const fieldErrorText: Record<string, string> = {
     name: messages.models.errors.name,
     contextWindow: messages.models.errors.contextWindow,
     maxOutputTokens: messages.models.errors.maxOutputTokens,
+    inputPricePerMillion: messages.models.errors.inputPricePerMillion,
+    outputPricePerMillion: messages.models.errors.outputPricePerMillion,
 };
 
 /**
@@ -442,6 +444,32 @@ export function ProviderModelsSection({ client, provider }: ProviderModelsSectio
                                         onChange={(event) => updateRow(row.key, "maxOutputTokens", event.target.value)}
                                         placeholder={String(defaultMaxOutputTokens)}
                                         value={row.values.maxOutputTokens}
+                                    />
+                                </Field>
+                                <Field
+                                    error={errors?.inputPricePerMillion !== undefined && fieldErrorText.inputPricePerMillion}
+                                    htmlFor={`model-input-price-${provider.id}-${row.key}`}
+                                    label={messages.models.models.inputPricePerMillion}
+                                >
+                                    <Input
+                                        id={`model-input-price-${provider.id}-${row.key}`}
+                                        inputMode="decimal"
+                                        onChange={(event) => updateRow(row.key, "inputPricePerMillion", event.target.value)}
+                                        placeholder="0"
+                                        value={row.values.inputPricePerMillion}
+                                    />
+                                </Field>
+                                <Field
+                                    error={errors?.outputPricePerMillion !== undefined && fieldErrorText.outputPricePerMillion}
+                                    htmlFor={`model-output-price-${provider.id}-${row.key}`}
+                                    label={messages.models.models.outputPricePerMillion}
+                                >
+                                    <Input
+                                        id={`model-output-price-${provider.id}-${row.key}`}
+                                        inputMode="decimal"
+                                        onChange={(event) => updateRow(row.key, "outputPricePerMillion", event.target.value)}
+                                        placeholder="0"
+                                        value={row.values.outputPricePerMillion}
                                     />
                                 </Field>
                             </div>

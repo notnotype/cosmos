@@ -2,8 +2,8 @@ import {
     ActionExecutionError,
     type AgentInvocationContext,
     type AgentInvocationV2Port,
-    type AgentModelConnectionResolver,
-    type AgentModelConnectionSnapshot,
+    type AgentModelResolver,
+    type AgentModelSnapshot,
 } from "@cosmos/application";
 import {
     agentInvocationOutputSchema,
@@ -33,7 +33,7 @@ export interface PiAiClientV2 {
 }
 
 export interface PiAiAgentInvocationV2AdapterOptions {
-    connections: AgentModelConnectionResolver;
+    models: AgentModelResolver;
     secrets: PiAiSecretReader;
     client: PiAiClientV2;
 }
@@ -52,12 +52,12 @@ export class PiAiAgentInvocationV2Adapter implements AgentInvocationV2Port {
         context: AgentInvocationContext,
     ): Promise<AgentInvocationOutput> {
         assertNotAborted(context);
-        const connection = await this.options.connections.resolve(input.connectionId);
+        const model = await this.options.models.resolve(input.modelId ?? null);
         assertNotAborted(context);
-        if (connection === null) {
+        if (model === null) {
             throw new ActionExecutionError(
                 "authentication_required",
-                "The selected model connection is unavailable.",
+                "The selected model is unavailable.",
                 false,
             );
         }
@@ -69,23 +69,23 @@ export class PiAiAgentInvocationV2Adapter implements AgentInvocationV2Port {
 
         try {
             // 预算上限由模型配置决定：调用方给的 maxOutputTokens 只能更小，不能突破。
-            const maxTokens = Math.min(input.budget.maxOutputTokens, connection.maxOutputTokens);
-            const credential = await this.options.secrets.read(connection.secretRef);
+            const maxTokens = Math.min(input.budget.maxOutputTokens, model.maxOutputTokens);
+            const credential = await this.options.secrets.read(model.secretRef);
             assertNotAborted(context);
             if (credential === null || credential.trim().length === 0) {
                 throw new ActionExecutionError(
                     "authentication_required",
-                    "The selected model connection has no stored credential.",
+                    "The selected model has no stored credential.",
                     false,
                 );
             }
             const response = await this.options.client.complete(
-                toPiModel(connection),
-                toPiContext(input, connection),
+                toPiModel(model),
+                toPiContext(input, model),
                 { apiKey: credential, maxTokens, signal: controller.signal, metadata: { idempotencyKey: context.idempotencyKey } },
             );
             assertNotAborted(context);
-            return mapResponseV2(response, connection);
+            return mapResponseV2(response, model);
         } catch (error) {
             if (context.signal.aborted) {
                 throw new ActionExecutionError("cancelled", "Agent invocation was cancelled.", false);
@@ -94,12 +94,24 @@ export class PiAiAgentInvocationV2Adapter implements AgentInvocationV2Port {
                 throw new ActionExecutionError("timeout", "Agent invocation timed out.", true);
             }
             if (error instanceof ActionExecutionError) throw error;
-            throw mapPiAiError(error, connection.providerId);
+            throw mapPiAiError(error, model.providerId);
         } finally {
             clearTimeout(timeout);
             context.signal.removeEventListener("abort", abort);
         }
     }
+}
+
+function calculateCost(
+    usage: { inputTokens: number; outputTokens: number },
+    model: AgentModelSnapshot,
+): { input: number; output: number; total: number; currency: string } | undefined {
+    if (model.inputPricePerMillion === null || model.outputPricePerMillion === null) {
+        return undefined;
+    }
+    const input = (usage.inputTokens / 1_000_000) * model.inputPricePerMillion;
+    const output = (usage.outputTokens / 1_000_000) * model.outputPricePerMillion;
+    return { input, output, total: input + output, currency: "USD" };
 }
 
 function assertNotAborted(context: AgentInvocationContext): void {
@@ -108,16 +120,16 @@ function assertNotAborted(context: AgentInvocationContext): void {
     }
 }
 
-function toPiModel(connection: AgentModelConnectionSnapshot): Model<string & {}> {
+function toPiModel(model: AgentModelSnapshot): Model<string & {}> {
     const config = {
-        provider: connection.providerId,
-        model: connection.modelId,
-        name: connection.modelName,
-        baseUrl: connection.baseUrl,
-        contextWindow: connection.contextWindow,
-        maxTokens: connection.maxOutputTokens,
+        provider: model.providerId,
+        model: model.modelId,
+        name: model.modelName,
+        baseUrl: model.baseUrl,
+        contextWindow: model.contextWindow,
+        maxTokens: model.maxOutputTokens,
     };
-    return connection.api === "openai-responses"
+    return model.api === "openai-responses"
         ? createPiAiOpenAIResponsesModel(config)
         : createPiAiOpenAICompletionsModel(config);
 }
@@ -126,7 +138,7 @@ function toPiModel(connection: AgentModelConnectionSnapshot): Model<string & {}>
  * Assistant 历史必须与本次模型一致：pi-ai 用消息上的 api/provider/model 判断上下文
  * 是否可复用，写错会让服务端拒绝或让旧模型的名义出现在新模型的对话里。
  */
-function toPiContext(input: AgentInvocationV2Input, connection: AgentModelConnectionSnapshot): Context {
+function toPiContext(input: AgentInvocationV2Input, model: AgentModelSnapshot): Context {
     const system = input.messages
         .filter((message) => message.role === "system")
         .map((message) => message.content)
@@ -138,9 +150,9 @@ function toPiContext(input: AgentInvocationV2Input, connection: AgentModelConnec
                 return {
                     role: "assistant" as const,
                     content: [{ type: "text" as const, text: message.content }],
-                    api: connection.api,
-                    provider: connection.providerId,
-                    model: connection.modelId,
+                    api: model.api,
+                    provider: model.providerId,
+                    model: model.modelId,
                     usage: {
                         input: 0,
                         output: 0,
@@ -173,11 +185,11 @@ function toPiContext(input: AgentInvocationV2Input, connection: AgentModelConnec
 
 function mapResponseV2(
     response: AssistantMessage,
-    connection: AgentModelConnectionSnapshot,
+    model: AgentModelSnapshot,
 ): AgentInvocationOutput {
     // 服务商侧的拒绝以 `stopReason: "error"` 返回，而不是抛错；先按状态码归类，
     // 否则下面「结束原因不认识」的分支会把它误报成协议错误。
-    const failure = mapPiAiResponseFailure(response, connection.providerId);
+    const failure = mapPiAiResponseFailure(response, model.providerId);
     if (failure !== null) throw failure;
 
     const content = response.content
@@ -201,18 +213,24 @@ function mapResponseV2(
         throw new ActionExecutionError("malformed_payload", "pi-ai returned an unsupported response.", false);
     }
 
+    const usage = {
+        inputTokens: response.usage.input,
+        outputTokens: response.usage.output,
+        totalTokens: response.usage.totalTokens,
+    };
+    const cost = calculateCost(usage, model);
+
     try {
         return agentInvocationOutputSchema.parse({
             content,
             toolCalls,
-            usage: {
-                inputTokens: response.usage.input,
-                outputTokens: response.usage.output,
-                totalTokens: response.usage.totalTokens,
-            },
+            usage,
+            // cost 为 undefined 时不写入该属性：isJsonValue 会拒绝含 undefined 值的对象，
+            // 导致 durable workflow runner 报 "non-JSON value"。
+            ...(cost ? { cost } : {}),
             // 输出里的 provider/model 回应实际使用的配置，而不是调用方声明的（@2 没有声明）。
-            provider: connection.providerId,
-            model: connection.modelId,
+            provider: model.providerId,
+            model: model.modelId,
             finishReason,
             metadata: {},
         });

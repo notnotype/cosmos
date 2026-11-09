@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MODEL_CONNECTION_CONNECTOR_ID, storyAgentCandidateRecordSchema, storyAgentGenerationRequestSchema,
+import { storyAgentCandidateRecordSchema, storyAgentGenerationRequestSchema,
     storyAgentGenerationSchema, type StoryAgentCandidateRecordContract, type StoryAgentGenerationRequest, type StoryDetail } from "@cosmos/contracts";
 
 const storeSchema = z.object({ records: storyAgentCandidateRecordSchema.array(), jobs: z.object({
@@ -22,9 +22,6 @@ function candidate(story: StoryDetail, id: string): StoryAgentCandidateRecordCon
 export function createAgentCandidateFixtureApi(story: StoryDetail,
     behavior: { loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean; sourceStatus: "current" | "superseded" | "unavailable" }, onCount: (count: number) => void) {
     return {
-        async listConnections() { return [{ id: "lab-model", name: "Synthetic model", connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-            account: null, scopeJson: null, configJson: null, status: "active" as const, secretRef: null, lastError: null,
-            lastCheckedAt: null, version: 1, modelId: "fixture", createdAt: "2026-10-08T12:00:00.000Z", updatedAt: "2026-10-08T12:00:00.000Z" }]; },
         async storyAgentCandidates() { return readStore().records; },
         async revisionContent(revisionId: string) {
             return { entryId: "lab-entry", entryRevisionId: revisionId, representation: null, contentText: "", readingMode: "unavailable" as const, evidenceStatus: "available" as const };
@@ -35,7 +32,7 @@ export function createAgentCandidateFixtureApi(story: StoryDetail,
             const existing = data.jobs.find((item) => item.key === key);
             if (existing) { onCount(data.jobs.length); return existing.generation; }
             const generation = storyAgentGenerationSchema.parse({ runId: `lab-run-${data.jobs.length}`, storyId,
-                task: request.task, connectionId: request.connectionId, status: "queued", candidateId: null, errorCode: null });
+                task: request.task, status: "queued", candidateId: null, errorCode: null });
             data.jobs.push({ key, generation });
             writeStore(data);
             onCount(data.jobs.length);

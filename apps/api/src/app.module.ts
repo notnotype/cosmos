@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { ContentRebuild, ContentCommands, ContentQuery, StoryAgentWorkflowControl, StoryAgentCandidates, ConfiguredModels, ModelProviderCredentials, ModelProviderQuery, ModelProviderRemovals, ProviderModelDiscoveryRunner, createHttpsProviderModelDirectory } from "@cosmos/application";
+import { ContentRebuild, ContentCommands, ContentQuery, StoryAgentWorkflowControl, StoryAgentCandidates, ConfiguredModels, SystemConfigService, ModelProviderCredentials, ModelProviderQuery, ModelProviderRemovals, ProviderModelDiscoveryRunner, createHttpsProviderModelDirectory } from "@cosmos/application";
 import { createBuiltinManifestCatalog } from "@cosmos/application/catalog";
 import { MediaCleanupWorkflowControlService } from "@cosmos/application/media-cleanup";
 import { IngestWorkflowControlService } from "@cosmos/application/workflow-control";
@@ -11,12 +11,12 @@ import {
     PrismaContentRebuildRepository,
     PrismaContentSelectionRepository,
     PrismaStoryAgentCandidateRepository,
-    PrismaAgentModelConnectionResolver,
     PrismaWorkflowHostStore,
     PrismaProviderCredentialRepository,
     PrismaModelProviderQueryRepository,
     PrismaModelProviderRemovalRepository,
     PrismaConfiguredModelRepository,
+    PrismaSystemConfigRepository,
     PrismaProviderDiscoveryReader,
     withModelConfigurationLock,
 } from "@cosmos/storage-prisma";
@@ -26,6 +26,7 @@ import { HookController } from "./hook.controller.js";
 import { SourceProbeService } from "./source-probe.service.js";
 import { ModelConfigurationModule } from "./model-configuration.module.js";
 import { resolveModelConfigurationTrust } from "./model-configuration-trust.js";
+import { SystemConfigController } from "./system-config.controller.js";
 
 export const cosmosLogger = createLogger({
     service: "cosmos-api",
@@ -50,10 +51,10 @@ export const cosmosIngestControl = new IngestWorkflowControlService({
 export const cosmosContentRebuild = new ContentRebuild(new PrismaContentRebuildRepository(cosmosRepository.prisma, cosmosRepository.blobs));
 export const cosmosContentQuery = new ContentQuery(new PrismaContentQueryRepository(cosmosRepository.prisma));
 export const cosmosContentCommands = new ContentCommands(new PrismaContentSelectionRepository(cosmosRepository.prisma));
+export const cosmosSystemConfig = new SystemConfigService(new PrismaSystemConfigRepository(cosmosRepository.prisma));
 export const cosmosStoryAgentCandidates = new StoryAgentCandidates(new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma));
 export const cosmosStoryAgentControl = new StoryAgentWorkflowControl({
     store: cosmosWorkflowStore, content: cosmosContentQuery,
-    connections: new PrismaAgentModelConnectionResolver(cosmosRepository.prisma),
     stories: { readStory: async (storyId) => {
         const detail = await cosmosRepository.story(storyId);
         if (!detail) return null;
@@ -98,8 +99,12 @@ export const cosmosMediaCleanupControl = new MediaCleanupWorkflowControlService(
             clock: { now: () => new Date() },
         }),
     })],
-    controllers: [AppController, HookController],
+    controllers: [AppController, HookController, SystemConfigController],
     providers: [
+        {
+            provide: "COSMOS_SYSTEM_CONFIG",
+            useValue: cosmosSystemConfig,
+        },
         {
             provide: "COSMOS_PRODUCT_PORT",
             useValue: cosmosRepository,

@@ -48,14 +48,14 @@ describe("HttpCosmosClient structured reading", () => {
     });
     it("queues exact source bindings with a stable key and reads an encoded generation route", async () => {
         const requests: { url: string; body: unknown; key: string | null }[] = [];
-        const generation = { runId: "run/1", storyId: "story/1", task: "story.summarize", connectionId: "connection-1",
+        const generation = { runId: "run/1", storyId: "story/1", task: "story.summarize",
             status: "queued", candidateId: null, errorCode: null };
         const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async (input, init) => {
             requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null,
                 key: new Headers(init?.headers).get("idempotency-key") });
             return Response.json(generation, { status: init?.method === "POST" ? 202 : 200 });
         } });
-        const request = { task: "story.summarize" as const, connectionId: "connection-1", sources: [{ entryRevisionId: "revision-1", representationVersion: 2 }] };
+        const request = { task: "story.summarize" as const, modelId: "configured-model-1", sources: [{ entryRevisionId: "revision-1", representationVersion: 2 }] };
         await expect(client.proposeStoryAgentCandidate("story/1", request, "stable-key")).resolves.toEqual(generation);
         await expect(client.storyAgentGeneration("story/1", "run/1")).resolves.toEqual(generation);
         expect(requests).toEqual([

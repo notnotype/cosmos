@@ -1,10 +1,10 @@
-import { ActionRegistry, type AgentModelConnectionSnapshot, type SecretStorePort } from "@cosmos/application";
+import { ActionRegistry, type AgentModelSnapshot, type SecretStorePort } from "@cosmos/application";
 import type { PiAiClient } from "@cosmos/agent-pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkerAgentInvocationV2Action } from "./agent-action-v2.js";
 
 const input = {
-    connectionId: "connection-1",
+    modelId: "configured-model-id",
     messages: [{ role: "user" as const, content: "Say hello in one word." }],
     tools: [],
     budget: { maxDurationMs: 30_000, maxToolCalls: 0, maxOutputTokens: 64 },
@@ -13,16 +13,17 @@ const input = {
 
 const context = { idempotencyKey: "agent-v2-smoke", signal: new AbortController().signal };
 
-const connection: AgentModelConnectionSnapshot = {
-    connectionId: "connection-1",
+const model: AgentModelSnapshot = {
+    modelId: "namespace/model",
+    modelName: "Synthetic Model",
     providerId: "provider-1",
     api: "openai-completions",
     baseUrl: "https://api.example.invalid/v1",
-    modelId: "namespace/model",
-    modelName: "Synthetic Model",
     contextWindow: 4_096,
     maxOutputTokens: 256,
     secretRef: "opaque-secret-ref",
+    inputPricePerMillion: null,
+    outputPricePerMillion: null,
 };
 
 function client(complete: PiAiClient["complete"]): PiAiClient {
@@ -65,7 +66,7 @@ function response(): Awaited<ReturnType<PiAiClient["complete"]>> {
 describe("worker agent.invoke@2 action", () => {
     it("registers even when the worker has no agent configuration", () => {
         const action = createWorkerAgentInvocationV2Action({
-            connections: { resolve: async () => null },
+            models: { resolve: async () => null },
             secrets: secrets(async () => null),
         });
 
@@ -76,7 +77,7 @@ describe("worker agent.invoke@2 action", () => {
         const read = vi.fn(async () => "sk-test");
         const complete = vi.fn<PiAiClient["complete"]>(async () => response());
         const registry = new ActionRegistry([createWorkerAgentInvocationV2Action({
-            connections: { resolve: async () => connection },
+            models: { resolve: async () => model },
             secrets: secrets(read),
             client: client(complete),
         })]);
@@ -93,7 +94,7 @@ describe("worker agent.invoke@2 action", () => {
     it("maps a credential read failure to authentication_required instead of leaking storage errors", async () => {
         const complete = vi.fn<PiAiClient["complete"]>(async () => response());
         const registry = new ActionRegistry([createWorkerAgentInvocationV2Action({
-            connections: { resolve: async () => connection },
+            models: { resolve: async () => model },
             secrets: secrets(async () => { throw new Error("EACCES: secret file unreadable"); }),
             client: client(complete),
         })]);

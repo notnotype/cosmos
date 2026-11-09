@@ -8,7 +8,7 @@ import {
 } from "./index.js";
 
 const input = {
-    connectionId: "connection-1",
+    modelId: "configured-model-1",
     messages: [{ role: "user" as const, content: "Summarize this." }],
     tools: [],
     budget: { maxDurationMs: 5_000, maxToolCalls: 0, maxOutputTokens: 128 },
@@ -28,7 +28,7 @@ const output = {
 const context = { idempotencyKey: "agent-v2-1", signal: new AbortController().signal };
 
 /**
- * `agent.invoke@2` 的边界（API 0009）：调用方只给连接 ID，模型与凭证由服务端解析。
+ * `agent.invoke@2` 的边界：调用方可选给模型 ID，省略时由服务端使用系统默认。
  * 这里固定的是「多余字段必须被拒绝」——静默忽略会让调用方以为自己指定的模型生效了。
  */
 describe("Agent Invocation Action v2", () => {
@@ -41,7 +41,7 @@ describe("Agent Invocation Action v2", () => {
         });
     });
 
-    it("dispatches the port with the parsed connection-scoped input", async () => {
+    it("dispatches the port with the parsed model-scoped input", async () => {
         const invoke = vi.fn<AgentInvocationV2Port["invoke"]>(async () => output);
         const registry = new ActionRegistry([createAgentInvocationV2Action({ invoke })]);
 

@@ -100,7 +100,7 @@ describe("Task 39 Connection smoke input guard", () => {
         expect(process.env.OPENAI_LOG).toBe(originalLog);
     });
     it("pins migration export to the reviewed immutable commit", () => {
-        expect(SNAPSHOT_COMMIT).toBe("62c8624d061e6ae9624bbe362785e558a9ac7348");
+        expect(SNAPSHOT_COMMIT).toBe("7ca568a91c57fba7bd8256727662936143b63a14");
     });
 
     it("deploys only frozen migrations and dispatches through real isolated Connection/SecretStore", async () => {
@@ -110,7 +110,7 @@ describe("Task 39 Connection smoke input guard", () => {
         });
         try {
             const result = await runOfflineSmoke();
-            expect(result).toMatchObject({ mode: "offline", status: "completed", migrationCount: 42,
+            expect(result).toMatchObject({ mode: "offline", status: "completed", migrationCount: 43,
                 secretReads: 1, outputMatchesExpected: true, credentialAbsentFromOutput: true,
                 missingSecretRejected: true, retained: true });
             expect(fetch).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ describe("Task 39 Connection smoke input guard", () => {
                 commit: string; files: Array<{ path: string; sha256: string }>;
             };
             expect(manifest.commit).toBe(SNAPSHOT_COMMIT);
-            expect(manifest.files.filter((file) => file.path.endsWith("/migration.sql"))).toHaveLength(42);
+            expect(manifest.files.filter((file) => file.path.endsWith("/migration.sql"))).toHaveLength(43);
             expect(manifest.files.some((file) => file.path.includes("20261008"))).toBe(true);
             expect(manifest.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256))).toBe(true);
             for (const name of ["result.json", "application.log.json", "migration.log"]) {
@@ -136,7 +136,7 @@ describe("Task 39 Connection smoke input guard", () => {
         try {
             const result = await prepareRealSmoke();
             expect(result.status).toBe("prepared-no-request");
-            expect(result.migrationCount).toBe(42);
+            expect(result.migrationCount).toBe(43);
             expect(await validatePreparedRoot(result.isolatedRoot)).toBe(result.isolatedRoot);
             expect(result.plan).toEqual(requestPlan(result.isolatedRoot));
             expect(result.plan.budget.maxOutputTokens).toBe(64);
@@ -239,16 +239,16 @@ describe("Task 39 Connection smoke input guard", () => {
     });
 });
 
-describe("Task 39 connection-scoped @2 smoke", () => {
+describe("Task 39 model-scoped @2 smoke", () => {
     it("prepares an exact @2 request plan without credentials or network", async () => {
         const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network forbidden."));
         try {
             const result = await prepareRealSmokeV2();
             expect(result.status).toBe("prepared-no-request");
-            expect(result.migrationCount).toBe(42);
+            expect(result.migrationCount).toBe(43);
             expect(await validatePreparedRootV2(result.isolatedRoot)).toBe(result.isolatedRoot);
             expect(result.plan).toEqual(requestPlanV2(result.isolatedRoot));
-            // @2 的计划里没有 provider/model 这类调用方声明之外的东西：只有连接 ID 与预算。
+            // 预披露计划绑定服务端配置的模型与服务商，调用方不能覆盖地址或凭证。
             expect(result.plan).toMatchObject({
                 mode: "real-v2", providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
                 budget: { maxDurationMs: 300_000, maxOutputTokens: 64 },
@@ -272,21 +272,21 @@ describe("Task 39 connection-scoped @2 smoke", () => {
         await expect(validatePreparedRootV2(v2Root)).rejects.toThrow(/Request plan changed/);
     });
 
-    it("resolves the model, endpoint and credential from the connection instead of the caller", async () => {
+    it("resolves the model, endpoint and credential from the configured model instead of the caller", async () => {
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
             throw new Error("Network is forbidden in the offline @2 smoke.");
         });
         try {
             const result = await runOfflineV2Smoke();
             expect(result).toMatchObject({
-                mode: "offline-v2", status: "completed", migrationCount: 42,
+                mode: "offline-v2", status: "completed", migrationCount: 43,
                 providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
                 secretReads: 1, sdkCalls: 2, outputMatchesExpected: true,
-                credentialAbsentFromOutput: true, resolvedFromConnection: true, maxOutputTokensClamped: true,
-                missingSecretRejected: true, revokedRejected: true, retained: true,
+                credentialAbsentFromOutput: true, resolvedFromModel: true, maxOutputTokensClamped: true,
+                missingSecretRejected: true, deletedRejected: true, retained: true,
             });
             expect(fetch).not.toHaveBeenCalled();
-            // 只有两次真实送达 SDK：缺凭证与被撤销的连接都在解析阶段就失败关闭了。
+            // 缺凭证与已删除模型必须在解析阶段失败关闭，不能增加 SDK 调用。
             expect(result.sdkCalls).toBe(2);
             for (const name of ["result.json", "application.log.json", "migration.log"]) {
                 const text = await readFile(join(result.isolatedRoot, name), "utf8");
@@ -313,7 +313,7 @@ describe("Task 39 @1 evidence action composition", () => {
     const connection: ConnectionInstance = {
         id: "connection-1", name: "Test provider credential", connectorId: "custom-auth",
         account: null, scopeJson: null, configJson: null, status: "active", secretRef: "opaque-secret-ref",
-        lastError: null, lastCheckedAt: null, modelId: null, version: 1,
+        lastError: null, lastCheckedAt: null, version: 1,
         createdAt: "2026-10-12T00:00:00.000Z", updatedAt: "2026-10-12T00:00:00.000Z",
     };
     const input = {

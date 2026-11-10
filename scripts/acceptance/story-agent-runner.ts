@@ -43,9 +43,9 @@ export async function runStoryAcceptance(options: { credential: string; transpor
         const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: "task40-acceptance",
             leaseMs: 120_000, definitions: [createStoryAgentWorkflowDefinition()],
             actions: [createWorkerAgentInvocationV2Action({ ...configured, secrets: repository.secrets }), createStoryAgentSaveAction(candidates)] });
-        const control = new StoryAgentWorkflowControl({ store: host.store, connections: configured.connections,
+        const control = new StoryAgentWorkflowControl({ store: host.store,
             stories: { readStory: async () => storySnapshot }, content: new ContentQuery({ readContentSource: async () => { throw new Error("Unexpected source read"); } }) });
-        const intent = { storyId: storySnapshot.storyId, connectionId: configured.connectionId, task: "story.summarize" as const, idempotencyKey: "task40-one-request" };
+        const intent = { storyId: storySnapshot.storyId, modelId: configured.modelId, task: "story.summarize" as const, idempotencyKey: "task40-one-request" };
         const queued = await control.enqueue(intent);
         if ((await control.enqueue(intent)).runId !== queued.runId) throw new Error("Unexpected replay run");
         const readFormal = async () => ({

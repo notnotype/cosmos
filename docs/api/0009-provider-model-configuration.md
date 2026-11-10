@@ -1,10 +1,12 @@
 # Provider/model 配置与调用合同
 
-> 状态：Draft · Task 39 目标合同，部分实现。已实现并通过隔离测试：Provider/模型创建与编辑、Provider 删除、凭证写入与清理补偿、同步发现、Connection 模型选择、`agent.invoke@2` 执行链路；整条产品流程（配置服务商 → 发现模型 → 配置模型 → 连接选模型 → 执行）有一条隔离端到端验收，另有一次真实 `agent.invoke@2` 最小请求（HTTP 200）。
+> 状态：Draft · Task 39 目标合同，部分实现。已实现并通过隔离测试：Provider/模型创建与编辑、Provider 删除、凭证写入与清理补偿、同步发现、`agent.invoke@2` 执行链路；整条产品流程（配置服务商 → 发现模型 → 配置模型 → Agent 调用）有一条隔离端到端验收，另有一次真实 `agent.invoke@2` 最小请求（HTTP 200）。
+>
+> **Task 41 更新（2026-11-10）**：Connection 不再承担模型选择职责，`ConnectionInstance.modelId` 已删除。Agent 调用改用系统默认模型（`SystemConfig.defaultModelId`）或显式传入 `modelId`，不再通过 Connection 解析模型。`ConfiguredModel` 新增可选 `inputPricePerMillion` 和 `outputPricePerMillion` 用于成本计算。
 >
 > 不再实现（本文其余部分对它们的描述是历史目标，不是当前行为）：`GET /model-providers/:id/connections`——「编辑 Provider 前提示受影响的连接」改由 Web 用连接列表与模型列表自行聚合，代价是它只是界面提示，不是服务端保证；Provider 删除的实际形态是同步 `DELETE /model-providers/:id`（204），不是本文原设计的 202 OperationSnapshot，改回需要单独决定。真实外呼已按住址、单次传输与逐次授权执行过两次（`@1`、`@2` 各一次 HTTP 200），仍不授权部署、批量外呼或其它 Provider。
 >
-> 产品决策：[已接受 Proposal](../proposals/connection-credential-entry-v1.md)；过程和验证：[Task 39](../../.agents/tasks/39-pi-ai-adapter/walkthrough-provider-model.md)。
+> 产品决策：[已接受 Proposal](../proposals/connection-credential-entry-v1.md)；Task 41 变更：[Proposal](../proposals/connection-agent-profile-separation-v1.md)；过程和验证：[Task 39](../../.agents/tasks/39-pi-ai-adapter/walkthrough-provider-model.md)、[Task 41](../../.agents/tasks/41-connection-agent-separation/README.md)。
 
 ## 所有者与首个消费者
 

@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ConfiguredModels, ModelProviderCredentials } from "@cosmos/application";
-import { MODEL_CONNECTION_CONNECTOR_ID } from "@cosmos/contracts";
-import { PrismaAgentModelConnectionResolver, PrismaConfiguredModelRepository, PrismaProviderCredentialRepository,
-    type PrismaCosmosRepository, withModelConfigurationLock } from "@cosmos/storage-prisma";
+import { PrismaAgentModelResolver, PrismaConfiguredModelRepository, PrismaProviderCredentialRepository,
+    PrismaSystemConfigRepository, type PrismaCosmosRepository, withModelConfigurationLock } from "@cosmos/storage-prisma";
 
 export const storySnapshot = {
     storyId: "task40-synthetic-story", storyRevisionId: "task40-synthetic-revision",
@@ -18,7 +17,9 @@ export const acceptancePlan = {
     retention: "Isolated database and validated model output remain local; no raw HTTP response/header logging. SecretRefs are deleted in finally. Provider billing/retention is unknown.",
 };
 
-export async function configureStoryConnection(repository: PrismaCosmosRepository, credential: string) {
+export async function configureStoryConnection(repository: PrismaCosmosRepository, credential: string): Promise<{
+    modelId: string; models: PrismaAgentModelResolver;
+}> {
     const providerId = "task40-acceptance-provider";
     const configuredModelId = "task40-acceptance-model";
     const credentials = new ModelProviderCredentials({
@@ -30,7 +31,8 @@ export async function configureStoryConnection(repository: PrismaCosmosRepositor
     await new ConfiguredModels(new PrismaConfiguredModelRepository(repository.prisma), () => configuredModelId).create(providerId, {
         modelId: acceptancePlan.model, name: "Task40 acceptance", contextWindow: 262_144, maxOutputTokens: acceptancePlan.maxOutputTokens,
     });
-    const connection = await repository.createConnection({ name: "Task40 acceptance connection",
-        connectorId: MODEL_CONNECTION_CONNECTOR_ID, modelId: configuredModelId });
-    return { connectionId: connection.id, connections: new PrismaAgentModelConnectionResolver(repository.prisma) };
+    return { modelId: configuredModelId, models: new PrismaAgentModelResolver(
+        repository.prisma,
+        new PrismaSystemConfigRepository(repository.prisma)
+    ) };
 }

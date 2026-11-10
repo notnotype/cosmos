@@ -4,12 +4,13 @@ import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { ActionRegistry, ConfiguredModels, ModelProviderCredentials } from "@cosmos/application";
 import type { PiAiClientV2 } from "@cosmos/agent-pi-ai";
-import { MODEL_CONNECTION_CONNECTOR_ID, agentInvocationOutputSchema } from "@cosmos/contracts";
+import { agentInvocationOutputSchema } from "@cosmos/contracts";
 import {
-    PrismaAgentModelConnectionResolver,
+    PrismaAgentModelResolver,
     PrismaConfiguredModelRepository,
     PrismaCosmosRepository,
     PrismaProviderCredentialRepository,
+    PrismaSystemConfigRepository,
     withModelConfigurationLock,
 } from "@cosmos/storage-prisma";
 import { createWorkerAgentInvocationV2Action } from "../../../apps/worker/src/agent-action-v2.js";
@@ -20,9 +21,8 @@ import {
 } from "./connection-smoke-harness.js";
 import type { DiagnosticStage } from "./connection-smoke-harness.js";
 
-// `agent.invoke@2` 的请求形状与 @1 不同：调用方只给 `connectionId`，模型、地址与凭证由服务端
-// 按 Connection → Model → Provider → SecretStore 解析。两套计划因此并列而不是共用——@1 的
-// 计划字节已被 `task39-real-QmVMec` 的验收固定，改一个字段就让那份证据失效。
+// `agent.invoke@2` 的请求形状：调用方给 `modelId`（可选），模型、地址与凭证由服务端
+// 按 modelId（或默认模型）→ Provider → SecretStore 解析。
 
 export const V2_PROVIDER_ID = "provider-task39-v2";
 export const V2_CONFIGURED_MODEL_ID = "model-task39-v2";
@@ -72,7 +72,7 @@ export async function configureModelConnection(
     credential: string,
     baseUrl: string,
     step: <T>(stage: DiagnosticStage, use: () => Promise<T>) => Promise<T> = (_stage, use) => use(),
-): Promise<{ connectionId: string; secretRef: string }> {
+): Promise<{ modelId: string; secretRef: string }> {
     const credentials = new ModelProviderCredentials({
         repository: new PrismaProviderCredentialRepository(repository.prisma),
         secrets: repository.secrets,
@@ -93,27 +93,25 @@ export async function configureModelConnection(
         modelId: model, name: "Task 39 v2 verification model",
         contextWindow: 262_144, maxOutputTokens: 64,
     }));
-    const connection = await step("connection_create", () => repository.createConnection({
-        name: "Task 39 v2 verification connection",
-        connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-        modelId: V2_CONFIGURED_MODEL_ID,
-    }));
     const providerRow = await repository.prisma.modelProvider.findUnique({
         where: { id: V2_PROVIDER_ID }, select: { secretRef: true },
     });
     if (!providerRow?.secretRef) throw new Error("Provider credential was not stored.");
-    return { connectionId: connection.id, secretRef: providerRow.secretRef };
+    return { modelId: V2_CONFIGURED_MODEL_ID, secretRef: providerRow.secretRef };
 }
 
 export async function dispatchInvocationV2(
     repository: PrismaCosmosRepository,
-    connectionId: string,
+    modelId: string,
     client?: PiAiClientV2,
     maxOutputTokens = 64,
 ) {
     let secretReads = 0;
     const action = createWorkerAgentInvocationV2Action({
-        connections: new PrismaAgentModelConnectionResolver(repository.prisma),
+        models: new PrismaAgentModelResolver(
+            repository.prisma,
+            new PrismaSystemConfigRepository(repository.prisma)
+        ),
         secrets: {
             put: (ref, value) => repository.secrets.put(ref, value),
             delete: (ref) => repository.secrets.delete(ref),
@@ -122,7 +120,7 @@ export async function dispatchInvocationV2(
         client,
     });
     const output = agentInvocationOutputSchema.parse(await new ActionRegistry([action]).dispatch("agent.invoke@2", {
-        connectionId,
+        modelId,
         messages: [{ role: "user", content: "Reply with exactly: OK" }],
         tools: [],
         budget: { maxDurationMs: 300_000, maxToolCalls: 0, maxOutputTokens },
@@ -150,36 +148,39 @@ export async function runOfflineV2Smoke() {
     try {
         await repository.initialize();
         const configured = await configureModelConnection(repository, SYNTHETIC_CREDENTIAL, V2_OFFLINE_BASE_URL);
-        const first = await dispatchInvocationV2(repository, configured.connectionId, createOfflineV2Client(requests));
+        const first = await dispatchInvocationV2(repository, configured.modelId, createOfflineV2Client(requests));
         // 调用方要求更大的输出预算时，仍然只能按模型配置的上限发送。
-        await dispatchInvocationV2(repository, configured.connectionId, createOfflineV2Client(requests), 4_096);
+        await dispatchInvocationV2(repository, configured.modelId, createOfflineV2Client(requests), 4_096);
         // 凭证被删除后必须失败关闭，且不再发出任何模型调用。
         await repository.secrets.delete(configured.secretRef);
         let missingSecretRejected = false;
-        try { await dispatchInvocationV2(repository, configured.connectionId, createOfflineV2Client(requests)); }
+        try { await dispatchInvocationV2(repository, configured.modelId, createOfflineV2Client(requests)); }
         catch (error: unknown) { missingSecretRejected = expectAuthenticationRequired(error); }
         if (!missingSecretRejected) throw new Error("Missing Secret did not fail closed.");
-        // 连接撤销后同样失败关闭：@2 的可用性由连接状态决定，不看进程启动配置。
-        const current = await repository.getConnection(configured.connectionId);
-        if (!current) throw new Error("The configured connection disappeared.");
-        await repository.updateConnection(configured.connectionId, {
-            expectedVersion: current.version, status: "revoked",
-        });
-        let revokedRejected = false;
-        try { await dispatchInvocationV2(repository, configured.connectionId, createOfflineV2Client(requests)); }
-        catch (error: unknown) { revokedRejected = expectAuthenticationRequired(error); }
-        if (!revokedRejected) throw new Error("A revoked connection did not fail closed.");
+        // 恢复凭证，确保删除模型场景独立受到测试（不受凭证缺失干扰）。
+        await repository.secrets.put(configured.secretRef, SYNTHETIC_CREDENTIAL);
+        let deletedRejected = false;
+        try {
+            // 模型被删除后同样失败关闭：@2 的可用性由模型配置决定，不看进程启动配置。
+            await repository.prisma.configuredModel.delete({ where: { id: configured.modelId } });
+            try { await dispatchInvocationV2(repository, configured.modelId, createOfflineV2Client(requests)); }
+            catch (error: unknown) { deletedRejected = expectAuthenticationRequired(error); }
+            if (!deletedRejected) throw new Error("A deleted model did not fail closed.");
+        } finally {
+            // 清理恢复的凭证，避免隔离根残留密钥。
+            await repository.secrets.delete(configured.secretRef);
+        }
         if (requests.length !== 2) throw new Error("Rejected calls still reached the SDK.");
         const result = {
             status: "completed", mode: "offline-v2", isolatedRoot: root, snapshotCommit: SNAPSHOT_COMMIT,
             migrationCount, ...first, providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
             sdkCalls: requests.length,
-            // 模型、地址与凭证都由连接解析结果决定，不是调用方声明的；Provider 记的是配置行 ID
+            // 模型、地址与凭证都由模型解析结果决定，不是调用方声明的；Provider 记的是配置行 ID
             // （`V2_PROVIDER_ID`），不是上游模型品牌名。
-            resolvedFromConnection: requests.every((request) =>
+            resolvedFromModel: requests.every((request) =>
                 request.provider === V2_PROVIDER_ID && request.model === model && request.baseUrl === V2_OFFLINE_BASE_URL),
             maxOutputTokensClamped: requests.every((request) => request.maxTokens === 64),
-            missingSecretRejected, revokedRejected, retained: true,
+            missingSecretRejected, deletedRejected, retained: true,
         };
         await repository.close();
         if (JSON.stringify(logs).includes(SYNTHETIC_CREDENTIAL)) throw new Error("Credential detected in logs.");
@@ -263,7 +264,7 @@ export async function runRealSmokeV2(root: string) {
         let responseStatus: number | null = null;
         let responseReturned = false;
         const summary = await diagnostics.step("dispatch", () => withBoundedProviderTransport(
-            () => dispatchInvocationV2(active, configured.connectionId),
+            () => dispatchInvocationV2(active, configured.modelId),
             globalThis.fetch, () => { diagnostics.record.transportSends += 1; }, (response) => {
                 responseReturned = true;
                 responseStatus = response.status;

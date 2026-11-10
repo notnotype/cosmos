@@ -6,7 +6,7 @@
 
 ## 最后更新
 
-2026-10-20。
+2026-11-10（Task 41：模型配置与 Connection 分离）。
 
 ## 组件定位
 
@@ -29,18 +29,18 @@
 5. Handler 抛出的受管 Action 错误保留其 code/message/retryable；未受管错误由 Registry 统一归类。
 6. Activity Worker 接管 Job/Run lease、取消、重试和 completion；本组件不自行提交 Job 结果。
 
-## 连接作用域 Action（`agent.invoke@2`）
+## 模型作用域 Action（`agent.invoke@2`）
 
 `packages/application/src/agent-invocation-v2.ts` 在同一个 Registry 与同一套 Host 状态机上注册第二个版本：
 
-- **Agent Invocation V2 Port（`AgentInvocationV2Port`）**：接收只含 `connectionId` 的输入与执行上下文，返回 `AgentInvocationOutput`；模型与凭证由端口实现从连接解析。
+- **Agent Invocation V2 Port（`AgentInvocationV2Port`）**：接收包含可选 `modelId` 的输入与执行上下文，返回 `AgentInvocationOutput`；模型与凭证由端口实现从模型配置解析。如果 `modelId` 缺失，使用系统默认模型（`SystemConfig.defaultModelId`）。
 - **Agent Invocation @2（`agent.invoke@2`）**：`kind`、`executionPlacement`、能力、超时与 retry policy 与 @1 完全一致，只有输入形状不同。
 
-输入是 strict 对象：`connectionId`（非空）、`messages`、`tools`、`budget`、`metadata`。`provider`、`model`、`baseUrl`、`secretRef`、`apiKey` 一律不接受——静默忽略会让调用方误以为自己指定的模型生效了，所以多余字段必须报 `invalid_input`。
+输入是 strict 对象：可选 `modelId`（非空字符串）、`messages`、`tools`、`budget`、`metadata`。如果 `modelId` 缺失，使用系统默认模型（`SystemConfig.defaultModelId`）。`provider`、`model`、`baseUrl`、`secretRef`、`apiKey`、`connectionId` 一律不接受——静默忽略会让调用方误以为自己指定的模型生效了，所以多余字段必须报 `invalid_input`。
 
-`AgentModelConnectionResolver`（端口）返回 `AgentModelConnectionSnapshot | null`：一次读取连接、模型与 Provider，任一不满足就返回 `null`。分三次读会读到三个时刻的状态，用户刚换模型时可能把新模型的预算和旧服务商的地址拼在一起。
+`AgentModelResolver`（端口）返回 `AgentModelSnapshot | null`：一次读取模型配置、Provider 与凭证，任一不满足就返回 `null`。模型配置包含可选的 `inputPricePerMillion` 和 `outputPricePerMillion`，用于成本计算。
 
-与 @1 的选择关系：@2 用于用户在模型页里选好的连接，Worker 现在只注册它。`@1` 的 Worker 部署 profile 与注册已随 F 切片退出（前置的真实服务验收已完成，见 [API 0009](../../api/0009-provider-model-configuration.md)）；`agent.invoke@1` 的端口、输入输出契约、Fake 与 disabled catalog 条目仍保留，但没有生产进程注册它，Story 内部生成用例也已改用 @2。
+与 @1 的选择关系：@2 用于系统配置的默认模型或显式指定的模型，Worker 现在只注册它。`@1` 的 Worker 部署 profile 与注册已随 F 切片退出（前置的真实服务验收已完成，见 [API 0009](../../api/0009-provider-model-configuration.md)）；`agent.invoke@1` 的端口、输入输出契约、Fake 与 disabled catalog 条目仍保留，但没有生产进程注册它，Story 内部生成用例也已改用 @2。
 
 ### Story 候选消费者（产品接线）
 
@@ -79,9 +79,10 @@ Agent Action 的执行定义：`idempotent=false`、支持取消、无 Action �
 - `usage`：非负整数 `inputTokens`、`outputTokens`、`totalTokens`；
 - `provider`、`model`：非空字符串；
 - `finishReason`：`stop`、`tool_call`、`length` 或 `cancelled`；
-- `metadata`：JSON-safe record，默认空对象。
+- `metadata`：JSON-safe record，默认空对象；
+- `cost`（可选）：成本信息对象，包含 `input`（输入成本）、`output`（输出成本）、`total`（总成本）和 `currency`（货币单位，默认 "USD"）。成本根据模型配置的 `inputPricePerMillion` 和 `outputPricePerMillion` 计算。
 
-当前 Fake Adapter 只返回预配置 output；它不会自动生成工具调用或内容。
+当前 Fake Adapter 只返回预配置 output；它不会自动生成工具调用或内容，也不计算成本。
 
 ## 状态与持久化
 
@@ -132,5 +133,6 @@ Fake Adapter 没有环境变量或外部配置。`agent.invoke@1` 的执行位�
 - 实现：`packages/application/src/agent-invocation.ts`、`packages/application/src/agent-invocation-v2.ts`、`packages/contracts/src/agent.ts`、`packages/application/src/catalog.ts`；
 - contracts 行为测试：`packages/contracts/src/agent.test.ts`、`packages/contracts/src/action.test.ts`；
 - application 行为测试：`packages/application/src/agent-invocation.test.ts`、`packages/application/src/agent-invocation-v2.test.ts`；
-- 连接解析行为测试：`packages/storage-prisma/src/agent-model-resolver.test.ts`；
+- 模型解析行为测试：`packages/storage-prisma/src/agent-model-resolver.test.ts`（Task 41 后替代连接解析）；
+- checkpoint 回归测试：`packages/application/src/ingestion-service.checkpoint.test.ts`（Task 41 修复产品 bug）；
 - Activity Worker 行为测试：`packages/application/src/workflow-host-runtime.test.ts`。

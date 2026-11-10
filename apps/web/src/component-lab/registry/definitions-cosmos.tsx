@@ -1,5 +1,6 @@
 import {renderSystemOutput, systemOutputControls} from "../primitive-fixtures";
 import {
+    renderDefaultModelPanelLab,
     renderModelProviderPanelLab,
     renderProviderModelsSectionLab,
 } from "../model-fixtures";
@@ -140,10 +141,22 @@ export const cosmosComponentDefinitions = [
         scenes: [
             {id: "populated", label: "Populated", props: {state: "populated"}},
             {id: "empty", label: "Empty", props: {state: "empty"}},
-            {id: "model", label: "Model connection", props: {state: "model"}},
         ],
         tokens: sharedTokens,
         render: renderConnectionPanelLab,
+    },
+    {
+        id: "default-model-panel",
+        label: "DefaultModelPanel",
+        category: "Cosmos",
+        modulePath: "components/cosmos/default-model-panel.tsx",
+        defaultSceneId: "default",
+        controls: [],
+        scenes: [
+            {id: "default", label: "Default", props: {}},
+        ],
+        tokens: sharedTokens,
+        render: renderDefaultModelPanelLab,
     },
     {
         id: "storage-panel",

@@ -50,7 +50,6 @@ import {ThemeSwitcher} from "@/components/cosmos/theme-switcher";
 
 import type {CosmosThemePreference} from "@/theme/theme";
 
-import {renderConnectionPanelModelLab} from "./model-fixtures";
 import type {LabProps} from "./types";
 
 const fixtureTimestamp = "2026-01-01T00:00:00.000Z";
@@ -564,10 +563,7 @@ function connectionProbeJob(status: "queued" | "succeeded") {
 }
 
 export function renderConnectionPanelLab(props: LabProps) {
-    const state = optionProp(props, "state", "populated", ["populated", "empty", "model"] as const);
-    // 模型连接的行态（未选/已选/配置缺失）需要能读到已配置的模型，夹具因此单独一份
-    // （`model-fixtures.tsx`），不与外部平台连接共享客户端。
-    if (state === "model") return renderConnectionPanelModelLab();
+    const state = optionProp(props, "state", "populated", ["populated", "empty"] as const);
     const client = state === "empty"
         ? ({
             listConnections: async () => [],

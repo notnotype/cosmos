@@ -51,7 +51,7 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
         const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: "task40-body-acceptance",
             leaseMs: 120_000, definitions: [createStoryAgentWorkflowDefinition()], actions: [
                 createWorkerAgentInvocationV2Action({ ...configured, secrets: repository.secrets }), createStoryAgentSaveAction(candidates)] });
-        const control = new StoryAgentWorkflowControl({ store: host.store, connections: configured.connections,
+        const control = new StoryAgentWorkflowControl({ store: host.store,
             stories: { readStory: async () => bodyStory }, content: new ContentQuery(new PrismaContentQueryRepository(repository.prisma)) });
         api = await startBodyApi(root);
         const endpoint = `${api.origin}/api/v1/stories/${bodyStory.storyId}`;
@@ -64,7 +64,7 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
         const beforeRevision = (await readDetail()).story.revisionId;
         const response = await fetch(`${endpoint}/agent-candidates`, { method: "POST", headers: {
             "content-type": "application/json", origin: api.origin, "idempotency-key": "task40-body-single-request" },
-            body: JSON.stringify({ task: "story.summarize", connectionId: configured.connectionId, sources: bodyBindings }) });
+            body: JSON.stringify({ task: "story.summarize", modelId: configured.modelId, sources: bodyBindings }) });
         if (response.status !== 202) throw new Error("API did not queue request");
         const queued = storyAgentGenerationSchema.parse(await response.json());
         report.apiQueue = true;

@@ -96,6 +96,17 @@ describe("Run control (RUN-004 / ADR-0016)", () => {
     it("listWorkflowRuns returns recent runs newest-first, limited and source-filtered", async () => {
         await withTestDatabase("workflow-host", async (database) => {
             const store = createStore(database);
+            // WorkflowRun 的来源外键要求筛选目标先落库，不能只在 envelope 中虚构来源 id。
+            await store.prisma.sourceInstance.createMany({
+                data: ["source-a", "source-b"].map((id) => ({
+                    id,
+                    name: id,
+                    kind: "fixture-rss",
+                    sourceDefinitionRef: "source.fixture-rss@1",
+                    operationId: "fetch",
+                    configJson: "{}",
+                })),
+            });
             await store.createWorkflowEnvelope({
                 runId: "run-old",
                 idempotencyKey: "run-old",

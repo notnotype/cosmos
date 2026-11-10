@@ -50,6 +50,20 @@ afterEach(async () => {
 });
 
 describe("PrismaSystemConfigRepository", () => {
+    test("reads an absent configuration without creating the singleton", async () => {
+        expect(await repository.getSystemConfigWithModel()).toEqual({ defaultModelId: null, defaultModel: null });
+        expect(await prisma.systemConfig.count()).toBe(0);
+    });
+
+    test("concurrent first writes keep exactly one singleton and a complete winning value", async () => {
+        const values = ["model-a", "model-b", null, "model-c"];
+        await Promise.all(values.map((value) => repository.setDefaultModelId(value)));
+        const rows = await prisma.systemConfig.findMany();
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.id).toBe("singleton");
+        expect(values).toContain(rows[0]?.defaultModelId);
+    });
+
     test("returns null initially and automatically creates the singleton on read", async () => {
         expect(await prisma.systemConfig.count()).toBe(0);
 

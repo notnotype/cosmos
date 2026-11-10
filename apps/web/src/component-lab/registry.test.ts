@@ -33,6 +33,7 @@ const expectedPublicModules = [
     "components/cosmos/story-agent-candidates.tsx",
     "components/cosmos/connection-panel.tsx",
     "components/cosmos/default-model-panel.tsx",
+    "components/cosmos/model-details.tsx",
     "components/cosmos/feed-browser.tsx",
     "components/cosmos/run-control.tsx",
     "components/cosmos/run-history.tsx",

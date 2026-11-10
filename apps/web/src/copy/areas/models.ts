@@ -1,6 +1,6 @@
 /**
  * 模型页（`/models`）文案。入口与边界来自已接受的 Proposal
- * `connection-credential-entry-v1.md`：先配服务商与模型，再到账号里选模型。
+ * `connection-credential-entry-v1.md`：先配服务商与模型；默认模型统一在设置页选择。
  *
  * 这里只有一句产品承诺是硬要求：保存不调用模型。用户填完 key 就点保存时，
  * 界面必须明确说这次保存没有发生任何请求，否则「保存成功」会被读成「认证通过」。
@@ -38,12 +38,10 @@ export const models = {
         collapse: (name: string) => `收起「${name}」的模型`,
         remove: "删除服务商",
         removeTitle: (name: string) => `删除「${name}」？`,
-        /** 删除会一并清掉模型和已保存的密钥；被账号引用时服务端会拒绝，不会半途删掉。 */
-        removeHint: "会一并删除它的模型和已保存的 API Key。有账号正在使用其中某个模型时不会删除。",
+        /** 删除会一并清掉模型和已保存的密钥；默认模型引用由服务端保护。 */
+        removeHint: "会一并删除它的模型和已保存的 API Key。其中包含系统默认模型时，请先到设置页更换或清除默认模型。",
         removeAction: "删除",
         removed: "已删除服务商。",
-        /** 编辑器里提示改动会影响谁；数字是界面 join 账号列表与模型列表算出来的，不是服务端保证。 */
-        affectedConnections: (count: number) => `有 ${count} 个账号正在使用这个服务商的模型，改地址或协议会一起生效。`,
     },
     models: {
         title: "模型",
@@ -58,7 +56,7 @@ export const models = {
         inputPricePerMillion: "输入单价（USD / 百万 token）",
         outputPricePerMillion: "输出单价（USD / 百万 token）",
         remove: "移除",
-        removeConfirm: (name: string) => `移除「${name}」？引用它的账号会失去这个模型。`,
+        removeConfirm: (name: string) => `移除「${name}」？如果它是系统默认模型，请先到设置页更换或清除默认模型。`,
         /** 两个预算在库里非空，所以它们是「留空即用默认值」，输入框只显示 placeholder。 */
         defaultsHint: "预算字段留空就按输入框里的默认值提交，可按上游实际能力改小。",
         addRow: "再加一行",
@@ -92,39 +90,11 @@ export const models = {
             unreachable: "暂时连不上上游，可以稍后再试。",
         },
     },
-    /**
-     * 账号一侧的模型选择。账号与「服务商/模型」是两件事：账号说「用哪个模型」，
-     * 模型本身在 `/models` 配。所以这里只提供选择与跳过去补配置的提示。
-     */
-    connection: {
-        label: "模型",
-        unset: "还没选模型",
-        missing: "配置缺失：选中的模型已不在列表里",
-        missingHint: "到「模型」页重新添加这个模型，或在这里换一个。",
-        select: "选择模型",
-        selectTitle: "选择模型",
-        selectHint: "只列出已配置的模型；带预算字段才能在调用时使用。",
-        change: "更换模型",
-        /** 行内控件的可见名就有歧义（同一行可能有两个按钮），所以无障碍名带上账号名。 */
-        selectLabel: (name: string) => `选择模型 ${name}`,
-        saveLabel: (name: string) => `保存模型选择 ${name}`,
-        empty: "还没有可用模型。先到「模型」页添加服务商与模型。",
-        loading: "正在读取可用模型…",
-        loadFailed: "可用模型读取失败。",
-        save: "保存",
-        cancel: "取消",
-        notices: {
-            versionConflict: "这个账号刚被改过，已重新读取，请再选一次。",
-            invalidSelection: "这个模型现在不能选：可能所属服务商正在删除。",
-            notFound: "这个账号已经不在了，已重新读取列表。",
-            unavailable: "保存失败，请稍后重试。",
-        },
-    },
     /** 写操作失败的恢复提示。恢复动作不同，所以句子不能合并成一句「保存失败」。 */
     notices: {
         versionConflict: "服务商已被其它修改更新，已重新读取，请再保存一次。",
         alreadyExists: "这个服务商下已经有同一个模型 ID 了，不需要重复添加。",
-        inUse: "这个模型还有账号在用，先把它从账号里换掉再删。",
+        inUse: "这个模型仍是系统默认模型，请先到设置页更换或清除默认模型再删。",
         credentialMissing: "这个服务商还没有可用的凭证，先在编辑里保存 API Key。",
         operationInProgress: "同一个服务商还有一次保存在进行中，稍等再试。",
         cleanupPending: "配置已保存，但旧凭证还没清理完；再点一次保存会继续清理。",
@@ -136,7 +106,7 @@ export const models = {
         failureReasons: {
             versionConflict: "可能原因：这条记录已在别处更新；请以最新内容为准再保存。",
             alreadyExists: "可能原因：同一个模型 ID 只能录入一次；要改预算请编辑已有的那一行。",
-            inUse: "可能原因：至少一个使用这个模型的账号还指向它；删除被引用的模型会让那些账号失去模型。",
+            inUse: "可能原因：系统默认模型仍指向它，或它所属服务商下的模型；删除会让默认模型配置失效。",
             credentialMissing: "可能原因：凭证没有写入或已被清理；请检查 API Key 后再保存。",
             operationInProgress: "可能原因：上一次保存仍在处理；等待片刻后再试。",
             cleanupPending: "可能原因：旧凭证清理暂未完成；稍后再次保存可继续清理。",

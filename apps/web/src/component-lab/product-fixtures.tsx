@@ -481,7 +481,7 @@ const connectionLabConnections: readonly ConnectionInstance[] = [
     {
         id: "connection-lab-expired",
         name: "示例站登录态",
-        connectorId: "generic",
+        connectorId: "imap",
         account: null,
         scopeJson: null,
         configJson: null,
@@ -531,9 +531,6 @@ const connectionLabClient = {
     ],
     createConnectionProbe: async () => connectionProbeJob("succeeded"),
     getConnectionProbe: async () => connectionProbeJob("succeeded"),
-    // 模型选择器要读「已配置的模型」：夹具给一个空列表，实验室里模型连接显示「还没选模型」。
-    listModelProviders: async () => ({ items: [], nextCursor: null }),
-    listConfiguredModels: async () => ({ items: [], nextCursor: null }),
 } as unknown as HttpCosmosClient;
 
 /** 连接探测 Job 的夹具：终态 + 一条「已登录」结论。 */

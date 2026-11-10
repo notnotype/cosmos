@@ -244,6 +244,7 @@ type	StoryUserStateMigrationCounts
 type	StoryUserStateMigrationResult
 type	StructuredContentViewContract
 type	StructuredSourceBlockContract
+type	SystemConfigDto
 type	TargetType
 type	TemporalFallback
 type	TemporalPrecision
@@ -274,6 +275,7 @@ type	UpdateSavedViewCommand
 type	UpdateSectionCommand
 type	UpdateSourceCommand
 type	UpdateStoryRevisionCommand
+type	UpdateSystemConfigCommand
 type	UpdateTopicCommand
 type	UpdateTopicMemberRoleCommand
 type	UserDataExport
@@ -545,6 +547,7 @@ value	storyUserStateMigrationCountsSchema
 value	storyUserStateMigrationResultSchema
 value	structuredContentViewSchema
 value	structuredSourceBlockSchema
+value	systemConfigDtoSchema
 value	targetTypeSchema
 value	temporalFallbackSchema
 value	temporalPrecisionSchema
@@ -575,6 +578,7 @@ value	updateSavedViewCommandSchema
 value	updateSectionCommandSchema
 value	updateSourceCommandSchema
 value	updateStoryRevisionCommandSchema
+value	updateSystemConfigCommandSchema
 value	updateTopicCommandSchema
 value	updateTopicMemberRoleCommandSchema
 value	userDataExportSchema

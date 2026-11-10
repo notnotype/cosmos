@@ -92,7 +92,7 @@ type ModelProviderPanelProps = {
 
 /**
  * 模型页的服务商区（Proposal connection-credential-entry-v1）：
- * 先添加服务商并保存它的凭证，再为它录入或发现模型；连接页再用这些模型。
+ * 先添加服务商并保存它的凭证，再为它录入或发现模型；默认模型在设置页选择。
  *
  * 界面上有两个刻意的约束：
  * 1. 保存不调用模型。填完 key 就能保存是通过设计的——「保存成功」只表示配置与凭证落盘，
@@ -115,14 +115,6 @@ export function ModelProviderPanel({ client }: ModelProviderPanelProps) {
     const [removing, setRemoving] = useState(false);
     /** 删除被引用拒绝时的常驻原因。 */
     const [removalError, setRemovalError] = useState<string | null>(null);
-    /**
-     * 编辑时有多少连接在用这个服务商的模型。
-     *
-     * 界面自行 join 连接列表与模型列表：一个专门的服务端端点只为一句提示，不值得多一套
-     * 仓储方法与测试面；代价是它只是提示，不构成服务端保证。带 providerId 存，切换编辑目标
-     * 时旧计数自然失效，不必在 effect 里同步清空。
-     */
-    const [affected, setAffected] = useState<{ providerId: string; count: number } | null>(null);
 
     const loadProviders = useCallback(async () => {
         setLoadError(null);
@@ -143,31 +135,6 @@ export function ModelProviderPanel({ client }: ModelProviderPanelProps) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         void loadProviders();
     }, [loadProviders]);
-
-    const editingProviderId = editor?.mode === "edit" ? editor.provider.id : null;
-
-    useEffect(() => {
-        if (editingProviderId === null) return;
-        let cancelled = false;
-        void (async () => {
-            try {
-                const [models, connections] = await Promise.all([
-                    client.listConfiguredModels(editingProviderId),
-                    client.listConnections(),
-                ]);
-                if (cancelled) return;
-                const used = new Set(models.items.map((model) => model.id));
-                setAffected({
-                    providerId: editingProviderId,
-                    count: connections.filter((connection) => connection.modelId !== null
-                        && used.has(connection.modelId)).length,
-                });
-            } catch {
-                // 只是提示：读不到就不显示，不打断编辑。
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [client, editingProviderId]);
 
     function openCreate() {
         setEditor({ mode: "create" });
@@ -267,8 +234,8 @@ export function ModelProviderPanel({ client }: ModelProviderPanelProps) {
     /**
      * 删除一个服务商：连带它的模型与服务端保存的密钥。
      *
-     * 被连接引用的模型会让服务端拒绝整次删除（409 in_use）。这时把原因留在列表上方，
-     * 而不是弹一个几秒就消失的提示——用户要照着它去改连接。
+     * 系统默认模型会让服务端拒绝整次删除（409 in_use）。这时把原因留在列表上方，
+     * 而不是弹一个几秒就消失的提示——用户要照着它去更换或清除默认模型。
      */
     async function confirmRemoval() {
         if (removal === null) return;
@@ -312,11 +279,6 @@ export function ModelProviderPanel({ client }: ModelProviderPanelProps) {
                     </DialogTitle>
                     <DialogDescription>{messages.models.provider.createsNoCall}</DialogDescription>
                 </DialogHeader>
-                {affected !== null && affected.providerId === editingProviderId && affected.count > 0 && (
-                    <p className="text-[12px] text-muted-foreground">
-                        {messages.models.provider.affectedConnections(affected.count)}
-                    </p>
-                )}
                 <form
                     className="flex flex-col gap-3"
                     onSubmit={(event) => {

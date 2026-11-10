@@ -1,3 +1,9 @@
+import {
+    systemConfigDtoSchema,
+    updateSystemConfigCommandSchema,
+    type SystemConfigDto,
+    type UpdateSystemConfigCommand,
+} from "@cosmos/contracts";
 import { z } from "zod";
 import { ConfiguredModelsClient } from "./client-configured-models.js";
 
@@ -9,6 +15,18 @@ export type DefaultModelResponse = z.infer<typeof defaultModelResponseSchema>;
  * 继承 ConfiguredModelsClient，在导出门面 (HttpCosmosClient) 之前插入继承链。
  */
 export class SystemConfigClient extends ConfiguredModelsClient {
+    async getSystemConfig(): Promise<SystemConfigDto> {
+        return this.request("/api/v1/system/config", { schema: systemConfigDtoSchema });
+    }
+
+    async updateSystemConfig(input: UpdateSystemConfigCommand): Promise<{ defaultModelId: string | null }> {
+        return this.request("/api/v1/system/config", {
+            method: "PUT",
+            body: updateSystemConfigCommandSchema.parse(input),
+            schema: z.object({ defaultModelId: z.string().nullable() }).strict(),
+        });
+    }
+
     async getDefaultModel(): Promise<DefaultModelResponse> {
         return this.request("/api/v1/config/default-model", {
             schema: defaultModelResponseSchema,

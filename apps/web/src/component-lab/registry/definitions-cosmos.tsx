@@ -2,6 +2,7 @@ import {renderSystemOutput, systemOutputControls} from "../primitive-fixtures";
 import {
     renderDefaultModelPanelLab,
     renderModelProviderPanelLab,
+    renderModelDetailsLab,
     renderProviderModelsSectionLab,
 } from "../model-fixtures";
 import {
@@ -144,6 +145,20 @@ export const cosmosComponentDefinitions = [
         ],
         tokens: sharedTokens,
         render: renderConnectionPanelLab,
+    },
+    {
+        id: "model-details",
+        label: "ModelDetails",
+        category: "Cosmos",
+        modulePath: "components/cosmos/model-details.tsx",
+        defaultSceneId: "priced",
+        controls: [control("state", "State", "select", "priced", ["priced", "unknown"])],
+        scenes: [
+            {id: "priced", label: "Known prices", props: {state: "priced"}},
+            {id: "unknown", label: "Unknown prices", props: {state: "unknown"}},
+        ],
+        tokens: sharedTokens,
+        render: renderModelDetailsLab,
     },
     {
         id: "default-model-panel",

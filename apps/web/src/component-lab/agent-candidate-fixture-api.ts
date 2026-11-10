@@ -22,6 +22,17 @@ function candidate(story: StoryDetail, id: string): StoryAgentCandidateRecordCon
 export function createAgentCandidateFixtureApi(story: StoryDetail,
     behavior: { loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean; sourceStatus: "current" | "superseded" | "unavailable" }, onCount: (count: number) => void) {
     return {
+        async getSystemConfig() {
+            return {
+                defaultModelId: "lab-story-model",
+                defaultModel: {
+                    id: "lab-story-model", providerId: "lab-provider", modelId: "fixture",
+                    name: "Story 演示模型", contextWindow: 128000, maxOutputTokens: 2048,
+                    inputPricePerMillion: 1, outputPricePerMillion: 2, version: 1,
+                    createdAt: "2026-11-10T06:00:00.000Z", updatedAt: "2026-11-10T06:00:00.000Z",
+                },
+            };
+        },
         async storyAgentCandidates() { return readStore().records; },
         async revisionContent(revisionId: string) {
             return { entryId: "lab-entry", entryRevisionId: revisionId, representation: null, contentText: "", readingMode: "unavailable" as const, evidenceStatus: "available" as const };

@@ -14,6 +14,16 @@ function serviceWith(initialValue: string | null = null) {
     return new SystemConfigService({
         async getDefaultModelId() { return value; },
         async setDefaultModelId(modelId) { value = modelId; },
+        async getSystemConfigWithModel() { return { defaultModelId: value, defaultModel: null }; },
+        async getModelSelection(id: string) { return { model: {
+            id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
+            contextWindow: 128000, maxOutputTokens: 4096, version: 1,
+            createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
+        }, providerState: "active" }; },
+        async setDefaultModelWithValidation(id, validate) {
+            validate(await this.getModelSelection(id));
+            await this.setDefaultModelId(id);
+        },
     });
 }
 
@@ -26,6 +36,21 @@ function createLogger(): Logger {
 }
 
 describe("SystemConfigController", () => {
+    it.each([
+        ["not_found", 404, "not_found"],
+        ["inactive_provider", 409, "invalid_model_selection"],
+    ] as const)("maps invalid selection reason %s on the existing PUT", async (reason, status, code) => {
+        const service = Object.assign(serviceWith(), {
+            async setDefaultModelId() {
+                throw Object.assign(new Error("PRIVATE_SELECTION_DETAIL"), { code: "invalid_model_selection", reason });
+            },
+        });
+        const controller = new SystemConfigController(service);
+        await expect(controller.setDefaultModel({ modelId: "model-a" })).rejects.toMatchObject({
+            status, response: { code, message: "System config operation failed." },
+        });
+    });
+
     it("gets and sets string or null default model IDs over isolated HTTP", async () => {
         const service = serviceWith("org/initial");
         @Module({
@@ -87,6 +112,16 @@ describe("SystemConfigController", () => {
         const service = new SystemConfigService({
             async getDefaultModelId() { return null; },
             async setDefaultModelId(modelId) { writes.push(modelId); },
+            async getSystemConfigWithModel() { return { defaultModelId: null, defaultModel: null }; },
+            async getModelSelection(id: string) { return { model: {
+                id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
+                contextWindow: 128000, maxOutputTokens: 4096, version: 1,
+                createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
+            }, providerState: "active" }; },
+            async setDefaultModelWithValidation(id, validate) {
+                validate(await this.getModelSelection(id));
+                await this.setDefaultModelId(id);
+            },
         });
         const controller = new SystemConfigController(service);
 
@@ -103,6 +138,8 @@ describe("SystemConfigController", () => {
         const service = {
             async getDefaultModelId() { throw new Error(secret); },
             async setDefaultModelId() { throw Object.assign(new Error(secret), { code: "storage_down" }); },
+            async getConfig(): Promise<never> { throw new Error(secret); },
+            async setDefaultModel(): Promise<never> { throw new Error(secret); },
         };
         const controller = new SystemConfigController(service);
 

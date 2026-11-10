@@ -2,6 +2,7 @@ import {CosmosTransportError, type HttpCosmosClient} from "@cosmos/transport-htt
 
 import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
 import {ModelProviderPanel} from "@/components/cosmos/model-provider-panel";
+import {ModelDetails} from "@/components/cosmos/model-details";
 import {ProviderModelsSection} from "@/components/cosmos/provider-models-section";
 import {ToastHost, ToastProvider} from "@/components/ui/toast";
 
@@ -81,23 +82,12 @@ const modelPanelLabMethods = {
     createConfiguredModel: async () => modelLabModels[0],
     deleteConfiguredModel: async () => {},
     deleteModelProvider: async () => {},
-    // 编辑框会 join 连接列表来提示「改动会影响谁」；实验室给一条引用 chat 的模型连接。
-    listConnections: async () => [{
-        id: "connection-deepseek-agent",
-        name: "DeepSeek 助手",
-        connectorId: "cosmos.agent",
-        status: "active" as const,
-        modelId: modelLabModels[0]!.id,
-        version: 1,
-        createdAt: fixtureTimestamp,
-        updatedAt: fixtureTimestamp,
-    }],
 };
 
 const modelPanelLabClient = modelPanelLabMethods as unknown as HttpCosmosClient;
 
 /**
- * 被连接引用时的删除：服务端返回 409 `in_use`，界面必须把原因留在列表上方，
+ * 被默认模型设置引用时的删除：服务端返回 409 `in_use`，界面必须把原因留在列表上方，
  * 而不是弹一个几秒就消失的提示。真实判定在服务端事务里，这里只复现契约。
  */
 const modelPanelConflictClient = {
@@ -132,16 +122,24 @@ export function renderModelProviderPanelLab(props: LabProps) {
 }
 
 const defaultModelLabClient: Pick<HttpCosmosClient,
-    "getDefaultModel" | "setDefaultModel" | "listModelProviders" | "listConfiguredModels"
+    "getSystemConfig" | "updateSystemConfig" | "listModelProviders" | "listConfiguredModels"
 > = {
-    getDefaultModel: async () => ({modelId: modelLabModels[0]!.id}),
-    setDefaultModel: async (modelId: string | null) => ({modelId}),
+    getSystemConfig: async () => ({defaultModelId: modelLabModels[0]!.id, defaultModel: modelLabModels[0]!}),
+    updateSystemConfig: async ({defaultModelId}) => ({defaultModelId}),
     listModelProviders: modelPanelLabMethods.listModelProviders,
     listConfiguredModels: modelPanelLabMethods.listConfiguredModels,
 };
 
 export function renderDefaultModelPanelLab() {
-    return <DefaultModelPanel client={defaultModelLabClient as HttpCosmosClient} />;
+    return <DefaultModelPanel client={defaultModelLabClient} />;
+}
+
+export function renderModelDetailsLab(props: LabProps) {
+    const state = optionProp(props, "state", "priced", ["priced", "unknown"] as const);
+    const model = state === "priced"
+        ? { ...modelLabModels[0]!, inputPricePerMillion: 0, outputPricePerMillion: 2 }
+        : modelLabModels[0]!;
+    return <ModelDetails model={model} providerName={modelLabProvider.name} />;
 }
 
 export function renderProviderModelsSectionLab(props: LabProps) {

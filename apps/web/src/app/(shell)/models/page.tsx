@@ -5,7 +5,7 @@ import { client } from "@/app/home/page-runtime";
 import { messages } from "@/copy/messages";
 
 /*
- * 模型（Proposal connection-credential-entry-v1）：服务商 → 模型，连接页再从这里挑模型。
+ * 模型与服务商独立管理；全局默认在设置页选择。
  *
  * 这一页是独立入口，不挂在自动化页里：凭证配置与采集计划无关，一个只想填 key 的人
  * 不该先看到计划、运行记录和连接。

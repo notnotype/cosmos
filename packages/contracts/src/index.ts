@@ -4,6 +4,11 @@
  */
 
 export {
+    systemConfigDtoSchema, updateSystemConfigCommandSchema,
+    type SystemConfigDto, type UpdateSystemConfigCommand,
+} from "./system-config.js";
+
+export {
     aiHotSourceConfigSchema, assetErrorCodeSchema, assetErrorCodes, bilibiliSearchSourceConfigSchema,
     bilibiliSourceConfigSchema,
     connectionInstanceSchema, connectionStatusSchema, contentKindSchema, contentMetricsSchema,

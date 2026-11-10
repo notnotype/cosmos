@@ -22,6 +22,7 @@ export const automation = {
         dialogTitle: "新建账号",
         dialogDescription:
             "账号保存的是登录凭据的引用，不是凭据本身。适配器配置与授权范围是可选的补充说明。",
+        modelConnectorUnsupported: "模型不再使用账号配置，请到设置页选择默认模型。",
         submit: "保存账号",
         cancel: "取消",
         empty: "尚未创建账号；接入认证类平台前无需配置。",

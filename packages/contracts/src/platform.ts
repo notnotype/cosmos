@@ -232,6 +232,7 @@ export const serviceErrorCodeSchema = z.enum([
     "protocol_mismatch",
     "uncertain",
     "invalid_input",
+    "invalid_model_selection",
     "forbidden_origin",
     "version_conflict",
     "in_use",

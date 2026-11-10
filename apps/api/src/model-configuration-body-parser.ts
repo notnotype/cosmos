@@ -13,9 +13,14 @@ function isConfigurationWrite(request: IncomingMessage): boolean {
 
 /** Register before app.init; these routes must validate headers and byte limits before JSON decoding. */
 export function configureModelConfigurationBodyParsers(app: NestExpressApplication): void {
+    const isSystemConfigWrite = (request: IncomingMessage): boolean => request.method === "PUT"
+        && /^\/api\/v1\/system\/config\/?$/i.test((request.url ?? "").split("?")[0]!);
+    const isJson = (request: IncomingMessage): boolean =>
+        /^application\/json(?:\s*;|$)/i.test(String(request.headers["content-type"] ?? ""));
+    app.useBodyParser("json", { strict: false, type: (request: IncomingMessage) => isSystemConfigWrite(request) && isJson(request) });
     app.useBodyParser("json", {
-        type: (request: IncomingMessage) => !isConfigurationWrite(request)
-            && /^application\/json(?:\s*;|$)/i.test(String(request.headers["content-type"] ?? "")),
+        type: (request: IncomingMessage) => !isSystemConfigWrite(request) && !isConfigurationWrite(request)
+            && isJson(request),
     });
     app.useBodyParser("urlencoded", {
         extended: true,

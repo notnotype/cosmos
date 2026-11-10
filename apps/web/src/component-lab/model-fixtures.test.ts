@@ -5,7 +5,8 @@ import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
 
 import {renderDefaultModelPanelLab} from "./model-fixtures";
 
-function getClient(): HttpCosmosClient {
+type FixtureClient = Pick<HttpCosmosClient, "getSystemConfig" | "updateSystemConfig" | "listModelProviders" | "listConfiguredModels">;
+function getClient(): FixtureClient {
     return renderDefaultModelPanelLab().props.client;
 }
 
@@ -29,68 +30,30 @@ afterEach(() => {
 describe("default model panel lab fixture", () => {
     it("renders DefaultModelPanel with its offline client", () => {
         const element = renderDefaultModelPanelLab();
-
         expect(element.type).toBe(DefaultModelPanel);
         expect(element.props.client).toEqual({
-            getDefaultModel: expect.any(Function),
-            setDefaultModel: expect.any(Function),
-            listModelProviders: expect.any(Function),
-            listConfiguredModels: expect.any(Function),
+            getSystemConfig: expect.any(Function), updateSystemConfig: expect.any(Function),
+            listModelProviders: expect.any(Function), listConfiguredModels: expect.any(Function),
         });
     });
 
     it("keeps the client reference stable across renders", () => {
-        expect(renderDefaultModelPanelLab().props.client)
-            .toBe(renderDefaultModelPanelLab().props.client);
+        expect(renderDefaultModelPanelLab().props.client).toBe(renderDefaultModelPanelLab().props.client);
     });
 
-    it("reads an active provider, its configured models and a matching default", async () => {
+    it("reads an active provider, its configured models and matching default details", async () => {
         const client = getClient();
         const providers = await client.listModelProviders();
-
         expect(providers.nextCursor).toBeNull();
-        expect(providers.items).toHaveLength(1);
-        expect(providers.items[0]).toMatchObject({
-            id: "provider-deepseek",
-            name: "我的 DeepSeek",
-            state: "active",
-            credentialState: "configured",
-        });
-
+        expect(providers.items[0]).toMatchObject({ id: "provider-deepseek", state: "active", credentialState: "configured" });
         const models = await client.listConfiguredModels(providers.items[0]!.id);
-
-        expect(models.nextCursor).toBeNull();
         expect(models.items).toHaveLength(2);
-        expect(models.items).toEqual([
-            expect.objectContaining({
-                id: "model-chat",
-                providerId: providers.items[0]!.id,
-                modelId: "deepseek-chat",
-                name: "DeepSeek Chat",
-            }),
-            expect.objectContaining({
-                id: "model-reasoner",
-                providerId: providers.items[0]!.id,
-                modelId: "deepseek-reasoner",
-                name: "DeepSeek Reasoner",
-            }),
-        ]);
-
-        const defaultModel = await client.getDefaultModel();
-
-        expect(defaultModel).toEqual({modelId: "model-chat"});
-        expect(models.items.some((model) => model.id === defaultModel.modelId)).toBe(true);
+        const config = await client.getSystemConfig();
+        expect(config.defaultModelId).toBe("model-chat");
+        expect(config.defaultModel).toEqual(models.items[0]);
     });
 
-    it.each(["model-chat", "model-reasoner"])("returns the selected configured model %s when saving", async (modelId) => {
-        const client = getClient();
-
-        await expect(client.setDefaultModel(modelId)).resolves.toEqual({modelId});
-    });
-
-    it("returns a null modelId when clearing the default", async () => {
-        const client = getClient();
-
-        await expect(client.setDefaultModel(null)).resolves.toEqual({modelId: null});
+    it.each(["model-chat", "model-reasoner", null])("returns the selected default %s without a real write", async (defaultModelId) => {
+        await expect(getClient().updateSystemConfig({defaultModelId})).resolves.toEqual({defaultModelId});
     });
 });

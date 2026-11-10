@@ -16,7 +16,8 @@ export const snapshotPath = "packages/storage-prisma/prisma";
 export const provider = "jijiapi";
 export const model = "gpt-6-luna";
 export const secretRef = "secret:task39-connection-smoke";
-export const SNAPSHOT_COMMIT = "62c8624d061e6ae9624bbe362785e558a9ac7348";
+// Current @2 resolution reads Task 41 model prices, even when an explicit modelId is supplied.
+export const SNAPSHOT_COMMIT = "7ca568a91c57fba7bd8256727662936143b63a14";
 export const SYNTHETIC_CREDENTIAL = "task39-synthetic-offline-only";
 export const ISOLATION_PARENT = join(repositoryRoot, ".agent/tmp");
 export const ROOT_PREFIX = "task39-offline-";
@@ -129,7 +130,7 @@ export async function exportFrozenSnapshot(root: string): Promise<{
     const listing = join(root, "snapshot-paths.txt");
     runToFile("git", ["ls-tree", "-r", "--name-only", SNAPSHOT_COMMIT, snapshotPath], listing, repositoryRoot);
     const paths = (await readFile(listing, "utf8")).trim().split(/\r?\n/);
-    if (paths.filter((path) => path.endsWith("/migration.sql")).length !== 42) {
+    if (paths.filter((path) => path.endsWith("/migration.sql")).length !== 43) {
         throw new Error("Frozen migration count changed.");
     }
     const manifest: Array<{ path: string; sha256: string }> = [];

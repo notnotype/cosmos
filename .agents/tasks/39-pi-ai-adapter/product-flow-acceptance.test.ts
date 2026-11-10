@@ -11,13 +11,13 @@ import {
     ProviderModelDiscoveryRunner,
 } from "@cosmos/application";
 import type { PiAiClientV2 } from "@cosmos/agent-pi-ai";
-import { MODEL_CONNECTION_CONNECTOR_ID } from "@cosmos/contracts";
 import type { AgentInvocationV2Input } from "@cosmos/contracts";
 import {
-    PrismaAgentModelConnectionResolver,
+    PrismaAgentModelResolver,
     PrismaConfiguredModelRepository,
     PrismaProviderCredentialRepository,
     PrismaProviderDiscoveryReader,
+    PrismaSystemConfigRepository,
     withModelConfigurationLock,
 } from "@cosmos/storage-prisma";
 
@@ -26,7 +26,7 @@ import { createWorkerAgentInvocationV2Action } from "../../../apps/worker/src/ag
 import { createWorkflowHost } from "../../../apps/worker/src/workflow-host.js";
 
 /**
- * 任务 39 的端到端验收：把「配置服务商 → 发现模型 → 配置模型 → 连接选模型 → 执行」
+ * 任务 39 的端到端验收：把「配置服务商 → 发现模型 → 配置模型 → 执行」
  * 这一条真实产品链路串起来跑一遍。
  *
  * 只有两处是假的：Provider 的 `/models` 出口与模型的 `complete()`。前者在真实环境里是
@@ -44,9 +44,9 @@ function asJson(value: unknown): JsonValue {
     return value as JsonValue;
 }
 
-function agentInput(connectionId: string): AgentInvocationV2Input {
+function agentInput(modelId: string): AgentInvocationV2Input {
     return {
-        connectionId,
+        modelId,
         messages: [{ role: "user", content: "Write one sentence about durable workflows." }],
         tools: [],
         budget: { maxDurationMs: 5_000, maxToolCalls: 0, maxOutputTokens: 512 },
@@ -124,7 +124,7 @@ async function startRun(
 }
 
 describe("Task 39 产品流程端到端验收", () => {
-    it("把已选模型的连接跑成一次真实的 WorkflowRun", async () => {
+    it("把已选模型跑成一次真实的 WorkflowRun", async () => {
         await withRepository("task39-product-flow", async (repository, prisma) => {
             // 1. 配置服务商与它的凭证：走真实的应用服务、幂等键与 SecretStore。
             const credentials = new ModelProviderCredentials({
@@ -185,15 +185,7 @@ describe("Task 39 产品流程端到端验收", () => {
             });
             expect(model).toMatchObject({ id: CONNECTION_MODEL_ID, providerId: PROVIDER_ID, version: 1 });
 
-            // 4. 建一条模型连接：凭证属于 Provider，连接只挑模型。
-            const connection = await repository.createConnection({
-                name: "Flow Connection",
-                connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-                modelId: CONNECTION_MODEL_ID,
-            });
-            expect(connection).toMatchObject({ modelId: CONNECTION_MODEL_ID, version: 1, status: "active" });
-
-            // 5. 用 Worker 的正式装配跑一次 WorkflowRun。
+            // 4. 用 Worker 的正式装配跑一次 WorkflowRun，直接传入 modelId。
             const calls: Array<{ model: unknown; options: ProviderStreamOptions }> = [];
             const client: PiAiClientV2 = {
                 complete: async (model_, _context, options) => {
@@ -206,7 +198,10 @@ describe("Task 39 产品流程端到端验收", () => {
                 blobs: repository.blobs,
                 definitions: [acceptanceWorkflow()],
                 actions: [createWorkerAgentInvocationV2Action({
-                    connections: new PrismaAgentModelConnectionResolver(prisma),
+                    models: new PrismaAgentModelResolver(
+                        prisma,
+                        new PrismaSystemConfigRepository(prisma)
+                    ),
                     secrets: repository.secrets,
                     client,
                 })],
@@ -214,7 +209,7 @@ describe("Task 39 产品流程端到端验收", () => {
                 leaseMs: 60_000,
             });
 
-            const completedRunId = await startRun(composition, agentInput(connection.id));
+            const completedRunId = await startRun(composition, agentInput(CONNECTION_MODEL_ID));
             const completed = await drain(composition, completedRunId);
             expect(completed.status).toBe("completed");
 
@@ -229,7 +224,7 @@ describe("Task 39 产品流程端到端验收", () => {
                 finishReason: "stop",
                 usage: { inputTokens: 12, outputTokens: 9, totalTokens: 21 },
             });
-            // 模型与地址来自连接解析结果，不是调用方声明的。
+            // 模型与地址来自模型解析结果，不是调用方声明的。
             expect(calls).toHaveLength(1);
             expect(calls[0]!.model).toMatchObject({
                 api: "openai-completions",
@@ -245,13 +240,9 @@ describe("Task 39 产品流程端到端验收", () => {
             const walBytes = await readFile(walPath, "utf8").catch(() => "");
             expect(`${databaseBytes}${walBytes}`).not.toContain(API_KEY);
 
-            // 6. 撤销连接后同一条链路必须失败关闭，且不再发出任何模型调用。
-            await repository.updateConnection(connection.id, {
-                expectedVersion: connection.version,
-                modelId: null,
-                status: "revoked",
-            });
-            const failedRunId = await startRun(composition, agentInput(connection.id));
+            // 5. 删除模型后同一条链路必须失败关闭，且不再发出任何模型调用。
+            await models.delete(PROVIDER_ID, CONNECTION_MODEL_ID, model.version);
+            const failedRunId = await startRun(composition, agentInput(CONNECTION_MODEL_ID));
             const failed = await drain(composition, failedRunId);
             expect(failed.status).toBe("failed");
             const failedJob = (await prisma.job.findMany({ where: { workflowRunId: failedRunId } }))

@@ -1,7 +1,6 @@
-import {MODEL_CONNECTION_CONNECTOR_ID, type ConnectionInstance} from "@cosmos/contracts";
 import {CosmosTransportError, type HttpCosmosClient} from "@cosmos/transport-http";
 
-import {ConnectionPanel} from "@/components/cosmos/connection-panel";
+import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
 import {ModelProviderPanel} from "@/components/cosmos/model-provider-panel";
 import {ProviderModelsSection} from "@/components/cosmos/provider-models-section";
 import {ToastHost, ToastProvider} from "@/components/ui/toast";
@@ -41,6 +40,8 @@ const modelLabModels = [
         contextWindow: 65_536,
         maxOutputTokens: 8_192,
         version: 1,
+        createdAt: fixtureTimestamp,
+        updatedAt: fixtureTimestamp,
     },
     {
         id: "model-reasoner",
@@ -50,6 +51,8 @@ const modelLabModels = [
         contextWindow: 65_536,
         maxOutputTokens: 8_192,
         version: 1,
+        createdAt: fixtureTimestamp,
+        updatedAt: fixtureTimestamp,
     },
 ];
 
@@ -128,112 +131,17 @@ export function renderModelProviderPanelLab(props: LabProps) {
     );
 }
 
-const modelConnectionLabConnections: ConnectionInstance[] = [
-    {
-        id: "connection-model-unset",
-        name: "未选模型的连接",
-        connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-        account: null,
-        scopeJson: null,
-        configJson: null,
-        status: "active",
-        // 模型连接的凭证属于 Provider（API 0009）：连接自己带 secretRef 就是所有权越界。
-        secretRef: null,
-        lastError: null,
-        lastCheckedAt: null,
-        modelId: null,
-        version: 1,
-        createdAt: fixtureTimestamp,
-        updatedAt: fixtureTimestamp,
-    },
-    {
-        id: "connection-model-selected",
-        name: "已选模型的连接",
-        connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-        account: null,
-        scopeJson: null,
-        configJson: null,
-        status: "active",
-        secretRef: null,
-        lastError: null,
-        lastCheckedAt: null,
-        modelId: modelLabModels[0]!.id,
-        version: 1,
-        createdAt: fixtureTimestamp,
-        updatedAt: fixtureTimestamp,
-    },
-    {
-        id: "connection-model-missing",
-        name: "模型已删除的连接",
-        connectorId: MODEL_CONNECTION_CONNECTOR_ID,
-        account: null,
-        scopeJson: null,
-        configJson: null,
-        status: "active",
-        secretRef: null,
-        lastError: null,
-        lastCheckedAt: null,
-        // 指向一个列表里不存在的模型：模型被删后连接不能假装还配着。
-        modelId: "model-removed",
-        version: 1,
-        createdAt: fixtureTimestamp,
-        updatedAt: fixtureTimestamp,
-    },
-];
+const defaultModelLabClient: Pick<HttpCosmosClient,
+    "getDefaultModel" | "setDefaultModel" | "listModelProviders" | "listConfiguredModels"
+> = {
+    getDefaultModel: async () => ({modelId: modelLabModels[0]!.id}),
+    setDefaultModel: async (modelId: string | null) => ({modelId}),
+    listModelProviders: modelPanelLabMethods.listModelProviders,
+    listConfiguredModels: modelPanelLabMethods.listConfiguredModels,
+};
 
-/**
- * 模型连接场景的客户端。保存换选后面板会重新读列表，所以状态必须可写、且每次读取返回
- * 新数组（引用相同会让 `setConnections` 认为没变化）。模块级单例是刻意的：面板的加载
- * effect 依赖 `client` 引用，每次渲染换新对象会无限重取；整页刷新会重新加载模块，用例之间
- * 不会互相污染。
- */
-const modelConnectionLabClient = {
-    listConnections: async () => [...modelConnectionLabConnections],
-    listSourceDefinitions: async () => [],
-    listModelProviders: async () => ({items: [modelLabProvider], nextCursor: null}),
-    listConfiguredModels: async () => ({items: modelLabModels, nextCursor: null}),
-    updateConnection: async (
-        connectionId: string,
-        input: {
-            expectedVersion?: number;
-            modelId?: string | null;
-            status?: ConnectionInstance["status"];
-            lastError?: string | null;
-        },
-    ) => {
-        const index = modelConnectionLabConnections.findIndex((item) => item.id === connectionId);
-        const current = modelConnectionLabConnections[index];
-        if (current === undefined) {
-            throw new CosmosTransportError(404, {
-                code: "not_found",
-                message: "Connection not found.",
-                retryable: false,
-            });
-        }
-        // 换选带期望版本：面板据此在并发覆盖时显示版本冲突，而不是静默成功。
-        if (input.expectedVersion !== undefined && input.expectedVersion !== current.version) {
-            throw new CosmosTransportError(409, {
-                code: "version_conflict",
-                message: "Connection was updated.",
-                retryable: false,
-            });
-        }
-        const updated: ConnectionInstance = {
-            ...current,
-            ...(input.modelId === undefined ? {} : {modelId: input.modelId}),
-            ...(input.status === undefined ? {} : {status: input.status}),
-            ...(input.lastError === undefined ? {} : {lastError: input.lastError}),
-            version: current.version + 1,
-            updatedAt: fixtureTimestamp,
-        };
-        modelConnectionLabConnections[index] = updated;
-        return updated;
-    },
-} as unknown as HttpCosmosClient;
-
-/** 连接面板的模型态：同一份列表里三种模型连接（未选、已选、指向已删模型）。 */
-export function renderConnectionPanelModelLab() {
-    return <ConnectionPanel client={modelConnectionLabClient} />;
+export function renderDefaultModelPanelLab() {
+    return <DefaultModelPanel client={defaultModelLabClient as HttpCosmosClient} />;
 }
 
 export function renderProviderModelsSectionLab(props: LabProps) {

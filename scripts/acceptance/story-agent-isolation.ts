@@ -8,7 +8,8 @@ import { resolvePrismaCliPath } from "../../packages/storage-prisma/src/prisma-c
 import type { SecretStorePort } from "@cosmos/application";
 
 export const repositoryRoot = resolve(import.meta.dirname, "../..");
-export const snapshotCommit = "c9b57b8ac2de67163083ff301bc3ed85cdd2cb32";
+// The isolated database must include the model fields read by the current Worker resolver.
+export const snapshotCommit = "7ca568a91c57fba7bd8256727662936143b63a14";
 const schemaPrefix = "packages/storage-prisma/prisma";
 
 export async function prepareStoryIsolation() {

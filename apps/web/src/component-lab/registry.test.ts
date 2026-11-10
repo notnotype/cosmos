@@ -32,6 +32,7 @@ const expectedPublicModules = [
     "components/cosmos/story-source-reader.tsx",
     "components/cosmos/story-agent-candidates.tsx",
     "components/cosmos/connection-panel.tsx",
+    "components/cosmos/default-model-panel.tsx",
     "components/cosmos/feed-browser.tsx",
     "components/cosmos/run-control.tsx",
     "components/cosmos/run-history.tsx",
@@ -67,6 +68,14 @@ describe("component lab registry", () => {
 
         expect(new Set(modulePaths).size).toBe(modulePaths.length);
         expect(modulePaths.toSorted()).toEqual(expectedPublicModules.toSorted());
+    });
+
+    it("keeps model selection out of connection panel scenes and controls", () => {
+        const definition = labComponentDefinitions.find((item) => item.id === "connection-panel")!;
+        const stateControl = definition.controls.find((item) => item.name === "state")!;
+
+        expect(definition.scenes.map((scene) => scene.id)).toEqual(["populated", "empty"]);
+        expect(stateControl).toMatchObject({kind: "select", options: ["populated", "empty"]});
     });
 
     it("uses unique component and scene identifiers", () => {

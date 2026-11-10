@@ -440,10 +440,135 @@ function calculateCost(
 
 ---
 
-### Phase 3.3b: 修复 apps/worker (进行中)
+### Phase 3.3b: 修复 apps/worker ✅
 
-- `apps/worker/src/agent-action-v2.ts`
-- `apps/worker/src/main.ts`
-- 相关测试文件
+**实施日期**: 2026-11-10
 
-待完成...
+**变更内容**:
+- `apps/worker/src/agent-action-v2.ts`: `createWorkerAgentInvocationV2Action` 参数从 `connections: AgentModelConnectionResolver` 改为 `models: AgentModelResolver`
+- `apps/worker/src/main.ts`: 主启动函数中使用 `PrismaAgentModelResolver` + `PrismaSystemConfigRepository` 替代 `PrismaAgentModelConnectionResolver`
+- 相关测试文件适配
+
+**验证**:
+- Worker 包独立测试 10 files / 43 tests 通过
+- Worker 类型检查通过
+
+---
+
+### Phase 3.4: React 前端完整迁移 ✅
+
+**实施日期**: 2026-11-10
+**实施者**: React 前端子代理 (8330925e)
+
+**变更内容**:
+- `apps/web/src/component-lab/registry/definitions-cosmos.tsx`: Story Agent 参数从 `connectionId` 改为可选 `modelId`
+- `apps/web/src/component-lab/model-fixtures.tsx`: 新增 `createModelFixtures()`，删除 `createConnectionFixtures()` 中的模型连接夹具
+- `apps/web/src/component-lab/registry/controls.ts`: 控制器从 `connection` 改为 `model`（可选）
+- `apps/web/src/component-lab/product-fixtures.tsx`: 删除 `configuredModelConnectionFixture`
+- 新增 `apps/web/src/component-lab/model-fixtures.test.ts`: 模型夹具单元测试
+- 更新 `apps/web/src/component-lab/registry.test.ts`: 适配新的 model 控制器
+
+**验证**:
+- `bunx vitest run apps/web/src/component-lab/` → 5 files / 34 tests passed
+- 前端类型检查通过
+
+---
+
+### Phase 3.5: 测试层全面修复 ✅
+
+**实施日期**: 2026-11-10
+**实施者**: 测试工程师子代理 (550808ab) + 主 agent
+
+**根因分析**:
+
+1. **Schema 快照过期**：Story Agent 和 Task 39 的隔离数据库快照仍使用 Task 41 之前的 schema，缺少 `ConfiguredModel.inputPricePerMillion` 和 `outputPricePerMillion` 两列，导致 `ConfiguredModels.create` 在 configuration 阶段失败，`transportSends=0`
+
+2. **产品代码 bug**（非 Task 41 引入）：`IngestionService` 错误使用 `source.id` 而非 `source.planId` 调用 checkpoint API，触发外键约束失败 (P2003)，作业变 `retry_wait`
+
+**修改文件** (8 个测试/辅助文件):
+
+1. `scripts/acceptance/story-agent-isolation.ts`: 更新 schema 快照 pin 到包含 Task 41 的 commit 7ca568a
+2. `scripts/acceptance/story-agent-plan.ts`: 明确返回 `{ modelId, models: PrismaAgentModelResolver }`
+3. `scripts/acceptance/story-agent-runner.test.ts`: 新增真实隔离库回归测试（价格列、显式/默认模型解析）
+4. `.agents/tasks/39-pi-ai-adapter/connection-smoke-harness.ts`: 更新 schema 快照，迁移数量 42→43
+5. `.agents/tasks/39-pi-ai-adapter/connection-smoke.test.ts`: 迁移断言对齐，改 `resolvedFromModel`/`deletedRejected`
+6. `.agents/tasks/39-pi-ai-adapter/product-flow-acceptance.test.ts`: 修复 `models.delete` 签名
+7. `packages/storage-prisma/src/run-control.test.ts`: 修正 `sourceInstance` 夹具
+8. `packages/storage-prisma/src/worker-pipeline.test.ts`: checkpoint 改用 `source.planId`，补充 `CollectionPlan` 夹具
+
+**主 agent 修改文件** (4 个辅助文件):
+
+1. `scripts/acceptance/story-agent-runner.ts`: 删除 `connections` 参数，传递 `models`
+2. `scripts/acceptance/story-body-runner.ts`: 删除 `connections` 参数
+3. `.agents/tasks/39-pi-ai-adapter/connection-smoke-v2.ts`: 返回类型改为 `{ modelId, secretRef }`，改 `resolvedFromModel`，增加删除模型前恢复凭证 + try/finally 清理
+4. `packages/storage-prisma/src/run-control.test.ts`: 添加 `sourceInstance` 创建
+
+**验证命令** (全部成功，exit 0):
+
+- `bunx vitest run scripts/acceptance/story-agent-runner.test.ts` → 9 passed (83.33s)
+- `bunx vitest run scripts/acceptance/story-body-runner.test.ts` → 10 passed (100.92s)
+- `bunx vitest run .agents/tasks/39-pi-ai-adapter/product-flow-acceptance.test.ts` → 1 passed (6.27s)
+- `bunx vitest run .agents/tasks/39-pi-ai-adapter/connection-smoke.test.ts` → 40 passed (45.71s)
+- `bunx vitest run packages/storage-prisma/src/run-control.test.ts` → 5 passed (35.13s)
+- `bunx vitest run packages/storage-prisma/src/worker-pipeline.test.ts` → 7 passed (30.98s)
+- **`bunx vitest run` → 220 files / 1308 tests passed (232.06s)**
+
+---
+
+### Phase 3.6: Checkpoint 产品 Bug 修复 ✅
+
+**实施日期**: 2026-11-10
+**实施者**: Node 后端子代理 (e5f02032)
+
+**问题**: `IngestionService` 使用 `source.id` 而非 `source.planId` 调用 checkpoint API（既有 bug，非 Task 41 引入）
+
+**修改文件**:
+- `packages/application/src/ingestion-service.ts` (2 行)
+  - 第 150 行：`getCheckpoint(source.planId)`
+  - 第 230 行：`setCheckpoint(source.planId, cursor)`
+- 新增 `packages/application/src/ingestion-service.checkpoint.test.ts` (78 行回归测试)
+
+**TDD 证据**:
+- RED: 2 failed（旧 cursor 未读取、新 cursor 错写到 source.id）
+- GREEN: 2 passed
+
+**验证**:
+- `bun run --cwd packages/application typecheck` → exit 0
+- `bunx vitest run packages/application apps/worker/src/workflow-ingest.*.test.ts packages/storage-prisma/src/worker-pipeline.test.ts` → 36 files / 253 tests passed (44.09s)
+- worker-pipeline 全 7 通过（两项 `retry_wait` → `succeeded`）
+- `git diff --check` → exit 0
+
+---
+
+## 最终验证结果
+
+**全量测试**: `bunx vitest run`
+- **220 files / 1308 tests passed**
+- Duration: 232.06s
+- Exit: 0
+
+**类型检查**: 所有包的 `typecheck` 全部通过
+
+**代码质量**: `git diff --check` 无错误
+
+**未运行**: 全仓 E2E、浏览器测试、真实 Provider 请求、生产数据迁移
+
+---
+
+## 文档影响
+
+待更新的技术文档（由文档工程师处理）:
+- [ ] API 文档：反映 `modelId` 替代 `connectionId`
+- [ ] 架构文档：更新模型配置链路
+- [ ] 迁移指南：Connection 模型配置迁移说明
+
+---
+
+## 下一步
+
+- [ ] 前端 UI 实现（设置页的默认模型配置）
+- [ ] 数据迁移脚本（识别并删除模型型连接，设置默认模型）
+- [ ] API endpoint 实现（SystemConfig CRUD）
+- [ ] 成本展示 UI（Story 生成页显示成本信息）
+- [ ] E2E 测试覆盖
+- [ ] 生产环境验证

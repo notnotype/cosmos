@@ -53,7 +53,7 @@ import { createFixtureSource, withRepository } from "./index.fixtures.js";
             expect(result?.status).toBe("succeeded");
             expect((await repository.getRun(run.id))?.status).toBe("succeeded");
             expect((await repository.feed({ limit: 20 })).items).toHaveLength(1);
-            expect(await repository.getCheckpoint(source.id)).toBe("worker-cursor");
+            expect(await repository.getCheckpoint(source.planId)).toBe("worker-cursor");
         });
     });
 
@@ -118,7 +118,7 @@ import { createFixtureSource, withRepository } from "./index.fixtures.js";
                 nextCursorAvailable: true,
             });
             expect((await repository.entries({ limit: 20 })).items).toHaveLength(0);
-            expect(await repository.getCheckpoint(source.id)).toBeNull();
+            expect(await repository.getCheckpoint(source.planId)).toBeNull();
         });
     });
 
@@ -346,7 +346,7 @@ import { createFixtureSource, withRepository } from "./index.fixtures.js";
             const result = await worker.pollOnce();
 
             expect(result?.status).toBe("succeeded");
-            expect(await repository.getCheckpoint(source.id)).toBe("schedule-cursor");
+            expect(await repository.getCheckpoint(source.planId)).toBe("schedule-cursor");
         });
     });
     it("commits Workflow checkpoint revisions only under the current dual fence", async () => {
@@ -383,6 +383,15 @@ import { createFixtureSource, withRepository } from "./index.fixtures.js";
                     configJson: "{}",
                     enabled: true,
                     revision: 1,
+                },
+            });
+            // checkpoint 归属采集计划；只有来源行不足以满足计划外键。
+            await repository.prisma.collectionPlan.create({
+                data: {
+                    id: "plan:source-checkpoint",
+                    sourceId: "source-checkpoint",
+                    name: "Checkpoint",
+                    enabled: true,
                 },
             });
             await repository.prisma.job.create({

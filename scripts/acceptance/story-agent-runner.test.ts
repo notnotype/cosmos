@@ -1,18 +1,47 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { FileSecretStore, PrismaCosmosRepository } from "@cosmos/storage-prisma";
+import { FileSecretStore, PrismaCosmosRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
 import { prepareStoryIsolation } from "./story-agent-isolation.js";
 import { access, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { acceptancePlan, createOfflineStoryTransport, runStoryAcceptance } from "./story-agent-runner.js";
 import { ContentQuery } from "@cosmos/application";
 import { prepareStoryAgentRequest } from "../../packages/application/src/story-agent-preparation.js";
-import { storySnapshot } from "./story-agent-plan.js";
+import { configureStoryConnection, storySnapshot } from "./story-agent-plan.js";
+
+it("configures an isolated model that the current worker resolver can load without a model connection", async () => {
+    const { root, repository, secretRefs } = await prepareStoryIsolation();
+    roots.push(root);
+    try {
+        const columns = await repository.prisma.$queryRaw<Array<{ name: string }>>`PRAGMA table_info("ConfiguredModel")`;
+        expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+            "inputPricePerMillion", "outputPricePerMillion",
+        ]));
+        const configured = await configureStoryConnection(repository, "synthetic-task40-key");
+        await expect(configured.models.resolve(configured.modelId)).resolves.toMatchObject({
+            modelId: acceptancePlan.model, providerId: "task40-acceptance-provider",
+            maxOutputTokens: acceptancePlan.maxOutputTokens,
+        });
+        await expect(configured.models.resolve(null)).resolves.toBeNull();
+        const fallback = await repository.prisma.configuredModel.create({ data: {
+            id: "task40-default-model", providerId: "task40-acceptance-provider", modelId: "synthetic-default-model",
+            name: "Isolated default model", contextWindow: 8_192, maxOutputTokens: 512,
+        } });
+        await new PrismaSystemConfigRepository(repository.prisma).setDefaultModelId(fallback.id);
+        await expect(configured.models.resolve(null)).resolves.toMatchObject({ modelId: fallback.modelId });
+        await expect(configured.models.resolve(configured.modelId)).resolves.toMatchObject({ modelId: acceptancePlan.model });
+        await expect(configured.models.resolve("missing-model")).resolves.toBeNull();
+        expect(await repository.prisma.connectionInstance.count()).toBe(0);
+    } finally {
+        for (const ref of secretRefs) await repository.secrets.delete(ref);
+        await repository.close();
+    }
+});
 
 it("discloses the exact no-source prompt built by the current preparation owner", async () => {
     const prepared = await prepareStoryAgentRequest({ readStory: async () => storySnapshot },
         new ContentQuery({ readContentSource: async () => null }),
         { storyId: storySnapshot.storyId, task: "story.summarize" },
-        { connectionId: "synthetic-connection", authority: { allowedProfiles: ["summary-only"] },
+        { modelId: "synthetic-model", authority: { allowedProfiles: ["summary-only"] },
             budget: { maxDurationMs: 60_000, maxOutputTokens: 512, maxToolCalls: 0 } });
     expect(acceptancePlan.messages).toEqual(prepared.input.messages);
 });

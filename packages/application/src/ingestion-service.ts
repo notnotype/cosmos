@@ -147,7 +147,7 @@ export class IngestionService {
                 }, error);
                 throw error;
             }
-            const cursor = await this.repository.getCheckpoint(source.id);
+            const cursor = await this.repository.getCheckpoint(source.planId);
             const fetchStartedAt = Date.now();
             logger.debug("connector.fetch.started", {
                 cursorPresent: cursor !== null,
@@ -227,7 +227,7 @@ export class IngestionService {
                 }
             }
 
-            await this.repository.setCheckpoint(source.id, page.nextCursor);
+            await this.repository.setCheckpoint(source.planId, page.nextCursor);
             let completedRun: RunSnapshot;
             try {
                 completedRun = await this.repository.completeRun({

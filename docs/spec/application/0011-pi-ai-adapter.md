@@ -2,11 +2,11 @@
 
 ## 状态
 
-当前实现规格；描述独立 `@cosmos/agent-pi-ai` package 的真实 `pi-ai` Adapter（固定的 `agent.invoke@1` 与按连接解析的 `agent.invoke@2`），以及 Worker 无条件注册的 `agent.invoke@2` Action 组合。Worker 没有 Agent 部署 profile；每次调用校验 Connection active 与 Provider 的 SecretRef，并通过 callback 读取 SecretStore；不把 connectorId 当模型 Provider。凭证回调不是强 lease 或内存擦除保证。@1 与 @2 均已通过真实最小 Provider 请求（HTTP 200，两次都走 Chat Completions）；这些 smoke 只证明单次链路可用，不覆盖生产可靠性或完整 Provider 行为。
+当前实现规格；描述独立 `@cosmos/agent-pi-ai` package 的真实 `pi-ai` Adapter（固定的 `agent.invoke@1` 与按模型配置解析的 `agent.invoke@2`），以及 Worker 无条件注册的 `agent.invoke@2` Action 组合。Worker 没有 Agent 部署 profile；每次调用校验配置模型 active 与 Provider 的 SecretRef，并通过 callback 读取 SecretStore；不把 connectorId 当模型 Provider。凭证回调不是强 lease 或内存擦除保证。@1 与 @2 均已通过真实最小 Provider 请求（HTTP 200，两次都走 Chat Completions）；这些 smoke 只证明单次链路可用，不覆盖生产可靠性或完整 Provider 行为。
 
 ## 最后更新
 
-2026-10-25。
+2026-11-10（Task 41：模型配置与 Connection 分离）。
 
 ## 组件定位
 

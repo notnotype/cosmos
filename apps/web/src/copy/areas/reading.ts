@@ -49,6 +49,9 @@ export const reading = {
             actualBasis: "按本次调用用量和调用时配置价格计算，非服务商结算账单。",
             input: "输入",
             output: "输出",
+            cacheWriteAmount: (value: string) => `，缓存写入：${value}`,
+            cacheReadAmount: (value: string) => `，缓存读取：${value}`,
+            noCacheAssumption: "本预估不使用缓存；每个场景按自身输入量选档。",
             assumptions: (inputMin: number, inputMax: number, outputMin: number, outputMax: number) =>
                 `粗略假设：输入 ${inputMin}–${inputMax}、输出 ${outputMin}–${outputMax} tokens（按模型上下文和输出上限收窄）。仅供参考，非报价、非实际计费；未计算来源正文长度与多模态用量，实际用量可能超出此范围。默认模型在执行时解析。`,
         },

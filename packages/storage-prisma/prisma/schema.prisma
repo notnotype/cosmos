@@ -138,6 +138,15 @@ model ConfiguredModel {
   maxOutputTokens       Int
   inputPricePerMillion  Decimal?      @default(0)
   outputPricePerMillion Decimal?      @default(0)
+  cacheWritePricePerMillion Decimal?
+  cacheReadPricePerMillion Decimal?
+  currency String @default("USD")
+  tieredPricingEnabled Boolean @default(false)
+  tieredPricingThreshold BigInt?
+  highInputPricePerMillion Decimal?
+  highOutputPricePerMillion Decimal?
+  highCacheWritePricePerMillion Decimal?
+  highCacheReadPricePerMillion Decimal?
   version               Int           @default(1)
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt

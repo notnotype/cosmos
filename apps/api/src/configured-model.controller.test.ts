@@ -9,7 +9,16 @@ import { configureModelConfigurationBodyParsers } from "./model-configuration-bo
 
 const providerId = "provider/one";
 const modelId = "model/one";
+const pricing = {
+    inputPricePerMillion: 1, outputPricePerMillion: 2, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0.1,
+    currency: "USD" as const, tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
+};
 const snapshot: ConfiguredModelSnapshot = {
+    currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
     id: modelId, providerId, modelId: "org/model", name: "Synthetic",
     contextWindow: 4096, maxOutputTokens: 128, version: 1,
     createdAt: "2026-10-20T00:00:00.000Z", updatedAt: "2026-10-20T00:00:00.000Z",
@@ -46,10 +55,10 @@ it("serves provider-scoped model CRUD through trusted HTTP without leaking failu
 
         const headers = { Origin: trust.origins[0]!, "Content-Type": "application/json", "Idempotency-Key": "model-create" };
         const created = await fetch(`${base}/api/v1/model-providers/provider%2Fone/models`, {
-            method: "POST", headers, body: JSON.stringify({ modelId: "org/new", name: "New", contextWindow: 2048, maxOutputTokens: 64 }),
+            method: "POST", headers, body: JSON.stringify({ modelId: "org/new", name: "New", contextWindow: 2048, maxOutputTokens: 64, ...pricing }),
         });
         expect(created.status).toBe(201);
-        expect(models.create).toHaveBeenCalledWith(providerId, { modelId: "org/new", name: "New", contextWindow: 2048, maxOutputTokens: 64 });
+        expect(models.create).toHaveBeenCalledWith(providerId, { modelId: "org/new", name: "New", contextWindow: 2048, maxOutputTokens: 64, ...pricing });
 
         const conflict = await fetch(`${base}/api/v1/model-providers/provider%2Fone/models/model%2Fone`, {
             method: "PATCH", headers: { ...headers, "Idempotency-Key": "model-update" },

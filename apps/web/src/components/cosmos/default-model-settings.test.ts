@@ -12,6 +12,9 @@ const provider: ModelProviderSnapshot = {
 const model: ConfiguredModelSnapshot = {
     id: "model-one", providerId: provider.id, modelId: "upstream-model", name: "Model One",
     contextWindow: 128000, maxOutputTokens: 4096, inputPricePerMillion: 0, outputPricePerMillion: 2,
+    currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
     version: 2, createdAt: date, updatedAt: date,
 };
 

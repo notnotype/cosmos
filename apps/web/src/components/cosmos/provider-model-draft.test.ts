@@ -1,3 +1,4 @@
+import { configuredModelSnapshotSchema } from "@cosmos/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +12,8 @@ import {
     modelRowCommands,
     toCreateProviderCommand,
     toCreateModelCommand,
+    toUpdateModelCommand,
+    modelDraftFromSnapshot,
     providerWriteOutcome,
     toUpdateProviderCommand,
     writeFailureNotice,
@@ -23,6 +26,37 @@ import {
  * 保存时「留空保留已存 key」、编辑 Provider 只提交真的改过的字段、
  * 以及发现结果只把候选当建议、已配置的模型不能被重复添加。
  */
+describe("四价与编辑模型命令", () => {
+    const prices = { inputPricePerMillion: "1", outputPricePerMillion: "2", cacheWritePricePerMillion: "3", cacheReadPricePerMillion: "0" };
+    const draft = () => ({ ...emptyModelDraft(), modelId: "priced", name: "Priced", ...prices });
+    const legacy = configuredModelSnapshotSchema.parse({ id: "m", providerId: "p", modelId: "priced", name: "Priced", contextWindow: 4096, maxOutputTokens: 512, inputPricePerMillion: 1, outputPricePerMillion: 2, version: 4, createdAt: "2026-11-11T00:00:00Z", updatedAt: "2026-11-11T00:00:00Z" });
+
+    it("四价必填、0有效，空白和非有限价格不能提交", () => {
+        const result = toCreateModelCommand(draft());
+        expect(result.ok && result.command).toMatchObject({ cacheReadPricePerMillion: 0, cacheWritePricePerMillion: 3 });
+        for (const value of ["", "  ", "Infinity", "-1"]) {
+            expect(toCreateModelCommand({ ...draft(), cacheReadPricePerMillion: value }).ok).toBe(false);
+        }
+    });
+    it("CNY阶梯开启提交完整四价，关闭显式清空高档且不丢本地草稿", () => {
+        const values = { ...draft(), currency: "CNY" as const, tieredPricingEnabled: true, tieredPricingThreshold: "500", highInputPricePerMillion: "4", highOutputPricePerMillion: "5", highCacheWritePricePerMillion: "6", highCacheReadPricePerMillion: "0" };
+        expect(toCreateModelCommand(values)).toMatchObject({ ok: true, command: { currency: "CNY", tieredPricingThreshold: 500, highCacheReadPricePerMillion: 0 } });
+        expect(toCreateModelCommand({ ...values, highCacheReadPricePerMillion: "" })).toMatchObject({ ok: false, errors: { highCacheReadPricePerMillion: "highCacheReadPricePerMillion" } });
+        expect(toCreateModelCommand({ ...values, tieredPricingEnabled: false })).toMatchObject({ ok: true, command: { tieredPricingThreshold: null, highInputPricePerMillion: null, highCacheWritePricePerMillion: null } });
+        expect(values.highInputPricePerMillion).toBe("4");
+    });
+    it("历史未知缓存价格允许仅改名称，定价修改必须补齐整组", () => {
+        const values = modelDraftFromSnapshot(legacy);
+        expect(values.cacheReadPricePerMillion).toBe("");
+        expect(toUpdateModelCommand(legacy, { ...values, name: "Renamed" })).toEqual({ ok: true, command: { expectedVersion: 4, name: "Renamed" } });
+        expect(toUpdateModelCommand(legacy, { ...values, inputPricePerMillion: "9" }).ok).toBe(false);
+        expect(toUpdateModelCommand(legacy, { ...values, ...prices, currency: "CNY" })).toMatchObject({ ok: true, command: { expectedVersion: 4, currency: "CNY", inputPricePerMillion: 1, outputPricePerMillion: 2, cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 0, tieredPricingEnabled: false, tieredPricingThreshold: null, highInputPricePerMillion: null, highOutputPricePerMillion: null, highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null } });
+    });
+});
+
+const zeroPrices = { inputPricePerMillion: "0", outputPricePerMillion: "0", cacheWritePricePerMillion: "0", cacheReadPricePerMillion: "0" };
+const zeroPricingCommand = { inputPricePerMillion: 0, outputPricePerMillion: 0, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0, currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null, highInputPricePerMillion: null, highOutputPricePerMillion: null, highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null };
+
 const filled: ProviderFormValues = {
     name: "  测试服务商  ",
     api: "openai-completions",
@@ -80,10 +114,10 @@ describe("模型页表单", () => {
     });
 
     it("把发现候选补成可保存的模型，并拒绝超出上限的预算", () => {
-        const draft = { ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X", contextWindow: "128000", maxOutputTokens: "4096" };
+        const draft = { ...emptyModelDraft(), ...zeroPrices, modelId: "gpt-x", name: "GPT X", contextWindow: "128000", maxOutputTokens: "4096" };
         expect(toCreateModelCommand(draft)).toEqual({
             ok: true,
-            command: { modelId: "gpt-x", name: "GPT X", contextWindow: 128000, maxOutputTokens: 4096 },
+            command: { modelId: "gpt-x", name: "GPT X", contextWindow: 128000, maxOutputTokens: 4096, ...zeroPricingCommand },
         });
 
         const tooLarge = toCreateModelCommand({ ...draft, maxOutputTokens: "256000" });
@@ -96,7 +130,7 @@ describe("模型页表单", () => {
         expect(empty.maxOutputTokens).toBe("");
 
         // 数据库两列非空，输入框留空只能是「用默认值」，否则提交必然被 schema 拒绝。
-        expect(toCreateModelCommand({ ...empty, modelId: "gpt-x", name: "GPT X", contextWindow: "", maxOutputTokens: "" }))
+        expect(toCreateModelCommand({ ...empty, ...zeroPrices, modelId: "gpt-x", name: "GPT X", contextWindow: "", maxOutputTokens: "" }))
             .toEqual({
                 ok: true,
                 command: {
@@ -104,51 +138,35 @@ describe("模型页表单", () => {
                     name: "GPT X",
                     contextWindow: defaultContextWindow,
                     maxOutputTokens: defaultMaxOutputTokens,
+                    ...zeroPricingCommand,
                 },
             });
     });
 
     it("预算越界这类跨字段错误要落在具体输入框上，不能静默地什么都不做", () => {
-        const result = toCreateModelCommand({ ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X", contextWindow: "100", maxOutputTokens: "200" });
+        const result = toCreateModelCommand({ ...emptyModelDraft(), ...zeroPrices, modelId: "gpt-x", name: "GPT X", contextWindow: "100", maxOutputTokens: "200" });
 
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(result.errors.maxOutputTokens).toBe("maxOutputTokens");
     });
 
-    it("价格字段留空不进请求；非负数字正常提交；非法数字落字段错误", () => {
-        const base = { ...emptyModelDraft(), modelId: "gpt-x", name: "GPT X" };
-
-        expect(toCreateModelCommand(base)).toEqual({
-            ok: true,
-            command: { modelId: "gpt-x", name: "GPT X", contextWindow: defaultContextWindow, maxOutputTokens: defaultMaxOutputTokens },
+    it("拒绝空白价格且非负四价正常提交，非法数字落字段错误", () => {
+        const base = { ...emptyModelDraft(), ...zeroPrices, modelId: "gpt-x", name: "GPT X" };
+        expect(toCreateModelCommand({ ...base, inputPricePerMillion: "" }).ok).toBe(false);
+        expect(toCreateModelCommand({ ...base, inputPricePerMillion: "1.5", outputPricePerMillion: "6" })).toMatchObject({
+            ok: true, command: { inputPricePerMillion: 1.5, outputPricePerMillion: 6, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0 },
         });
-
-        const priced = toCreateModelCommand({ ...base, inputPricePerMillion: "1.5", outputPricePerMillion: "6" });
-        expect(priced).toEqual({
-            ok: true,
-            command: {
-                modelId: "gpt-x", name: "GPT X",
-                contextWindow: defaultContextWindow, maxOutputTokens: defaultMaxOutputTokens,
-                inputPricePerMillion: 1.5, outputPricePerMillion: 6,
-            },
-        });
-
         const invalidInput = toCreateModelCommand({ ...base, inputPricePerMillion: "-1" });
-        expect(invalidInput.ok).toBe(false);
-        if (invalidInput.ok) return;
-        expect(invalidInput.errors.inputPricePerMillion).toBe("inputPricePerMillion");
-
+        expect(invalidInput).toMatchObject({ ok: false, errors: { inputPricePerMillion: "inputPricePerMillion" } });
         const invalidOutput = toCreateModelCommand({ ...base, outputPricePerMillion: "abc" });
-        expect(invalidOutput.ok).toBe(false);
-        if (invalidOutput.ok) return;
-        expect(invalidOutput.errors.outputPricePerMillion).toBe("outputPricePerMillion");
+        expect(invalidOutput).toMatchObject({ ok: false, errors: { outputPricePerMillion: "outputPricePerMillion" } });
     });
 
     it("一批多行：逐行校验、行内不合法就整批不提交、同批重复标记在行上", () => {
         const valid = modelRowCommands([
-            createModelDraftRow("a", { modelId: "gpt-x", name: "GPT X" }),
-            createModelDraftRow("b", { modelId: "gpt-y", name: "GPT Y" }),
+            createModelDraftRow("a", { ...zeroPrices, modelId: "gpt-x", name: "GPT X" }),
+            createModelDraftRow("b", { ...zeroPrices, modelId: "gpt-y", name: "GPT Y" }),
         ]);
         expect(valid.ok).toBe(true);
         if (!valid.ok) return;
@@ -156,16 +174,16 @@ describe("模型页表单", () => {
         expect(valid.commands[0]?.command.contextWindow).toBe(defaultContextWindow);
 
         const duplicate = modelRowCommands([
-            createModelDraftRow("a", { modelId: "gpt-x", name: "GPT X" }),
-            createModelDraftRow("b", { modelId: "gpt-x", name: "GPT X again" }),
+            createModelDraftRow("a", { ...zeroPrices, modelId: "gpt-x", name: "GPT X" }),
+            createModelDraftRow("b", { ...zeroPrices, modelId: "gpt-x", name: "GPT X again" }),
         ]);
         expect(duplicate.ok).toBe(false);
         if (duplicate.ok) return;
         expect(duplicate.errors.get("b")).toEqual({ modelId: "duplicate" });
 
         const invalid = modelRowCommands([
-            createModelDraftRow("a", { modelId: "gpt-x", name: "GPT X" }),
-            createModelDraftRow("b", { modelId: "", name: "没有 ID" }),
+            createModelDraftRow("a", { ...zeroPrices, modelId: "gpt-x", name: "GPT X" }),
+            createModelDraftRow("b", { ...zeroPrices, modelId: "", name: "没有 ID" }),
         ]);
         expect(invalid.ok).toBe(false);
         if (invalid.ok) return;
@@ -175,7 +193,7 @@ describe("模型页表单", () => {
     it("完全空着的草稿行不阻塞提交，也不产生写入", () => {
         const blank = modelRowCommands([
             createModelDraftRow("empty"),
-            createModelDraftRow("a", { modelId: "gpt-x", name: "GPT X" }),
+            createModelDraftRow("a", { ...zeroPrices, modelId: "gpt-x", name: "GPT X" }),
         ]);
         expect(blank.ok).toBe(true);
         if (!blank.ok) return;

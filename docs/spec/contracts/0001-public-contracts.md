@@ -46,14 +46,25 @@
 
 本节取代封口分册中冲突的默认模型与 Connection 选模型说明；公共 JSON 形状以本节及[源码](../../../packages/contracts/src/system-config.ts)为准，HTTP 状态与事务行为由 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)拥有。
 
-- 系统配置（`SystemConfigDto`）为 strict `{defaultModelId:string|null, defaultModel:ConfiguredModelSnapshot|null}`。两字段必需；已删除模型的旧 ID 仍可读取，模型投影为 null。快照包含模型 ID/Provider ID、上游标识、名称、上下文窗口、最大输出、版本、时间戳及可选输入/输出每百万 token 价格；未知价格省略，0 保留，不包含凭证。这里的“未知”描述读取投影：存储为 null/旧记录缺字段时省略；当前 Prisma 创建模型时省略价格会命中 Decimal? `@default(0)`，读取为已知 0，不能把未填写创建价格当作未知价格 fixture（见[存储定义](../../../packages/storage-prisma/prisma/schema.prisma#L132)）。
+- 系统配置（`SystemConfigDto`）为 strict `{defaultModelId:string|null, defaultModel:ConfiguredModelSnapshot|null}`。两字段必需；已删除模型的旧 ID 仍可读取，模型投影为 null。快照包含模型 ID/Provider ID、上游标识、名称、上下文窗口、最大输出、版本、时间戳及下节定价配置；未知价格省略，0 保留，不包含凭证。旧模型原两价保留，新增缓存价格未知不补零；新建模型普通四价必填，不再接受省略价格依赖数据库默认值。
 - 更新配置（`UpdateSystemConfigCommand`）为 strict `{defaultModelId:string|null}`；非空 ID 长 1–200、必须等于其 trim 值并通过控制字符约束，null 清除。完整 GET DTO 与 PUT 的 `{defaultModelId}` 确认响应不是同一个形状。
 - Agent invocation v2 与 Story 生成使用可选本地 `modelId`，省略走默认模型；Story strict 请求为 `{task,sources?,modelId?}`，generation 不再含 connectionId。Connection 不拥有模型选择。
-- Story 候选（`StoryAgentCandidate.cost?`）与生成投影（`StoryAgentGeneration.cost?`）复用 `agentInvocationOutputSchema.shape.cost.unwrap()`：strict `{input,output,total,currency}`，金额为非负数，币种字符串默认 USD；不新增不同费用类型。0 合法，旧记录或缺失费用省略字段，不填 null 或零，不以当前模型价格回算。Candidate 费用随既有 JSON 持久化；Generation 只在 completed 且候选身份、Story、Story Revision 与 task 均匹配时读取费用，失败/取消省略。精确投影条件见 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)，冻结目标及 conformance 见 [Story API](../../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)。
+- Story 候选（`StoryAgentCandidate.cost?`）与生成投影（`StoryAgentGeneration.cost?`）复用 `agentInvocationOutputSchema.shape.cost.unwrap()`：strict `{input,output,cacheWrite?,cacheRead?,total,currency}`，金额为有限非负数，币种字符串默认 USD；缓存两项 optional 兼容历史，新运行能够计价时输出完整四项。不新增不同费用类型。0 合法，旧记录或缺失费用省略字段，不填 null 或零，不以当前模型价格回算。Candidate 费用随既有 JSON 持久化；Generation 只在 completed 且候选身份、Story、Story Revision 与 task 均匹配时读取费用，失败/取消省略。精确投影条件见 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)，冻结目标及 conformance 见 [Story API](../../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)。
 
 - 连接探测结果 `ConnectionProbeResult.reason` 最多 500 字符；[Application 探测边界](../../../packages/application/src/connection-probe.ts#L72)对适配器 reason 统一 `slice(0,500)` 后，用同值返回结果并写入连接 `lastError`；active 时两者均为 null，`checkedAt` 写回 `lastCheckedAt`。该限制只约束探测写回，不能推导整个 Connection.lastError 字段或人工更新也最多 500。重建须覆盖超长 outcome 原因与 ConnectorExecutionError 原因的截断、返回/持久值一致及 active 清空，见[探测测试](../../../packages/application/src/connection-probe.test.ts)。
 
 验收锚点：[SystemConfig DTO 测试](../../../packages/contracts/src/system-config.test.ts)、[Story DTO](../../../packages/contracts/src/story-agent.ts)。重建至少验证 strict 额外字段拒绝、null 与缺失区别、未知价格省略及 0 合法。contracts 本身无持久状态、不执行设置、删除或费用计算。
+
+## 模型定价与调用费用当前合同
+
+本节从当前生产源码核对；功能已实现，整体验证进行中，运行证据由 [Task 42](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)拥有，不代表真实 Provider 结算或部署已验收。
+
+- 模型创建（`CreateConfiguredModelCommand`）为 strict，普通 `inputPricePerMillion`、`outputPricePerMillion`、`cacheWritePricePerMillion`、`cacheReadPricePerMillion` 四价必填有限非负数，0 合法，单位为每百万 token。`currency` 为 USD/CNY，创建缺省 USD；`tieredPricingEnabled` 缺省 false，`tieredPricingThreshold` 与 `highInputPricePerMillion`、`highOutputPricePerMillion`、`highCacheWritePricePerMillion`、`highCacheReadPricePerMillion` 缺省 null。启用时阈值须正安全整数且高档四价齐全；关闭时阈值及高档四价必须 null，不从普通档补齐高档。
+- 模型更新（`UpdateConfiguredModelCommand`）沿用 `expectedVersion`。任一价格配置字段出现时，普通四价、币种、开关、阈值及高档四价须显式齐全，作为完整组替换；更新不靠创建默认值补缺项。仅改名称、上游标识或 token 上限等 metadata 时不提交价格配置，保留旧价与未知状态。快照（`ConfiguredModelSnapshot`）四价允许省略表示未知；历史缺省币种/开关/阈值/高档分别解析为 USD/false/null/null。SystemConfig、列表、单项和写入返回共享此形状。
+- 调用用量（`AgentInvocationOutput.usage`）保留 inputTokens/outputTokens/totalTokens，新增 optional cacheWriteTokens/cacheReadTokens 兼容历史。新运行输出完整四类非负安全整数用量，并按四项之和重建 totalTokens；非法计数或总和超出安全整数返回 malformed_payload。inputTokens 是不含缓存的普通输入；prompt 总输入为 inputTokens + cacheWriteTokens + cacheReadTokens，output 不参与选档。启用且 prompt 总输入严格大于阈值时，整次调用四类全部用高档：阈值 272000 时，272000 普通、272001 高档，不分段累进。
+- cost 四项按各自互斥用量乘同一档单价/1000000，total 为四项之和，币种来自模型，旧模型 USD，不换汇。普通输入/输出价格任一未知或非法始终省略整个 cost；缓存价格未知且对应非零用量也省略，缓存为 0 时该项费用可为 0。阶梯启用却阈值非法/高档缺失，以及金额运算溢出时省略 cost，不生成部分总额。可计价的新运行即使缓存为 0 也输出缓存分项；历史缺项仍缺项，已持久化实际 cost 不重算。
+
+重建验收须覆盖创建缺四价拒绝、合法零价、关闭清空、启用缺项拒绝、完整组 PATCH/metadata-only 保留、旧快照解析、缓存未知 0/非0、272000/272001 整次选档、总量安全整数与金额溢出、历史费用不变。实现/测试锚点：[配置 schema](../../../packages/contracts/src/provider-model.ts)、[配置测试](../../../packages/contracts/src/provider-model.test.ts)、[调用 schema](../../../packages/contracts/src/agent.ts)、[调用适配器](../../../packages/agent-pi-ai/src/invocation-v2.ts)、[调用行为测试](../../../packages/agent-pi-ai/src/invocation-v2.test.ts)。
 
 ## 非目标/边界
 

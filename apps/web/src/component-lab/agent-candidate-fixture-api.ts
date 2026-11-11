@@ -7,8 +7,8 @@ export type AgentCandidateFixtureBehavior = {
     sourceStatus: "current" | "superseded" | "unavailable";
     costMode: "known" | "zero" | "missing";
 };
-const knownCost = { input: 0.12, output: 0.34, total: 0.46, currency: "USD" };
-const zeroCost = { input: 0, output: 0, total: 0, currency: "USD" };
+const knownCost = { input: 0.12, output: 0.34, cacheWrite: 0, cacheRead: 0, total: 0.46, currency: "USD" };
+const zeroCost = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, total: 0, currency: "USD" };
 
 const storeSchema = z.object({ records: storyAgentCandidateRecordSchema.array(), jobs: z.object({
     key: z.string(), generation: storyAgentGenerationSchema,
@@ -37,6 +37,10 @@ export function createAgentCandidateFixtureApi(story: StoryDetail,
                     id: "lab-story-model", providerId: "lab-provider", modelId: "fixture",
                     name: "Story 演示模型", contextWindow: 128000, maxOutputTokens: 2048,
                     inputPricePerMillion: 1, outputPricePerMillion: 2, version: 1,
+                    cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0,
+                    currency: "USD" as const, tieredPricingEnabled: false, tieredPricingThreshold: null,
+                    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+                    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
                     createdAt: "2026-11-10T06:00:00.000Z", updatedAt: "2026-11-10T06:00:00.000Z",
                 },
             };

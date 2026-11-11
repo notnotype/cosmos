@@ -182,6 +182,8 @@ describe("Task 39 产品流程端到端验收", () => {
                 name: "Flow Model",
                 contextWindow: 8_192,
                 maxOutputTokens: 1_024,
+                inputPricePerMillion: 0, outputPricePerMillion: 0,
+                cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0,
             });
             expect(model).toMatchObject({ id: CONNECTION_MODEL_ID, providerId: PROVIDER_ID, version: 1 });
 

@@ -75,6 +75,8 @@ export type AgentInvocationToolCall = z.infer<typeof agentInvocationToolCallSche
 export const agentInvocationUsageSchema = z.object({
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
+    cacheWriteTokens: z.number().int().nonnegative().optional(),
+    cacheReadTokens: z.number().int().nonnegative().optional(),
     totalTokens: z.number().int().nonnegative(),
 }).strict();
 export type AgentInvocationUsage = z.infer<typeof agentInvocationUsageSchema>;
@@ -87,6 +89,8 @@ export const agentInvocationOutputSchema = z.object({
     cost: z.object({
         input: z.number().nonnegative(),
         output: z.number().nonnegative(),
+        cacheWrite: z.number().nonnegative().optional(),
+        cacheRead: z.number().nonnegative().optional(),
         total: z.number().nonnegative(),
         currency: z.string().default("USD"),
     }).strict().optional(),

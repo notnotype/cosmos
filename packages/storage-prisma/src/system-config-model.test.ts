@@ -74,6 +74,10 @@ describe("SystemConfig model projection", () => {
                 id: "model-a", providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
                 contextWindow: 128000, maxOutputTokens: 4096,
                 inputPricePerMillion: 30.25, outputPricePerMillion: 60,
+                cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0.25,
+                currency: "CNY", tieredPricingEnabled: true, tieredPricingThreshold: 9007199254740991n,
+                highInputPricePerMillion: 61, highOutputPricePerMillion: 120,
+                highCacheWritePricePerMillion: 0, highCacheReadPricePerMillion: 0.5,
             } });
             const repository = new PrismaSystemConfigRepository(prisma);
             await repository.setDefaultModelId("model-a");
@@ -82,6 +86,10 @@ describe("SystemConfig model projection", () => {
                 id: "model-a", providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
                 contextWindow: 128000, maxOutputTokens: 4096,
                 inputPricePerMillion: 30.25, outputPricePerMillion: 60,
+                cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0.25,
+                currency: "CNY", tieredPricingEnabled: true, tieredPricingThreshold: 9007199254740991,
+                highInputPricePerMillion: 61, highOutputPricePerMillion: 120,
+                highCacheWritePricePerMillion: 0, highCacheReadPricePerMillion: 0.5,
             }) });
             expect(configuredModelSnapshotSchema.safeParse(config.defaultModel).success).toBe(true);
             expect(JSON.stringify(config)).not.toContain("secret:private");
@@ -92,10 +100,16 @@ describe("SystemConfig model projection", () => {
 
             await prisma.configuredModel.update({ where: { id: "model-a" }, data: {
                 inputPricePerMillion: null, outputPricePerMillion: null,
+                cacheWritePricePerMillion: null, cacheReadPricePerMillion: null,
+                tieredPricingEnabled: false, tieredPricingThreshold: null,
+                highInputPricePerMillion: null, highOutputPricePerMillion: null,
+                highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
             } });
             const unknownPrices = (await repository.getSystemConfigWithModel()).defaultModel;
             expect(unknownPrices).not.toHaveProperty("inputPricePerMillion");
             expect(unknownPrices).not.toHaveProperty("outputPricePerMillion");
+            expect(unknownPrices).not.toHaveProperty("cacheWritePricePerMillion");
+            expect(unknownPrices).not.toHaveProperty("cacheReadPricePerMillion");
             expect(configuredModelSnapshotSchema.safeParse(unknownPrices).success).toBe(true);
 
             await prisma.modelProvider.update({ where: { id: "provider-a" }, data: { state: "deleting" } });

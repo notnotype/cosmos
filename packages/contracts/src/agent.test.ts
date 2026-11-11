@@ -75,6 +75,26 @@ describe("Agent Invocation contracts", () => {
         }).success).toBe(false);
     });
 
+    it("accepts cache usage and four-part costs while retaining strict legacy JSON", () => {
+        const legacy = agentInvocationOutputSchema.parse(output);
+        expect(legacy.usage).toEqual(output.usage);
+        expect(legacy.usage).not.toHaveProperty("cacheReadTokens");
+        const current = {
+            ...output,
+            usage: { inputTokens: 11, outputTokens: 5, cacheWriteTokens: 3, cacheReadTokens: 7, totalTokens: 26 },
+            cost: { input: 1, output: 2, cacheWrite: 0, cacheRead: 4, total: 7, currency: "CNY" },
+        };
+        expect(agentInvocationOutputSchema.parse(current)).toEqual({ ...current, metadata: {} });
+        for (const usage of [
+            { ...current.usage, cacheReadTokens: -1 },
+            { ...current.usage, cacheWriteTokens: 0.5 },
+            { ...current.usage, unrecognizedTokens: 1 },
+        ]) expect(agentInvocationOutputSchema.safeParse({ ...current, usage }).success).toBe(false);
+        expect(agentInvocationOutputSchema.safeParse({
+            ...current, cost: { ...current.cost, cacheWrite: -1 },
+        }).success).toBe(false);
+    });
+
     it("keeps output provider metadata and finish reason explicit", () => {
         expect(agentInvocationOutputSchema.parse(output)).toEqual({
             ...output,

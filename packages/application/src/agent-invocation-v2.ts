@@ -23,6 +23,15 @@ export interface AgentModelSnapshot {
     secretRef: string;
     inputPricePerMillion: number | null;
     outputPricePerMillion: number | null;
+    cacheWritePricePerMillion?: number | null;
+    cacheReadPricePerMillion?: number | null;
+    currency?: "USD" | "CNY";
+    tieredPricingEnabled?: boolean;
+    tieredPricingThreshold?: number | null;
+    highInputPricePerMillion?: number | null;
+    highOutputPricePerMillion?: number | null;
+    highCacheWritePricePerMillion?: number | null;
+    highCacheReadPricePerMillion?: number | null;
 }
 
 export interface AgentModelResolver {

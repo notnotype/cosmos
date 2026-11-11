@@ -5,8 +5,8 @@ import { createAgentCandidateFixtureApi } from "./agent-candidate-fixture-api";
 import { storyLabFixture } from "./product-fixtures";
 
 const story = storyLabFixture("splittable", "费用验收文章", "现有摘要");
-const savedCost = { input: 0.12, output: 0.34, total: 0.46, currency: "USD" };
-const zeroCost = { input: 0, output: 0, total: 0, currency: "USD" };
+const savedCost = { input: 0.12, output: 0.34, cacheWrite: 0, cacheRead: 0, total: 0.46, currency: "USD" };
+const zeroCost = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, total: 0, currency: "USD" };
 const fetch = vi.fn(() => { throw new Error("Story lab fixtures must not access the network."); });
 function behavior() {
     return { loseResponse: false, hold: false, fail: false, saveThenFail: false,

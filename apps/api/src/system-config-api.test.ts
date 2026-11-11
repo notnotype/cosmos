@@ -93,11 +93,17 @@ async function seedModels(prisma: PrismaClient) {
     return { provider, first, second };
 }
 
+const pricingDefaults = {
+    currency: "USD" as const, tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
+};
 function firstSnapshot(providerId: string) {
     return {
         id: "a", providerId, modelId: "upstream/first", name: "First model",
         contextWindow: 32768, maxOutputTokens: 8192, version: 7,
         inputPricePerMillion: 1.25, outputPricePerMillion: 2.5,
+        ...pricingDefaults,
         createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
     };
 }
@@ -124,6 +130,7 @@ describe("system config HTTP contracts", () => {
                 defaultModel: {
                     id: second.id, providerId: provider.id, modelId: "upstream/second", name: "Unknown pricing",
                     contextWindow: 65536, maxOutputTokens: 4096, version: 3,
+                    ...pricingDefaults,
                     createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
                 },
             });

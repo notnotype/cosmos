@@ -12,6 +12,13 @@ const model: ConfiguredModelSnapshot = {
     name: "整理模型",
     contextWindow: 128000,
     maxOutputTokens: 8192,
+    currency: "USD",
+    tieredPricingEnabled: false,
+    tieredPricingThreshold: null,
+    highInputPricePerMillion: null,
+    highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null,
+    highCacheReadPricePerMillion: null,
     version: 7,
     createdAt: "2026-11-01T01:02:03.000Z",
     updatedAt: "2026-11-10T04:05:06.000Z",
@@ -75,6 +82,30 @@ describe("ModelDetails", () => {
         expect(content).not.toContain(absent);
         expect(content).not.toContain("undefined");
         expect(content).not.toContain("NaN");
+    });
+
+    it.each(["USD", "CNY"] as const)("所有价格未知时仍明确显示%s币种与关闭的阶梯状态", (currency) => {
+        const content = text(render({ currency }));
+        expect(content).toContain(`计价币种：${currency}`);
+        expect(content).toContain("阶梯定价：关闭");
+        expect(content).not.toContain("高档输入价格");
+    });
+
+    it("显示CNY四价、阈值与完整高档价格，历史缓存未知不填0", () => {
+        const content = text(render({ currency: "CNY", inputPricePerMillion: 1, outputPricePerMillion: 2,
+            cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0.5, tieredPricingEnabled: true,
+            tieredPricingThreshold: 500, highInputPricePerMillion: 4, highOutputPricePerMillion: 5,
+            highCacheWritePricePerMillion: 6, highCacheReadPricePerMillion: 7 }));
+        expect(content).toContain("计价币种：CNY");
+        expect(content).toContain("阶梯定价：开启");
+        expect(content).toContain("缓存写入价格：¥0 CNY / 百万 tokens");
+        expect(content).toContain("缓存读取价格：¥0.5 CNY / 百万 tokens");
+        expect(content).toContain("输入总量超过阈值，整次请求按高价档");
+        expect(content).toContain("500 tokens");
+        expect(content).toContain("高档缓存写入价格：¥6 CNY / 百万 tokens");
+        expect(content).not.toContain("USD");
+        expect(text(render())).toContain("缓存写入价格：未知");
+        expect(text(render())).toContain("缓存读取价格：未知");
     });
 
     it("keeps version and distinct machine-readable timestamps inside collapsed metadata", () => {

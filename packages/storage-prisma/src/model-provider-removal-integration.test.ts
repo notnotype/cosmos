@@ -45,8 +45,8 @@ it("verifies that a referenced model blocks both provider and model removal", as
     await writeFile(join(root, "schema/schema.prisma"), isolatedSchema);
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    expect(names).toHaveLength(43);
-    expect(names.at(-1)).toBe("20261106085039_task_41_connection_agent_separation");
+    expect(names).toHaveLength(44);
+    expect(names.at(-1)).toBe("20261111080000_task_42_cache_tiered_pricing");
     const manifest = [
         { path: "source-schema.prisma", sha256: createHash("sha256").update(schema).digest("hex") },
         { path: "schema/schema.prisma", sha256: createHash("sha256").update(isolatedSchema).digest("hex") },
@@ -69,7 +69,7 @@ it("verifies that a referenced model blocks both provider and model removal", as
         await writeFile(join(root, to!), text);
         manifest.push({ path: from!, sha256: createHash("sha256").update(original).digest("hex") });
     }
-    // 隔离根只放类型桩：被测代码真实，顶层 workspace 包的类型在这里按结构放宽。
+    // 隔离根保留应用端口桩；公共模型命令直接使用合同类型，避免价格字段漂移。
     await writeFile(join(root, "types.ts"), TYPES);
     await writeFile(join(root, "manifest.json"), JSON.stringify(manifest, null, 2));
     await writeFile(join(root, "package.json"), '{"type":"module"}');
@@ -86,13 +86,11 @@ it("verifies that a referenced model blocks both provider and model removal", as
     });
 }, 240_000);
 
-const TYPES = `export interface ModelProviderRemovalRepository {
+const TYPES = `import type { CreateConfiguredModelCommand, UpdateConfiguredModelCommand } from "@cosmos/contracts";
+export type { CreateConfiguredModelCommand, UpdateConfiguredModelCommand };
+export interface ModelProviderRemovalRepository {
     remove(input: { id: string; expectedVersion: number }): Promise<string | null>;
 }
-export type CreateConfiguredModelCommand = {
-    modelId: string; name: string; contextWindow: number; maxOutputTokens: number;
-};
-export type UpdateConfiguredModelCommand = CreateConfiguredModelCommand & { expectedVersion: number };
 export interface ConfiguredModelRepository {
     list(providerId: string): Promise<unknown[]>;
     get(providerId: string, id: string): Promise<unknown | null>;

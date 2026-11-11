@@ -1,15 +1,25 @@
 import {
     createConfiguredModelCommandSchema,
-    createModelProviderCommandSchema,
-    updateModelProviderCommandSchema,
+    updateConfiguredModelCommandSchema,
+    type ConfiguredModelSnapshot,
+    type UpdateConfiguredModelCommand,
     type CreateConfiguredModelCommand,
-    type CreateModelProviderCommand,
     type ModelProviderOperationSnapshot,
     type ModelProviderSnapshot,
     type ProviderModelDiscoveryCandidate,
     type ProviderModelDiscoveryErrorCode,
-    type UpdateModelProviderCommand,
 } from "@cosmos/contracts";
+
+import type { DraftResult } from "./provider-model/provider-form-draft";
+export {
+    toCreateProviderCommand,
+    toUpdateProviderCommand,
+    type ProviderFormValues,
+    type ProviderFormField,
+    type ProviderFormErrors,
+    type DraftResult,
+    type StoredProvider,
+} from "./provider-model/provider-form-draft";
 
 /**
  * 模型页的表单只有一套判据：合同 schema。这里不重复写校验规则，只负责三件界面才关心的事——
@@ -19,99 +29,22 @@ import {
  * 逻辑放在 `.ts` 而不是组件里，是因为仓库没有 DOM 测试环境：这些判据要能被行为测试直接钉住。
  */
 
-export type ProviderFormValues = {
-    name: string;
-    api: "openai-completions" | "openai-responses";
-    baseUrl: string;
-    /** 空字符串表示「不修改已保存的凭证」；创建时必填。 */
-    apiKey: string;
-};
-
-export type ProviderFormField = "name" | "api" | "baseUrl" | "apiKey";
-/** `form` 是整体性拒绝，没有可定位的字段。 */
-export type ProviderFormErrors = Partial<Record<ProviderFormField | "form", string>>;
-
-export type DraftResult<TCommand, TErrors = ProviderFormErrors> =
-    | { ok: true; command: TCommand }
-    | { ok: false; errors: TErrors };
-
-const issueReasons: Record<string, string> = {
-    name: "name",
-    api: "protocol",
-    baseUrl: "address",
-    apiKey: "credential",
-};
-
-function errorsFromIssues(issues: readonly { path: readonly PropertyKey[] }[]): ProviderFormErrors {
-    const errors: ProviderFormErrors = {};
-    for (const issue of issues) {
-        const field = String(issue.path[0] ?? "");
-        const reason = issueReasons[field];
-        if (reason !== undefined && errors[field as ProviderFormField] === undefined) {
-            errors[field as ProviderFormField] = reason;
-        }
-    }
-    return errors;
-}
-
-function trimmedProvider(values: ProviderFormValues): ProviderFormValues {
-    return {
-        name: values.name.trim(),
-        api: values.api,
-        baseUrl: values.baseUrl.trim(),
-        // 凭证两端空白可能是密钥本体的一部分，裁掉就等于改了密钥。
-        apiKey: values.apiKey,
-    };
-}
-
-export function toCreateProviderCommand(values: ProviderFormValues): DraftResult<CreateModelProviderCommand> {
-    const parsed = createModelProviderCommandSchema.safeParse(trimmedProvider(values));
-    return parsed.success
-        ? { ok: true, command: parsed.data }
-        : { ok: false, errors: errorsFromIssues(parsed.error.issues) };
-}
-
-export type StoredProvider = {
-    name: string;
-    api: ProviderFormValues["api"];
-    baseUrl: string;
-};
-
-/**
- * 编辑只提交与已保存值不同的字段：不变的字段不进请求，就不会因为界面里的一次误触
- * 把 Provider 版本推高一格。留空的凭证表示保留原值——用户无法读出已保存的 key，
- * 所以「空 = 不改」是唯一不会把凭证删掉的解释。
- */
-export function toUpdateProviderCommand(
-    expectedVersion: number,
-    stored: StoredProvider,
-    values: ProviderFormValues,
-): DraftResult<UpdateModelProviderCommand> {
-    const next = trimmedProvider(values);
-    const changed: Record<string, string | number> = { expectedVersion };
-    if (next.name !== stored.name) changed.name = next.name;
-    if (next.api !== stored.api) changed.api = next.api;
-    if (next.baseUrl !== stored.baseUrl) changed.baseUrl = next.baseUrl;
-    if (next.apiKey.trim() !== "") changed.apiKey = next.apiKey;
-
-    if (Object.keys(changed).length === 1) {
-        return { ok: false, errors: { form: "unchanged" } };
-    }
-
-    const parsed = updateModelProviderCommandSchema.safeParse(changed);
-    return parsed.success
-        ? { ok: true, command: parsed.data }
-        : { ok: false, errors: errorsFromIssues(parsed.error.issues) };
-}
-
 export type ModelDraftValues = {
     modelId: string;
     name: string;
     contextWindow: string;
     maxOutputTokens: string;
-    /** USD per million tokens; empty string means "not configured". */
     inputPricePerMillion: string;
     outputPricePerMillion: string;
+    cacheWritePricePerMillion: string;
+    cacheReadPricePerMillion: string;
+    currency: "USD" | "CNY";
+    tieredPricingEnabled: boolean;
+    tieredPricingThreshold: string;
+    highInputPricePerMillion: string;
+    highOutputPricePerMillion: string;
+    highCacheWritePricePerMillion: string;
+    highCacheReadPricePerMillion: string;
 };
 
 /**
@@ -130,6 +63,15 @@ export function emptyModelDraft(): ModelDraftValues {
         maxOutputTokens: "",
         inputPricePerMillion: "",
         outputPricePerMillion: "",
+        cacheWritePricePerMillion: "",
+        cacheReadPricePerMillion: "",
+        currency: "USD",
+        tieredPricingEnabled: false,
+        tieredPricingThreshold: "272000",
+        highInputPricePerMillion: "",
+        highOutputPricePerMillion: "",
+        highCacheWritePricePerMillion: "",
+        highCacheReadPricePerMillion: "",
     };
 }
 
@@ -150,6 +92,13 @@ const modelIssueReasons: Record<string, string> = {
     maxOutputTokens: "maxOutputTokens",
     inputPricePerMillion: "inputPricePerMillion",
     outputPricePerMillion: "outputPricePerMillion",
+    cacheWritePricePerMillion: "cacheWritePricePerMillion",
+    cacheReadPricePerMillion: "cacheReadPricePerMillion",
+    tieredPricingThreshold: "tieredPricingThreshold",
+    highInputPricePerMillion: "highInputPricePerMillion",
+    highOutputPricePerMillion: "highOutputPricePerMillion",
+    highCacheWritePricePerMillion: "highCacheWritePricePerMillion",
+    highCacheReadPricePerMillion: "highCacheReadPricePerMillion",
 };
 
 /** 数字输入框给的是字符串；空串与小数都要在提交前被拒，而不是 Number() 后变成 NaN 或 0。 */
@@ -165,44 +114,78 @@ function toBudgetOrDefault(value: string, fallback: number): number | null {
     return value.trim() === "" ? fallback : toBudget(value);
 }
 
-/** 价格字段：空串表示不配置（undefined），非负小数或整数都有效。 */
-function toPrice(value: string): number | undefined | null {
-    const trimmed = value.trim();
-    if (trimmed === "") return undefined;
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed < 0) return null; // null 表示解析失败
-    return parsed;
+/** 空白价格不是免费；用无效数值交给合同，将错误定位到对应价格字段。 */
+function toPrice(value: string): number {
+    return value.trim() === "" ? Number.NaN : Number(value);
+}
+
+const priceKeys = ["inputPricePerMillion", "outputPricePerMillion", "cacheWritePricePerMillion", "cacheReadPricePerMillion"] as const;
+const highPriceKeys = ["highInputPricePerMillion", "highOutputPricePerMillion", "highCacheWritePricePerMillion", "highCacheReadPricePerMillion"] as const;
+
+function pricingCommand(values: ModelDraftValues) {
+    return {
+        inputPricePerMillion: toPrice(values.inputPricePerMillion),
+        outputPricePerMillion: toPrice(values.outputPricePerMillion),
+        cacheWritePricePerMillion: toPrice(values.cacheWritePricePerMillion),
+        cacheReadPricePerMillion: toPrice(values.cacheReadPricePerMillion),
+        currency: values.currency,
+        tieredPricingEnabled: values.tieredPricingEnabled,
+        tieredPricingThreshold: values.tieredPricingEnabled ? (toBudget(values.tieredPricingThreshold) ?? Number.NaN) : null,
+        highInputPricePerMillion: values.tieredPricingEnabled ? toPrice(values.highInputPricePerMillion) : null,
+        highOutputPricePerMillion: values.tieredPricingEnabled ? toPrice(values.highOutputPricePerMillion) : null,
+        highCacheWritePricePerMillion: values.tieredPricingEnabled ? toPrice(values.highCacheWritePricePerMillion) : null,
+        highCacheReadPricePerMillion: values.tieredPricingEnabled ? toPrice(values.highCacheReadPricePerMillion) : null,
+    };
+}
+
+function modelErrors(issues: readonly { path: readonly PropertyKey[] }[]): ModelFormErrors {
+    const errors: ModelFormErrors = {};
+    for (const issue of issues) {
+        const field = issue.path.length === 0 ? "maxOutputTokens" : String(issue.path[0]);
+        if (field in modelIssueReasons) errors[field as ModelFormField] = modelIssueReasons[field];
+    }
+    return errors;
 }
 
 export function toCreateModelCommand(values: ModelDraftValues): DraftResult<CreateConfiguredModelCommand, ModelFormErrors> {
-    const inputPrice = toPrice(values.inputPricePerMillion);
-    const outputPrice = toPrice(values.outputPricePerMillion);
-
-    // 价格解析失败（null）时直接返回字段错误，不进合同校验
-    if (inputPrice === null) return { ok: false, errors: { inputPricePerMillion: "inputPricePerMillion" } };
-    if (outputPrice === null) return { ok: false, errors: { outputPricePerMillion: "outputPricePerMillion" } };
-
     const parsed = createConfiguredModelCommandSchema.safeParse({
-        modelId: values.modelId.trim(),
-        name: values.name.trim(),
+        modelId: values.modelId.trim(), name: values.name.trim(),
         contextWindow: toBudgetOrDefault(values.contextWindow, defaultContextWindow),
         maxOutputTokens: toBudgetOrDefault(values.maxOutputTokens, defaultMaxOutputTokens),
-        ...(inputPrice !== undefined ? { inputPricePerMillion: inputPrice } : {}),
-        ...(outputPrice !== undefined ? { outputPricePerMillion: outputPrice } : {}),
+        ...pricingCommand(values),
     });
-    if (parsed.success) return { ok: true, command: parsed.data };
+    return parsed.success ? { ok: true, command: parsed.data } : { ok: false, errors: modelErrors(parsed.error.issues) };
+}
 
-    const errors: ModelFormErrors = {};
-    for (const issue of parsed.error.issues) {
-        // 「输出上限大于上下文窗口」是跨字段规则，合同挂在根上（path 为空）。
-        // 挂在根上时界面没有可标红的字段，用户只会看到按钮没反应，所以落到输出上限那一栏。
-        const field = issue.path.length === 0 ? "maxOutputTokens" : String(issue.path[0] ?? "");
-        const reason = modelIssueReasons[field];
-        if (reason !== undefined && errors[field as ModelFormField] === undefined) {
-            errors[field as ModelFormField] = reason;
-        }
-    }
-    return { ok: false, errors };
+export function modelDraftFromSnapshot(model: ConfiguredModelSnapshot): ModelDraftValues {
+    const values = { ...emptyModelDraft(), modelId: model.modelId, name: model.name,
+        contextWindow: String(model.contextWindow), maxOutputTokens: String(model.maxOutputTokens),
+        currency: model.currency, tieredPricingEnabled: model.tieredPricingEnabled,
+        tieredPricingThreshold: String(model.tieredPricingThreshold ?? 272000) };
+    for (const key of [...priceKeys, ...highPriceKeys]) values[key] = model[key] == null ? "" : String(model[key]);
+    return values;
+}
+
+export function toUpdateModelCommand(
+    model: ConfiguredModelSnapshot, values: ModelDraftValues,
+): DraftResult<UpdateConfiguredModelCommand, ModelFormErrors> {
+    const previous = modelDraftFromSnapshot(model);
+    const changes: Record<string, unknown> = { expectedVersion: model.version };
+    if (values.modelId.trim() !== model.modelId) changes.modelId = values.modelId.trim();
+    if (values.name.trim() !== model.name) changes.name = values.name.trim();
+    if (values.contextWindow !== previous.contextWindow) changes.contextWindow = toBudgetOrDefault(values.contextWindow, defaultContextWindow);
+    if (values.maxOutputTokens !== previous.maxOutputTokens) changes.maxOutputTokens = toBudgetOrDefault(values.maxOutputTokens, defaultMaxOutputTokens);
+    const pricingChanged = values.currency !== previous.currency || values.tieredPricingEnabled !== previous.tieredPricingEnabled
+        || priceKeys.some((key) => values[key] !== previous[key])
+        || (values.tieredPricingEnabled && (values.tieredPricingThreshold !== previous.tieredPricingThreshold
+            || highPriceKeys.some((key) => values[key] !== previous[key])));
+    if (pricingChanged) Object.assign(changes, pricingCommand(values));
+    if (Object.keys(changes).length === 1) return { ok: false, errors: { form: "unchanged" } };
+    const context = toBudgetOrDefault(values.contextWindow, defaultContextWindow);
+    const output = toBudgetOrDefault(values.maxOutputTokens, defaultMaxOutputTokens);
+    if (context !== null && output !== null && output > context) return { ok: false, errors: { maxOutputTokens: "maxOutputTokens" } };
+    const parsed = updateConfiguredModelCommandSchema.safeParse(changes);
+    return parsed.success ? { ok: true, command: parsed.data } : { ok: false, errors: modelErrors(parsed.error.issues) };
 }
 
 /**

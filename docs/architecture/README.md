@@ -62,6 +62,12 @@ Worker → Connector / Workflow → 持久化数据
 
 Story Workflow 由 Worker 调用模型，Application 校验提案后将 invocation 的可选费用与候选一起写入既有候选 JSON；候选持久记录拥有该次费用真值，Web 和 HTTP 只读取投影。费用不进入新的账单表、不需要数据库迁移，也不按查询时的模型价格重新计算。generation 只在 completed 且候选 ID、Story、Story Revision 与 task 均匹配冻结 Run 输入时返回费用；缺失与 0 分开处理，失败/取消不公开成功费用。Web 首个消费者是持久候选卡片，generation 区域只显示状态，刷新/重启沿候选读取恢复。已接受目标见 [Story API Draft](../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)；本轮代码核对后，当前行为分别由 [HTTP 规格](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)及 [Web 规格](../spec/interfaces/0005-web-client.md#task-42-当前合同补充)承载。实现存在不替代运行验证，Task 完成仍须按各层证据判定。
 
+## 模型缓存与两档定价
+
+2026-11-11 Otirik 接受[模型缓存与两档定价 Proposal](../proposals/model-cache-tiered-pricing-v1.md)，复用 Task 42；长期取舍见 [ADR-0032](../adr/0032-model-cache-tiered-pricing.md)。配置、调用计价与 Web 已实现并通过本轮隔离验收，当前字段和重建验收由[公共合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)拥有。模型拥有币种（USD/CNY，不换汇）、普通输入/输出/缓存写入/缓存读取四价，以及可选高档完整四价和阈值，全部保存为模型表显式列。价格配置通过 Product API 完整组原子替换，只改名称等字段保留旧价。Web 新增编辑入口并回填配置，Worker 使用同次调用的配置快照计算；prompt 总输入严格大于阈值后，整次调用四类费用全部采用高档，UI 开启时阈值预填 272000。
+
+旧模型保留原两价，缓存价格为 NULL 未知、USD、阶梯关闭；input/output 任一价格未知始终省略 cost，缓存非零用量对应价格未知也省略 cost，缓存为 0 不阻断原两价已知时的计算。历史已持久化实际费用不重算。新增缓存 usage/cost 字段允许历史缺省，新运行输出完整分项；目标 prompt 总输入为普通 input + cacheWrite + cacheRead，output 不参与阈值。Leader 通过包管理器确认本地 pi-ai 为 0.55.4，并由核对代理确认该发布版本两种 OpenAI provider 的互斥映射，来源见 Proposal；SDK 映射依据与本轮运行验收分别记录于 Task。独立 additive SQL 已落地并通过隔离验证，本轮未迁移用户数据库或部署；真实 Provider 外呼不在本轮验收范围。字段约束、兼容和验收边界见 [API 配置合同](../api/0009-provider-model-configuration.md#模型缓存与两档定价目标草案2026-11-11)。
+
 ## 当前已实现
 
 当前代码和规格已能支持以下边界（具体字段、状态和验收仍以对应 spec 为准）：

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import type { Readable } from "node:stream";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -16,7 +16,7 @@ export const snapshotPath = "packages/storage-prisma/prisma";
 export const provider = "jijiapi";
 export const model = "gpt-6-luna";
 export const secretRef = "secret:task39-connection-smoke";
-// Current @2 resolution reads Task 41 model prices, even when an explicit modelId is supplied.
+// This immutable base supplies 43 migrations; @2 records its explicit pricing overlay in a separate manifest.
 export const SNAPSHOT_COMMIT = "7ca568a91c57fba7bd8256727662936143b63a14";
 export const SYNTHETIC_CREDENTIAL = "task39-synthetic-offline-only";
 export const ISOLATION_PARENT = join(repositoryRoot, ".agent/tmp");
@@ -145,8 +145,38 @@ export async function exportFrozenSnapshot(root: string): Promise<{
     return { schemaPath: join(root, "schema-snapshot", snapshotPath, "schema.prisma"), manifest };
 }
 
-export async function prepareDatabase(root: string) {
-    const { schemaPath, manifest } = await exportFrozenSnapshot(root);
+export function modelPricingOverlayMetadata() {
+    const migrationName = "20261111080000_task_42_cache_tiered_pricing";
+    const files = ["schema.prisma", `migrations/${migrationName}/migration.sql`].map((path) => ({
+        path, sha256: createHash("sha256").update(readFileSync(join(repositoryRoot, snapshotPath, path))).digest("hex"),
+    }));
+    return { baseCommit: SNAPSHOT_COMMIT, migrationName, source: "current-working-tree", files };
+}
+
+export async function prepareDatabase(root: string, options?: { modelPricingOverlay: true }) {
+    const frozen = await exportFrozenSnapshot(root);
+    let schemaPath = frozen.schemaPath;
+    const manifest = [...frozen.manifest];
+    if (options?.modelPricingOverlay) {
+        // Keep the original frozen snapshot and its manifest intact for the @1 contract.
+        const destinationRoot = join(root, "model-pricing-schema");
+        for (const entry of frozen.manifest) {
+            const destination = join(destinationRoot, entry.path);
+            await mkdir(dirname(destination), { recursive: true });
+            await writeFile(destination, await readFile(join(root, "schema-snapshot", entry.path)));
+        }
+        const overlay = modelPricingOverlayMetadata();
+        for (const entry of overlay.files) {
+            const destination = join(destinationRoot, snapshotPath, entry.path);
+            const bytes = await readFile(join(repositoryRoot, snapshotPath, entry.path));
+            if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) throw new Error("Model pricing overlay changed.");
+            await mkdir(dirname(destination), { recursive: true });
+            await writeFile(destination, bytes);
+            if (entry.path.endsWith("/migration.sql")) manifest.push({ path: `${snapshotPath}/${entry.path}`, sha256: entry.sha256 });
+        }
+        await writeFile(join(root, "model-pricing-overlay-manifest.json"), JSON.stringify(overlay, null, 4));
+        schemaPath = join(destinationRoot, snapshotPath, "schema.prisma");
+    }
     const databaseUrl = `file:${join(root, "cosmos.sqlite").replaceAll("\\", "/")}`;
     // No inherited credentials or ambient DATABASE_URL reach the migration process.
     runToFile(process.execPath, [resolvePrismaCliPath(), "migrate", "deploy", "--schema", schemaPath],

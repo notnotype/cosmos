@@ -10,8 +10,6 @@ import { z } from "zod";
 
 const identifier = z.string().min(1).max(200).refine((value) => value === value.trim() && !/[\x00-\x1f\x7f]/.test(value));
 
-type ModelFields = Omit<ConfiguredModelSnapshot, "id" | "providerId" | "version">;
-
 export interface ConfiguredModelRepository {
     list(providerId: string): Promise<unknown[]>;
     get(providerId: string, id: string): Promise<unknown | null>;
@@ -78,13 +76,12 @@ export class ConfiguredModels {
             const current = await this.repository.get(provider, model);
             if (current === null) return failure("not_found");
             const existing = snapshot(current);
-            const fields: Partial<ModelFields> = { ...parsed.data };
-            delete (fields as { expectedVersion?: number }).expectedVersion;
+            const { expectedVersion, ...fields } = parsed.data;
             const contextWindow = fields.contextWindow ?? existing.contextWindow;
             const maxOutputTokens = fields.maxOutputTokens ?? existing.maxOutputTokens;
             if (maxOutputTokens > contextWindow) return failure("invalid_input");
             return snapshot(await this.repository.update({ id: model, providerId: provider,
-                expectedVersion: parsed.data.expectedVersion, fields: fields as Omit<UpdateConfiguredModelCommand, "expectedVersion"> }));
+                expectedVersion, fields }));
         } catch (error) { return safeFailure(error); }
     }
 

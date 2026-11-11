@@ -14,6 +14,15 @@ const model: ConfiguredModelSnapshot = {
     maxOutputTokens: 16384,
     inputPricePerMillion: 1,
     outputPricePerMillion: 2,
+    cacheWritePricePerMillion: 0,
+    cacheReadPricePerMillion: 0,
+    currency: "USD",
+    tieredPricingEnabled: false,
+    tieredPricingThreshold: null,
+    highInputPricePerMillion: null,
+    highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null,
+    highCacheReadPricePerMillion: null,
     version: 1,
     createdAt: "2026-11-10T06:00:00.000Z",
     updatedAt: "2026-11-10T06:00:00.000Z",
@@ -30,6 +39,48 @@ function renderActual(cost?: AgentInvocationOutput["cost"]) {
 function text(html: string) {
     return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<");
 }
+
+describe("阶梯预估与历史缓存费用", () => {
+    const tiered = { ...model, currency: "CNY" as const, cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 4,
+        tieredPricingEnabled: true, tieredPricingThreshold: 1000, highInputPricePerMillion: 10,
+        highOutputPricePerMillion: 20, highCacheWritePricePerMillion: 30, highCacheReadPricePerMillion: 40 };
+    it("每个端点按自身输入量选档，等于阈值仍低档，输出不触发高档", () => {
+        const estimate = estimateStoryGenerationCost(tiered);
+        expect(estimate).toMatchObject({ minimum: 0.001512, maximum: 0.06048 });
+        const shortThreshold = estimateStoryGenerationCost({ ...tiered, tieredPricingThreshold: 500 });
+        expect(shortThreshold).toMatchObject({ minimum: 0.01512, maximum: 0.06048 });
+        const content = text(renderEstimate({ model: tiered }));
+        expect(content).toContain("CNY");
+        expect(content).not.toContain("USD");
+        expect(content).toContain("不使用缓存");
+    });
+    it.each(["USD", "CNY"] as const)("基础两价已知时，历史缓存未知仍能给出无缓存的%s预估", (currency) => {
+        const legacy = { ...model, currency, inputPricePerMillion: 2, outputPricePerMillion: 4,
+            cacheWritePricePerMillion: undefined, cacheReadPricePerMillion: undefined };
+        expect(estimateStoryGenerationCost(legacy)).toMatchObject({ minimum: 0.003024, maximum: 0.012096 });
+        const content = text(renderEstimate({ model: legacy }));
+        expect(content).toContain(`预估成本：${currency} 0.003024 – 0.012096`);
+        expect(content).toContain("不使用缓存");
+        expect(estimateStoryGenerationCost({ ...legacy, cacheWritePricePerMillion: -1, cacheReadPricePerMillion: Number.NaN }))
+            .toMatchObject({ minimum: 0.003024, maximum: 0.012096 });
+    });
+    it("启用档位不完整时不给报价，但普通缓存未知不阻止无缓存预估", () => {
+        expect(estimateStoryGenerationCost({ ...tiered, highInputPricePerMillion: null })).toBeNull();
+        expect(estimateStoryGenerationCost({ ...tiered, highCacheReadPricePerMillion: null })).toBeNull();
+        expect(estimateStoryGenerationCost({ ...tiered, cacheReadPricePerMillion: undefined }))
+            .toMatchObject({ minimum: 0.001512, maximum: 0.06048 });
+        expect(estimateStoryGenerationCost({ ...tiered, tieredPricingThreshold: 0 })).toBeNull();
+    });
+    it("显示后端保存的缓存与币种金额，历史absence隐藏而0保留", () => {
+        const content = text(renderActual({ input: 1, output: 2, cacheWrite: 0, cacheRead: 3, total: 6, currency: "CNY" }));
+        expect(content).toContain("实际成本：6 CNY");
+        expect(content).toContain("缓存写入：0");
+        expect(content).toContain("缓存读取：3");
+        const legacy = text(renderActual({ input: 1, output: 2, total: 3, currency: "USD" }));
+        expect(legacy).not.toContain("缓存写入：");
+        expect(legacy).not.toContain("缓存读取：");
+    });
+});
 
 describe("StoryGenerationEstimate", () => {
     it("identifies the current default model and shows the USD estimated range", () => {

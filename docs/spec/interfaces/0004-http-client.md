@@ -44,6 +44,12 @@ Web 页面读取 Feed/Source/Health、触发 Source 操作或订阅 SSE，或 No
 
 这些方法不使用 Provider 配置操作的 Idempotency-Key，不发起模型调用，不维护持久状态、不缓存或重试。非 2xx 延续 `CosmosTransportError`；成功响应格式错误仍抛 schema error。重建须覆盖新旧路径/字段名、null 清除、PUT 额外字段在发送前拒绝与响应 shape 不混用；源码及测试见[系统配置客户端](../../../packages/transport-http/src/client-system-config.ts)与[测试](../../../packages/transport-http/src/client-system-config.test.ts)。
 
+## 模型定价传输当前合同
+
+`createConfiguredModel(providerId,input,idempotencyKey)` 在发送前解析创建 schema，补齐创建默认币种/阶梯字段，但不补普通四价；`updateConfiguredModel(providerId,modelId,input,idempotencyKey)` 解析更新 schema，拒绝部分价格组，metadata-only 维持原请求不拼入价格默认值。两者分别 POST 模型集合、PATCH Provider 下模型单项，携带 Idempotency-Key；返回及 list/get/defaultModel 均通过同一模型快照 schema，保留零价/未知缓存和历史默认解析。精确字段与计价语义见 [公共合同](../contracts/0001-public-contracts.md#模型定价与调用费用当前合同)。
+
+客户端不选价格档、不换汇、不重算持久费用，也不在 409 时自动重传。重建须观察真实发送 body：创建含四价、PATCH metadata-only 无价格键、完整价格组原样携带、缺项发送前拒绝，以及响应保留币种/缓存/高档。实现与测试见[模型客户端](../../../packages/transport-http/src/client-configured-models.ts)、[模型客户端测试](../../../packages/transport-http/src/client-configured-models.test.ts)和[系统配置客户端测试](../../../packages/transport-http/src/client-system-config.test.ts)。功能已实现，整体验证状态由本轮 Task 记录。
+
 ## 概念与定义
 
 - **HttpCosmosClient**：构造时固定 base URL、fetcher 和 EventSource factory 的客户端实例。

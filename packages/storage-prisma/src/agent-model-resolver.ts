@@ -21,6 +21,10 @@ export class PrismaAgentModelResolver implements AgentModelResolver {
                 maxOutputTokens: true,
                 inputPricePerMillion: true,
                 outputPricePerMillion: true,
+                cacheWritePricePerMillion: true, cacheReadPricePerMillion: true,
+                currency: true, tieredPricingEnabled: true, tieredPricingThreshold: true,
+                highInputPricePerMillion: true, highOutputPricePerMillion: true,
+                highCacheWritePricePerMillion: true, highCacheReadPricePerMillion: true,
                 provider: { select: { id: true, api: true, baseUrl: true, state: true, secretRef: true } },
             },
         });
@@ -39,6 +43,15 @@ export class PrismaAgentModelResolver implements AgentModelResolver {
             secretRef: provider.secretRef,
             inputPricePerMillion: model.inputPricePerMillion === null ? null : Number(model.inputPricePerMillion),
             outputPricePerMillion: model.outputPricePerMillion === null ? null : Number(model.outputPricePerMillion),
+            cacheWritePricePerMillion: model.cacheWritePricePerMillion === null ? null : Number(model.cacheWritePricePerMillion),
+            cacheReadPricePerMillion: model.cacheReadPricePerMillion === null ? null : Number(model.cacheReadPricePerMillion),
+            currency: model.currency === "CNY" ? "CNY" : "USD",
+            tieredPricingEnabled: model.tieredPricingEnabled,
+            tieredPricingThreshold: model.tieredPricingThreshold === null ? null : Number(model.tieredPricingThreshold),
+            highInputPricePerMillion: model.highInputPricePerMillion === null ? null : Number(model.highInputPricePerMillion),
+            highOutputPricePerMillion: model.highOutputPricePerMillion === null ? null : Number(model.highOutputPricePerMillion),
+            highCacheWritePricePerMillion: model.highCacheWritePricePerMillion === null ? null : Number(model.highCacheWritePricePerMillion),
+            highCacheReadPricePerMillion: model.highCacheReadPricePerMillion === null ? null : Number(model.highCacheReadPricePerMillion),
         };
     }
 }

@@ -47,8 +47,8 @@ it("verifies HTTP credential writes and recovery against isolated Prisma and Fil
     await writeFile(join(root, "schema/schema.prisma"), isolatedSchema);
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    expect(names).toHaveLength(43);
-    expect(names.at(-1)).toBe("20261106085039_task_41_connection_agent_separation");
+    expect(names).toHaveLength(44);
+    expect(names.at(-1)).toBe("20261111080000_task_42_cache_tiered_pricing");
     const manifest = [
         { path: "source-schema.prisma", sha256: createHash("sha256").update(schema).digest("hex") },
         { path: "schema/schema.prisma", sha256: createHash("sha256").update(isolatedSchema).digest("hex") },

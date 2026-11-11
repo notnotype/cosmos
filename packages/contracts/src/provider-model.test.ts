@@ -16,7 +16,11 @@ const provider = {
     name: "My Provider", api: "openai-completions", baseUrl: "https://provider.example/v1",
     apiKey: "synthetic-key",
 };
-const model = { modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256 };
+const model = {
+    modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256,
+    inputPricePerMillion: 1, outputPricePerMillion: 2,
+    cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 4,
+};
 
 describe("Provider/model configuration contracts", () => {
     it("accepts both explicitly selected APIs and preserves credential bytes", () => {
@@ -62,7 +66,11 @@ describe("Provider/model configuration contracts", () => {
     });
 
     it("bounds model tokens and forbids reassignment or credential fields", () => {
-        expect(createConfiguredModelCommandSchema.parse(model)).toEqual(model);
+        expect(createConfiguredModelCommandSchema.parse(model)).toEqual({
+            ...model, currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+            highInputPricePerMillion: null, highOutputPricePerMillion: null,
+            highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
+        });
         expect(createConfiguredModelCommandSchema.parse({ ...model, modelId: "namespace/text-model" }))
             .toMatchObject({ modelId: "namespace/text-model" });
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, modelId: "https://provider.example/model" }).success).toBe(false);
@@ -78,14 +86,72 @@ describe("Provider/model configuration contracts", () => {
         }
         expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, maxOutputTokens: 128 }))
             .toEqual({ expectedVersion: 1, maxOutputTokens: 128 });
-        expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, inputPricePerMillion: 0, outputPricePerMillion: 2 }))
-            .toEqual({ expectedVersion: 1, inputPricePerMillion: 0, outputPricePerMillion: 2 });
+        expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, inputPricePerMillion: 0, outputPricePerMillion: 2 }).success)
+            .toBe(false);
         for (const price of [{ inputPricePerMillion: -1 }, { outputPricePerMillion: -1 }]) {
             expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, ...price }).success).toBe(false);
         }
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1 }).success).toBe(false);
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, providerId: "another" }).success).toBe(false);
         expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, contextWindow: 32, maxOutputTokens: 64 }).success).toBe(false);
+    });
+
+    it("requires the complete four-price set and validates tiered pricing as one group", () => {
+        const created = createConfiguredModelCommandSchema.parse(model);
+        expect(created).toMatchObject({
+            inputPricePerMillion: 1, outputPricePerMillion: 2,
+            cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 4,
+            currency: "USD", tieredPricingEnabled: false,
+        });
+        for (const field of ["inputPricePerMillion", "outputPricePerMillion", "cacheWritePricePerMillion", "cacheReadPricePerMillion"] as const) {
+            const incomplete = { ...model };
+            delete incomplete[field];
+            expect(createConfiguredModelCommandSchema.safeParse(incomplete).success).toBe(false);
+        }
+        expect(createConfiguredModelCommandSchema.safeParse({
+            ...model, tieredPricingEnabled: true, tieredPricingThreshold: 272000,
+            highInputPricePerMillion: 5, highOutputPricePerMillion: 6,
+            highCacheWritePricePerMillion: 7, highCacheReadPricePerMillion: 8,
+        }).success).toBe(true);
+        expect(createConfiguredModelCommandSchema.safeParse({
+            ...model, tieredPricingEnabled: true, tieredPricingThreshold: 272000,
+            highInputPricePerMillion: 5, highOutputPricePerMillion: 6,
+            highCacheWritePricePerMillion: 7,
+        }).success).toBe(false);
+        expect(createConfiguredModelCommandSchema.safeParse({
+            ...model, tieredPricingEnabled: false, tieredPricingThreshold: 272000,
+        }).success).toBe(false);
+        expect(createConfiguredModelCommandSchema.safeParse({ ...model, currency: "EUR" }).success).toBe(false);
+    });
+
+    it("requires pricing patches to carry a complete configuration while metadata-only patches stay partial", () => {
+        expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, name: "Renamed" }))
+            .toEqual({ expectedVersion: 1, name: "Renamed" });
+        const prices = {
+            inputPricePerMillion: 1, outputPricePerMillion: 2,
+            cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 4,
+            currency: "CNY", tieredPricingEnabled: true, tieredPricingThreshold: 272000,
+            highInputPricePerMillion: 5, highOutputPricePerMillion: 6,
+            highCacheWritePricePerMillion: 7, highCacheReadPricePerMillion: 8,
+        } as const;
+        expect(updateConfiguredModelCommandSchema.parse({ expectedVersion: 1, ...prices }))
+            .toMatchObject({ currency: "CNY", tieredPricingEnabled: true, highCacheReadPricePerMillion: 8 });
+        expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, currency: "USD" }).success).toBe(false);
+        expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, ...prices, highCacheReadPricePerMillion: null }).success).toBe(false);
+        expect(updateConfiguredModelCommandSchema.safeParse({ expectedVersion: 1, ...prices, tieredPricingEnabled: false }).success).toBe(false);
+    });
+
+    it("reads legacy snapshots without inventing prices and defaults their currency and tier switch", () => {
+        const legacy = {
+            modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256,
+            id: "model-legacy", providerId: "provider-1", version: 1,
+            createdAt: "2026-10-15T00:00:00.000Z", updatedAt: "2026-10-15T00:00:00.000Z",
+        };
+        expect(configuredModelSnapshotSchema.parse(legacy)).toMatchObject({
+            currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+        });
+        expect(configuredModelSnapshotSchema.parse(legacy)).not.toHaveProperty("inputPricePerMillion");
+        expect(configuredModelSnapshotSchema.parse(legacy)).not.toHaveProperty("cacheReadPricePerMillion");
     });
 
     it("accepts discovery commands without credentials and rejects unsafe fields", () => {

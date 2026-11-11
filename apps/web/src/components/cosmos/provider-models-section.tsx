@@ -26,6 +26,8 @@ import {
     type WriteFailureNotice,
 } from "@/components/cosmos/provider-model-draft";
 import { ProviderModelDiscoveryDialog } from "@/components/cosmos/provider-model/discovery-dialog";
+import { ConfiguredModelRow } from "@/components/cosmos/provider-model/configured-model-row";
+import { ModelPricingFields } from "@/components/cosmos/provider-model/model-pricing-fields";
 import { messages } from "@/copy/messages";
 import { newRequestKey } from "@/lib/request-key";
 
@@ -169,7 +171,7 @@ export function ProviderModelsSection({ client, provider }: ProviderModelsSectio
         return key;
     }
 
-    function updateRow(key: string, field: keyof ModelDraftValues, value: string) {
+    function updateRow<K extends keyof ModelDraftValues>(key: string, field: K, value: ModelDraftValues[K]) {
         setRows((current) => current.map((row) => row.key === key
             ? { ...row, values: { ...row.values, [field]: value } }
             : row));
@@ -327,28 +329,9 @@ export function ProviderModelsSection({ client, provider }: ProviderModelsSectio
             {models !== null && models.length > 0 && (
                 <ul className="flex flex-col divide-y divide-border/60 rounded-[var(--radius-control)] border border-border/60">
                     {models.map((model) => (
-                        <li
-                            className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2"
-                            key={model.id}
-                        >
-                            <span className="min-w-0 truncate text-[13px]">{model.name}</span>
-                            <code className="min-w-0 truncate rounded-sm bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                                {model.modelId}
-                            </code>
-                            <span className="text-[12px] text-muted-foreground">
-                                {model.contextWindow} / {model.maxOutputTokens}
-                            </span>
-                            <Button
-                                aria-label={`${messages.models.models.remove} ${model.name}`}
-                                className="ml-auto"
-                                disabled={removingId === model.id}
-                                onClick={() => void removeModel(model)}
-                                size="icon-xs"
-                                variant="ghost"
-                            >
-                                <Trash2 />
-                            </Button>
-                        </li>
+                        <ConfiguredModelRow key={model.id} client={client} model={model} providerName={provider.name}
+                            isDefault={false} disabled={saving || removingId === model.id}
+                            onRemove={() => void removeModel(model)} onSaved={loadModels} />
                     ))}
                 </ul>
             )}
@@ -446,33 +429,9 @@ export function ProviderModelsSection({ client, provider }: ProviderModelsSectio
                                         value={row.values.maxOutputTokens}
                                     />
                                 </Field>
-                                <Field
-                                    error={errors?.inputPricePerMillion !== undefined && fieldErrorText.inputPricePerMillion}
-                                    htmlFor={`model-input-price-${provider.id}-${row.key}`}
-                                    label={messages.models.models.inputPricePerMillion}
-                                >
-                                    <Input
-                                        id={`model-input-price-${provider.id}-${row.key}`}
-                                        inputMode="decimal"
-                                        onChange={(event) => updateRow(row.key, "inputPricePerMillion", event.target.value)}
-                                        placeholder="0"
-                                        value={row.values.inputPricePerMillion}
-                                    />
-                                </Field>
-                                <Field
-                                    error={errors?.outputPricePerMillion !== undefined && fieldErrorText.outputPricePerMillion}
-                                    htmlFor={`model-output-price-${provider.id}-${row.key}`}
-                                    label={messages.models.models.outputPricePerMillion}
-                                >
-                                    <Input
-                                        id={`model-output-price-${provider.id}-${row.key}`}
-                                        inputMode="decimal"
-                                        onChange={(event) => updateRow(row.key, "outputPricePerMillion", event.target.value)}
-                                        placeholder="0"
-                                        value={row.values.outputPricePerMillion}
-                                    />
-                                </Field>
                             </div>
+                            <ModelPricingFields id={`create-${provider.id}-${row.key}`} values={row.values} errors={errors ?? {}}
+                                disabled={saving} onChange={(field, value) => updateRow(row.key, field, value)} />
                             {failure !== null && (
                                 <p className="text-[12px] text-destructive" role="alert">
                                     {failure}

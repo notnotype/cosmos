@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { configuredModelSnapshotSchema, createConfiguredModelCommandSchema, updateConfiguredModelCommandSchema } from "@cosmos/contracts";
 import {CosmosTransportError, type HttpCosmosClient} from "@cosmos/transport-http";
 
 import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
@@ -55,7 +57,7 @@ const modelLabModels = [
         createdAt: fixtureTimestamp,
         updatedAt: fixtureTimestamp,
     },
-];
+].map((model) => configuredModelSnapshotSchema.parse(model));
 
 const modelDiscoveryLabSnapshot = {
     id: "discovery-lab",
@@ -72,44 +74,70 @@ const modelDiscoveryLabSnapshot = {
     updatedAt: fixtureTimestamp,
 };
 
-/** 实验室里 Provider 面板用到的客户端能力：只有这几个方法会被面板调用。 */
-const modelPanelLabMethods = {
-    listModelProviders: async () => ({items: [modelLabProvider], nextCursor: null}),
-    listConfiguredModels: async () => ({items: modelLabModels, nextCursor: null}),
-    discoverProviderModels: async () => modelDiscoveryLabSnapshot,
-    createModelProvider: async () => modelLabProvider,
-    updateModelProvider: async () => modelLabProvider,
-    createConfiguredModel: async () => modelLabModels[0],
-    deleteConfiguredModel: async () => {},
-    deleteModelProvider: async () => {},
-};
+type ModelPanelLabMethods = Pick<HttpCosmosClient,
+    "listModelProviders" | "listConfiguredModels" | "discoverProviderModels"
+    | "createModelProvider" | "updateModelProvider" | "createConfiguredModel"
+    | "getConfiguredModel" | "updateConfiguredModel" | "deleteConfiguredModel" | "deleteModelProvider"
+>;
 
-const modelPanelLabClient = modelPanelLabMethods as unknown as HttpCosmosClient;
+/** 每次挂载创建独立存储；列表重读能看到本预览内的修改，切换场景不会共享数据。 */
+function createModelPanelLabMethods({ empty = false, conflict = false } = {}): ModelPanelLabMethods {
+    let models = empty ? [] : modelLabModels.map((model) => configuredModelSnapshotSchema.parse(model));
+    let providers = empty ? [] : [{ ...modelLabProvider }];
+    let nextId = 1;
+    const reject = (status: number, code: string): never => {
+        throw new CosmosTransportError(status, { code, message: "Model configuration write rejected.", retryable: false });
+    };
+    const getModel = (providerId: string, id: string) => {
+        const model = models.find((item) => item.providerId === providerId && item.id === id);
+        return model ?? reject(404, "not_found");
+    };
+    return {
+        listModelProviders: async () => ({ items: providers.map((provider) => ({ ...provider })), nextCursor: null }),
+        listConfiguredModels: async (providerId) => ({
+            items: models.filter((model) => model.providerId === providerId).map((model) => configuredModelSnapshotSchema.parse(model)), nextCursor: null,
+        }),
+        discoverProviderModels: async () => ({ ...modelDiscoveryLabSnapshot, candidates: empty ? [] : modelDiscoveryLabSnapshot.candidates }),
+        createModelProvider: async () => {
+            providers = [{ ...modelLabProvider }];
+            return { ...modelLabProvider };
+        },
+        updateModelProvider: async () => ({ ...modelLabProvider }),
+        createConfiguredModel: async (providerId, input) => {
+            const command = createConfiguredModelCommandSchema.parse(input);
+            if (models.some((model) => model.providerId === providerId && model.modelId === command.modelId)) reject(409, "already_exists");
+            const model = configuredModelSnapshotSchema.parse({ ...command, providerId, id: `lab-model-${nextId++}`,
+                version: 1, createdAt: fixtureTimestamp, updatedAt: fixtureTimestamp });
+            models = [...models, model];
+            return configuredModelSnapshotSchema.parse(model);
+        },
+        getConfiguredModel: async (providerId, id) => configuredModelSnapshotSchema.parse(getModel(providerId, id)),
+        updateConfiguredModel: async (providerId, id, input) => {
+            const { expectedVersion, ...changes } = updateConfiguredModelCommandSchema.parse(input);
+            const current = getModel(providerId, id);
+            if (expectedVersion !== current.version) reject(409, "version_conflict");
+            if (models.some((model) => model.id !== id && model.providerId === providerId && model.modelId === (changes.modelId ?? current.modelId))) reject(409, "already_exists");
+            const updated = configuredModelSnapshotSchema.parse({ ...current, ...changes, version: current.version + 1,
+                updatedAt: new Date().toISOString() });
+            if (updated.maxOutputTokens > updated.contextWindow) reject(400, "invalid_input");
+            models = models.map((model) => model.id === id ? updated : model);
+            return configuredModelSnapshotSchema.parse(updated);
+        },
+        deleteConfiguredModel: async (providerId, id, expectedVersion) => {
+            const current = getModel(providerId, id);
+            if (current.version !== expectedVersion) reject(409, "version_conflict");
+            models = models.filter((model) => model.id !== id);
+        },
+        deleteModelProvider: async () => {
+            if (conflict) reject(409, "in_use");
+            providers = [];
+            models = [];
+        },
+    };
+}
 
-/**
- * 被默认模型设置引用时的删除：服务端返回 409 `in_use`，界面必须把原因留在列表上方，
- * 而不是弹一个几秒就消失的提示。真实判定在服务端事务里，这里只复现契约。
- */
-const modelPanelConflictClient = {
-    ...modelPanelLabMethods,
-    deleteModelProvider: async () => {
-        throw new CosmosTransportError(409, {
-            code: "in_use",
-            message: "Model configuration write rejected.",
-            retryable: false,
-        });
-    },
-} as unknown as HttpCosmosClient;
-
-export function renderModelProviderPanelLab(props: LabProps) {
-    const state = optionProp(props, "state", "populated", ["populated", "conflict", "empty"] as const);
-    const client = state === "empty"
-        ? ({
-            listModelProviders: async () => ({items: [], nextCursor: null}),
-        } as unknown as HttpCosmosClient)
-        : state === "conflict"
-            ? modelPanelConflictClient
-            : modelPanelLabClient;
+function ModelProviderPanelLab({ state }: { state: "populated" | "conflict" | "empty" }) {
+    const [client] = useState(() => createModelPanelLabMethods({ empty: state === "empty", conflict: state === "conflict" }) as unknown as HttpCosmosClient);
     // 面板无条件调用 useToast()，而 /dev/components 不在 (shell)/(reading) 路由组里，
     // 没有祖先 Provider；缺它会抛「must be used within <Toast.Provider>」并让整个预览台不渲染
     // （实测 toHaveCount(0)，不是渲染出空面板）。
@@ -121,13 +149,18 @@ export function renderModelProviderPanelLab(props: LabProps) {
     );
 }
 
+export function renderModelProviderPanelLab(props: LabProps) {
+    const state = optionProp(props, "state", "populated", ["populated", "conflict", "empty"] as const);
+    return <ModelProviderPanelLab key={state} state={state} />;
+}
+
 const defaultModelLabClient: Pick<HttpCosmosClient,
     "getSystemConfig" | "updateSystemConfig" | "listModelProviders" | "listConfiguredModels"
 > = {
     getSystemConfig: async () => ({defaultModelId: modelLabModels[0]!.id, defaultModel: modelLabModels[0]!}),
     updateSystemConfig: async ({defaultModelId}) => ({defaultModelId}),
-    listModelProviders: modelPanelLabMethods.listModelProviders,
-    listConfiguredModels: modelPanelLabMethods.listConfiguredModels,
+    listModelProviders: async () => ({ items: [modelLabProvider], nextCursor: null }),
+    listConfiguredModels: async () => ({ items: modelLabModels.map((model) => configuredModelSnapshotSchema.parse(model)), nextCursor: null }),
 };
 
 export function renderDefaultModelPanelLab() {
@@ -137,22 +170,17 @@ export function renderDefaultModelPanelLab() {
 export function renderModelDetailsLab(props: LabProps) {
     const state = optionProp(props, "state", "priced", ["priced", "unknown"] as const);
     const model = state === "priced"
-        ? { ...modelLabModels[0]!, inputPricePerMillion: 0, outputPricePerMillion: 2 }
+        ? { ...modelLabModels[0]!, inputPricePerMillion: 0, outputPricePerMillion: 2, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0 }
         : modelLabModels[0]!;
     return <ModelDetails model={model} providerName={modelLabProvider.name} />;
 }
 
+function ProviderModelsSectionLab({ state }: { state: "populated" | "empty" }) {
+    const [client] = useState(() => createModelPanelLabMethods({ empty: state === "empty" }) as unknown as HttpCosmosClient);
+    return <ProviderModelsSection client={client} provider={modelLabProvider} />;
+}
+
 export function renderProviderModelsSectionLab(props: LabProps) {
     const state = optionProp(props, "state", "populated", ["populated", "empty"] as const);
-    const client = state === "empty"
-        ? ({
-            listConfiguredModels: async () => ({items: [], nextCursor: null}),
-            discoverProviderModels: async () => ({
-                ...modelDiscoveryLabSnapshot,
-                status: "succeeded" as const,
-                candidates: [],
-            }),
-        } as unknown as HttpCosmosClient)
-        : modelPanelLabClient;
-    return <ProviderModelsSection client={client} provider={modelLabProvider} />;
+    return <ProviderModelsSectionLab key={state} state={state} />;
 }

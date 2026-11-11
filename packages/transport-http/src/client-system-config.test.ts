@@ -18,6 +18,10 @@ describe("HttpCosmosClient SystemConfig", () => {
         const model = {
             id: "model-one", providerId: "provider-one", modelId: "upstream-model", name: "Model One",
             contextWindow: 128000, maxOutputTokens: 4096, inputPricePerMillion: 0, outputPricePerMillion: 2,
+            cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0.1,
+            currency: "CNY", tieredPricingEnabled: true, tieredPricingThreshold: 1000,
+            highInputPricePerMillion: 1, highOutputPricePerMillion: 4,
+            highCacheWritePricePerMillion: 0, highCacheReadPricePerMillion: 0.2,
             version: 2, createdAt: "2026-11-10T00:00:00.000Z", updatedAt: "2026-11-10T01:00:00.000Z",
         };
         const response = { defaultModelId: model.id, defaultModel: model };

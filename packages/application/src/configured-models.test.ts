@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConfiguredModelSnapshot } from "@cosmos/contracts";
 import { ConfiguredModels, type ConfiguredModelRepository } from "./configured-models.js";
 
+const pricing = {
+    inputPricePerMillion: 1, outputPricePerMillion: 2,
+    cacheWritePricePerMillion: 3, cacheReadPricePerMillion: 4,
+    currency: "CNY" as const, tieredPricingEnabled: true, tieredPricingThreshold: 100,
+    highInputPricePerMillion: 5, highOutputPricePerMillion: 6,
+    highCacheWritePricePerMillion: 7, highCacheReadPricePerMillion: 8,
+};
 const snapshot: ConfiguredModelSnapshot = {
+    ...pricing,
     id: "model-1", providerId: "provider-1", modelId: "text-model", name: "Text model",
     contextWindow: 8192, maxOutputTokens: 256, version: 1,
     createdAt: "2026-10-20T00:00:00.000Z", updatedAt: "2026-10-20T00:00:00.000Z",
@@ -34,10 +42,11 @@ describe("ConfiguredModels", () => {
         const service = new ConfiguredModels(repo, () => "model-new");
         await expect(service.create("provider-1", {
             modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256,
+            ...pricing,
         })).resolves.toMatchObject({ id: "model-new", providerId: "provider-1" });
         expect(repo.create).toHaveBeenCalledWith({
             id: "model-new", providerId: "provider-1",
-            fields: { modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256 },
+            fields: { modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256, ...pricing },
         });
     });
 
@@ -69,7 +78,26 @@ describe("ConfiguredModels", () => {
         });
         await expect(new ConfiguredModels(duplicate).create("provider-1", {
             modelId: "text-model", name: "Text model", contextWindow: 8192, maxOutputTokens: 256,
+            ...pricing,
         })).rejects.toMatchObject({ code: "already_exists" });
+    });
+
+    it("keeps metadata patches free of pricing defaults and replaces pricing only as one group", async () => {
+        const repo = repository();
+        const service = new ConfiguredModels(repo);
+        await service.update("provider-1", "model-1", { expectedVersion: 1, name: "Renamed" });
+        expect(repo.update).toHaveBeenLastCalledWith({
+            id: "model-1", providerId: "provider-1", expectedVersion: 1, fields: { name: "Renamed" },
+        });
+        await expect(service.update("provider-1", "model-1", {
+            expectedVersion: 1, inputPricePerMillion: 99,
+        })).rejects.toMatchObject({ code: "invalid_input" });
+        expect(repo.update).toHaveBeenCalledTimes(1);
+        await expect(service.update("provider-1", "model-1", { expectedVersion: 1, ...pricing }))
+            .resolves.toMatchObject(pricing);
+        expect(repo.update).toHaveBeenLastCalledWith({
+            id: "model-1", providerId: "provider-1", expectedVersion: 1, fields: pricing,
+        });
     });
 
     it("deletes with a version fence and rejects malformed identifiers", async () => {

@@ -1,6 +1,6 @@
 # Cosmos Project Status
 
-> Task42 收尾（2026-11-11）：实现与验证完成；实施来源分支 `feat/t42-story-cost-e2e-docs`，base `12f730c9ba5381e6b84a9bbb2fd6d9cfcf3aefb9`。维护者已授权本地提交与合并，提交身份与合并结果以 Git 日志为准。Task42 的 Story 实际成本、E2E 更新、文档更新三项完成；最终全仓 229 files / 1411 tests、浏览器 4/4、组件实验室 33/33 分层通过。文档门禁仍受 Task40 既有断链与大小问题阻断；真实 Provider、来源、账号登录、部署和远端 CI 未验。此前 `5e760e2` 与 `710c2b1` 是历史验证基线。Phase 1 已收口，Phase 2 十四切片及平台面四块已交付，LIB-004 延后 Phase 3；后置债保持原界线。
+> Task42（2026-11-11）：模型缓存四价、USD/CNY 与两档整次计费已在分支 `feat/t42-cache-tiered-pricing` 实现并通过本轮隔离验收；全仓 230 files / 1446 tests、浏览器 6/6、组件实验室 12/12 通过。当前合同见[定价 Proposal](docs/proposals/model-cache-tiered-pricing-v1.md)，分层证据和过程见 [Task42 walkthrough](.agents/tasks/42-default-model-ui-api/walkthrough.md)。文档门禁仍有 Task40 既有断链与全局大小债务，不能据本轮通过宣称全部仓库门禁通过；真实 Provider、来源、账号登录、部署和远端 CI 未验。Phase 1 已收口，Phase 2 十四切片及平台面四块已交付，LIB-004 延后 Phase 3；后置债保持原界线。
 >
 > Task [36](.agents/tasks/36-reading-layout-and-object-details/README.md) 已合并并经维护者验收；证据见[完成历史](PROJECT-STATUS/history-2026-10-task36.md)，不代表当前工作树已全部验收。
 
@@ -39,7 +39,7 @@ Source 按 `sourceDefinitionRef + operationId + config` 创建为停用状态，
 
 ## 当前下一步
 
-**Task [42](.agents/tasks/42-default-model-ui-api/README.md) 三项完成（2026-11-11）**：Story 实际成本已接通持久候选与 Web，E2E 与文档同步；当前合同见 [API](docs/spec/interfaces/0002-product-api-http.md)、[HTTP Client](docs/spec/interfaces/0004-http-client.md)、[Web](docs/spec/interfaces/0005-web-client.md)。费用复用候选 JSON，缺失省略、0 保留，不迁移、不回填、不按当前价重算。联调同时修复探测 reason≤500 的返回/写回一致性及模型响应遗漏已知价格。最终 `bun run test`：229 files / 1411 tests，229.65s；浏览器 3 files / 4 tests，22.3s（端口4174），覆盖费用 API/候选/UI、回放、改价历史、刷新、决定、清理、探测与设置；组件实验室 3 files / 33 tests，28.7s。真实生成客户端存储测试1/1、探测9/9及前后端聚焦测试通过；application/storage 类型检查、API/Worker 与生产 Web 构建通过，各层数字不相加。`bun run docs:check` 与 `bun run docs:check:ci --base 12f730c9ba5381e6b84a9bbb2fd6d9cfcf3aefb9` 仍报相同22条 Task40 旧断链，后者 changedFiles=[] 证实既有；大小门禁另受未改的 Task40 封口 walkthrough 30.35KB/~9.9k tokens 阻断，未改历史或登记豁免。本页已精简至健康预算。离线 Worker fixture 与 Node 替代 OpenCLI 不证明真实 Provider、来源或账号登录；部署、远端 CI 未运行。完整命令、红绿与独立复审证据归 Task。
+**Task [42](.agents/tasks/42-default-model-ui-api/walkthrough.md) 本轮实现与隔离验收完成（2026-11-11）**：基于 `ad4c3c4`，分支 `feat/t42-cache-tiered-pricing` 已实现缓存四价、每模型币种及两档整次计费，[当前 API](docs/spec/interfaces/0002-product-api-http.md)、[客户端](docs/spec/interfaces/0004-http-client.md)、[Web](docs/spec/interfaces/0005-web-client.md)和 [ADR-0032](docs/adr/0032-model-cache-tiered-pricing.md)已同步。最终全仓 230 files / 1446 tests 全部通过（284.28s）；40 项 smoke、浏览器 6/6（56.7s）、Lab 12/12（17.8s）通过，覆盖四价创建/编辑/回填、真实 409 草稿恢复、272000/272001 整次选档和历史费用不随改价重算。全仓类型检查、Web lint、API/Worker 与依赖包构建、隔离栈 Web 构建及代码差异检查通过。独立审查发现的两项需求问题与冲突测试缺口均已修复并复核。文档检查仍有 22 条 Task40 旧断链，本轮未新增；全局尺寸既有债务及最终门禁结果单列于 Task，不宣称所有仓库门禁通过。维护者已另行授权本轮本地提交及合并到 master；未 push/deploy、未迁移用户数据库、未修改 DSH plugin；本轮真实 Provider 外呼与远端 CI 未验。早期失败、执行器诊断和精确命令保留在本轮 Task 过程记录。
 
 **Task [40](.agents/tasks/40-story-content-representation/README.md) 仍在验收中**：旧库升级、Node recovery、原 JS 预算及显式降级/候选决定已有隔离证据。维护者确认一次真实 Provider 合成正文摘要→Web 人工接受/持久化通过，内容和证据正确；非 Agent 独立复验，此前格式失败保留。Host 在入口进程，不替代独立 Worker 验收。真实来源复验、关系/质量任务及通用分类/旧 spec 仍待收口，新外呼须逐次授权，Task40 不关闭；详见 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。
 

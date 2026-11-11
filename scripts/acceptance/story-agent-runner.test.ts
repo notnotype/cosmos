@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { FileSecretStore, PrismaCosmosRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
-import { prepareStoryIsolation } from "./story-agent-isolation.js";
+import { prepareStoryIsolation, repositoryRoot, snapshotCommit } from "./story-agent-isolation.js";
 import { access, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { acceptancePlan, createOfflineStoryTransport, runStoryAcceptance } from "./story-agent-runner.js";
@@ -12,14 +13,35 @@ it("configures an isolated model that the current worker resolver can load witho
     const { root, repository, secretRefs } = await prepareStoryIsolation();
     roots.push(root);
     try {
+        const overlayMigrationName = "20261111080000_task_42_cache_tiered_pricing";
+        const overlayPaths = ["schema.prisma", `migrations/${overlayMigrationName}/migration.sql`];
+        const overlays = await Promise.all(overlayPaths.map(async (path) => {
+            const source = await readFile(join(repositoryRoot, "packages/storage-prisma/prisma", path));
+            const copied = await readFile(join(root, "snapshot/packages/storage-prisma/prisma", path));
+            expect(copied).toEqual(source);
+            return { path, sha256: createHash("sha256").update(source).digest("hex") };
+        }));
+        expect(JSON.parse(await readFile(join(root, "schema-snapshot-manifest.json"), "utf8"))).toEqual({
+            baseCommit: snapshotCommit, overlayMigrationName, overlaySource: "current-working-tree", overlays,
+        });
+        const migrations = (await readdir(join(root, "snapshot/packages/storage-prisma/prisma/migrations"), { withFileTypes: true }))
+            .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+        expect(migrations).toHaveLength(44);
+        expect(migrations.at(-1)).toBe(overlayMigrationName);
         const columns = await repository.prisma.$queryRaw<Array<{ name: string }>>`PRAGMA table_info("ConfiguredModel")`;
         expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
-            "inputPricePerMillion", "outputPricePerMillion",
+            "inputPricePerMillion", "outputPricePerMillion", "cacheWritePricePerMillion", "cacheReadPricePerMillion",
+            "currency", "tieredPricingEnabled", "tieredPricingThreshold", "highInputPricePerMillion", "highOutputPricePerMillion",
+            "highCacheWritePricePerMillion", "highCacheReadPricePerMillion",
         ]));
         const configured = await configureStoryConnection(repository, "synthetic-task40-key");
         await expect(configured.models.resolve(configured.modelId)).resolves.toMatchObject({
             modelId: acceptancePlan.model, providerId: "task40-acceptance-provider",
             maxOutputTokens: acceptancePlan.maxOutputTokens,
+            inputPricePerMillion: 0, outputPricePerMillion: 0, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0,
+            currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+            highInputPricePerMillion: null, highOutputPricePerMillion: null,
+            highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
         });
         await expect(configured.models.resolve(null)).resolves.toBeNull();
         const fallback = await repository.prisma.configuredModel.create({ data: {

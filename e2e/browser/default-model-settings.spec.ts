@@ -27,7 +27,9 @@ test("default model settings save, recover from a refused write, show deletion a
         providerVersion = provider.version;
         const modelResponse = await page.request.post(`/api/v1/model-providers/${provider.id}/models`, {
             headers: headers(), data: {modelId: "settings-model", name: "Settings synthetic model",
-                contextWindow: 4096, maxOutputTokens: 512},
+                contextWindow: 4096, maxOutputTokens: 512,
+                inputPricePerMillion: 0, outputPricePerMillion: 0,
+                cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0, currency: "USD"},
         });
         expect(modelResponse.status()).toBe(201);
         const model = configuredModelSnapshotSchema.parse(await modelResponse.json());
@@ -62,6 +64,8 @@ test("default model settings save, recover from a refused write, show deletion a
         await expect(region.getByRole("region", {name: "当前默认模型", exact: true})).toContainText(model.name);
         await expect(region).toContainText("输入价格：$0 USD / 百万 tokens");
         await expect(region).toContainText("输出价格：$0 USD / 百万 tokens");
+        await expect(region).toContainText("缓存写入价格：$0 USD / 百万 tokens");
+        await expect(region).toContainText("缓存读取价格：$0 USD / 百万 tokens");
         await expect(region).not.toContainText("价格信息不可用");
 
         const providerDeleteWhileModelExists = await page.request.delete(`/api/v1/model-providers/${provider.id}`, {

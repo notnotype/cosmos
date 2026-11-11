@@ -73,47 +73,115 @@ export type ModelProviderPage = z.infer<typeof modelProviderPageSchema>;
 
 const upstreamModelIdSchema = idSchema.refine((value) => !/^[a-z][a-z\d+.-]*:\/\//i.test(value)
     && !value.startsWith("//"), { message: "Model identifier must not be a URL." });
-const modelFields = {
+const modelIdentityFields = {
     modelId: upstreamModelIdSchema,
     name: nameSchema,
     contextWindow: positiveIntegerSchema,
     maxOutputTokens: positiveIntegerSchema,
-    // Prices are USD per million tokens; omitted prices mean the cost is unknown.
-    inputPricePerMillion: z.number().nonnegative().optional(),
-    outputPricePerMillion: z.number().nonnegative().optional(),
+};
+const priceSchema = z.number().finite().nonnegative();
+const currencySchema = z.enum(["USD", "CNY"]);
+const pricingFields = {
+    inputPricePerMillion: priceSchema,
+    outputPricePerMillion: priceSchema,
+    cacheWritePricePerMillion: priceSchema,
+    cacheReadPricePerMillion: priceSchema,
+    currency: currencySchema.default("USD"),
+    tieredPricingEnabled: z.boolean().default(false),
+    tieredPricingThreshold: positiveIntegerSchema.nullable().default(null),
+    highInputPricePerMillion: priceSchema.nullable().default(null),
+    highOutputPricePerMillion: priceSchema.nullable().default(null),
+    highCacheWritePricePerMillion: priceSchema.nullable().default(null),
+    highCacheReadPricePerMillion: priceSchema.nullable().default(null),
 };
 const withinContext = (value: { contextWindow?: number; maxOutputTokens?: number }): boolean =>
     value.contextWindow === undefined || value.maxOutputTokens === undefined
     || value.maxOutputTokens <= value.contextWindow;
+const hasCompleteTier = (value: {
+    tieredPricingEnabled?: boolean;
+    tieredPricingThreshold?: number | null;
+    highInputPricePerMillion?: number | null;
+    highOutputPricePerMillion?: number | null;
+    highCacheWritePricePerMillion?: number | null;
+    highCacheReadPricePerMillion?: number | null;
+}): boolean => value.tieredPricingEnabled
+    ? value.tieredPricingThreshold != null && value.highInputPricePerMillion != null
+        && value.highOutputPricePerMillion != null && value.highCacheWritePricePerMillion != null
+        && value.highCacheReadPricePerMillion != null
+    : (value.tieredPricingThreshold == null && value.highInputPricePerMillion == null
+        && value.highOutputPricePerMillion == null && value.highCacheWritePricePerMillion == null
+        && value.highCacheReadPricePerMillion == null);
 
-export const createConfiguredModelCommandSchema = z.object(modelFields).strict().refine(withinContext, {
+export const createConfiguredModelCommandSchema = z.object({
+    ...modelIdentityFields,
+    ...pricingFields,
+}).strict().refine(withinContext, {
     message: "Output token limit exceeds context window.",
+}).refine(hasCompleteTier, {
+    message: "Tiered pricing requires a threshold and all four high-tier prices; disabled tier pricing must be empty.",
 });
-export type CreateConfiguredModelCommand = z.infer<typeof createConfiguredModelCommandSchema>;
+export type CreateConfiguredModelCommand = z.input<typeof createConfiguredModelCommandSchema>;
 
-// Partial budgets must also be checked against persisted values by the application service.
+const updatePricingFields = {
+    inputPricePerMillion: priceSchema.optional(),
+    outputPricePerMillion: priceSchema.optional(),
+    cacheWritePricePerMillion: priceSchema.optional(),
+    cacheReadPricePerMillion: priceSchema.optional(),
+    currency: currencySchema.optional(),
+    tieredPricingEnabled: z.boolean().optional(),
+    tieredPricingThreshold: positiveIntegerSchema.nullable().optional(),
+    highInputPricePerMillion: priceSchema.nullable().optional(),
+    highOutputPricePerMillion: priceSchema.nullable().optional(),
+    highCacheWritePricePerMillion: priceSchema.nullable().optional(),
+    highCacheReadPricePerMillion: priceSchema.nullable().optional(),
+};
+const pricingKeys = Object.keys(updatePricingFields);
+function hasCompletePricingUpdate(value: Record<string, unknown>): boolean {
+    return !pricingKeys.some((key) => value[key] !== undefined) || pricingKeys.every((key) => value[key] !== undefined);
+}
+
+// Any price or tier edit replaces one complete configuration, preventing stale mixed tiers.
 export const updateConfiguredModelCommandSchema = z.object({
     expectedVersion: positiveIntegerSchema,
     modelId: upstreamModelIdSchema.optional(),
     name: nameSchema.optional(),
     contextWindow: positiveIntegerSchema.optional(),
     maxOutputTokens: positiveIntegerSchema.optional(),
-    inputPricePerMillion: z.number().nonnegative().optional(),
-    outputPricePerMillion: z.number().nonnegative().optional(),
+    ...updatePricingFields,
 }).strict().refine((value) => Object.entries(value).some(([key, field]) => key !== "expectedVersion" && field !== undefined), {
     message: "At least one update is required.",
-}).refine(withinContext, { message: "Output token limit exceeds context window." });
+}).refine(withinContext, { message: "Output token limit exceeds context window." })
+    .refine((value) => hasCompletePricingUpdate(value), {
+        message: "Price updates must include the complete pricing configuration.",
+    }).refine(hasCompleteTier, {
+        message: "Tiered pricing requires a threshold and all four high-tier prices; disabled tier pricing must be empty.",
+    });
 export type UpdateConfiguredModelCommand = z.infer<typeof updateConfiguredModelCommandSchema>;
 
 export const configuredModelSnapshotSchema = z.object({
-    ...modelFields,
+    ...modelIdentityFields,
     id: idSchema,
     providerId: idSchema,
     version: positiveIntegerSchema,
+    // Legacy snapshots may not have had every price recorded; omission stays unknown, not zero.
+    inputPricePerMillion: priceSchema.optional(),
+    outputPricePerMillion: priceSchema.optional(),
+    cacheWritePricePerMillion: priceSchema.optional(),
+    cacheReadPricePerMillion: priceSchema.optional(),
+    currency: currencySchema.default("USD"),
+    tieredPricingEnabled: z.boolean().default(false),
+    tieredPricingThreshold: positiveIntegerSchema.nullable().default(null),
+    highInputPricePerMillion: priceSchema.nullable().default(null),
+    highOutputPricePerMillion: priceSchema.nullable().default(null),
+    highCacheWritePricePerMillion: priceSchema.nullable().default(null),
+    highCacheReadPricePerMillion: priceSchema.nullable().default(null),
     // 存储层一直带这两个时间戳；快照曾漏掉它们，导致真实读取在严格解析处失败。
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
-}).strict().refine(withinContext, { message: "Output token limit exceeds context window." });
+}).strict().refine(withinContext, { message: "Output token limit exceeds context window." })
+    .refine(hasCompleteTier, {
+        message: "Tiered pricing requires a threshold and all four high-tier prices; disabled tier pricing must be empty.",
+    });
 export type ConfiguredModelSnapshot = z.infer<typeof configuredModelSnapshotSchema>;
 
 export const configuredModelPageSchema = z.object({

@@ -20,6 +20,12 @@ async function openPanel(page: Page, scene: string): Promise<Locator> {
     return expectSinglePreview(page);
 }
 
+function providerRow(page: Page, preview: Locator): Locator {
+    return preview.locator("li", {
+        has: page.getByRole("button", {name: new RegExp(`^(?:展开|收起)「${PROVIDER_NAME}」的模型$`)}),
+    });
+}
+
 /** 收集 console 错误与未捕获异常：两者都算验收失败。 */
 function watchFailures(page: Page): { readonly messages: string[] } {
     const messages: string[] = [];
@@ -30,11 +36,46 @@ function watchFailures(page: Page): { readonly messages: string[] } {
     return {messages};
 }
 
+test("model pricing requires all four base prices and retains edited currency and tiers in the Lab fixture", async ({page}) => {
+    const failures = watchFailures(page);
+    const preview = await openPanel(page, "populated");
+    const row = providerRow(page, preview);
+    await row.getByRole("button", {name: `展开「${PROVIDER_NAME}」的模型`}).click();
+    await row.getByLabel("模型 ID", {exact: true}).fill("lab-tiered-model");
+    await row.getByLabel("显示名称", {exact: true}).fill("Lab tiered model");
+    await row.getByRole("button", {name: "全部添加", exact: true}).click();
+    await expect(row.getByRole("button", {name: "编辑模型 Lab tiered model", exact: true})).toHaveCount(0);
+    for (const label of ["输入单价", "输出单价", "缓存写入单价", "缓存读取单价"]) {
+        await row.getByLabel(label, {exact: true}).fill("0");
+    }
+    await row.getByLabel("计价币种", {exact: true}).selectOption("CNY");
+    await row.getByLabel("启用阶梯定价", {exact: true}).check();
+    await expect(row.getByLabel("输入 token 阈值", {exact: true})).toHaveValue("272000");
+    for (const [label, value] of [["高档输入单价", "10"], ["高档输出单价", "20"],
+        ["高档缓存写入单价", "30"], ["高档缓存读取单价", "40"]]) {
+        await row.getByLabel(label!, {exact: true}).fill(value!);
+    }
+    await expect(row).toContainText("输入总量超过阈值，整次请求按高价档");
+    await row.getByRole("button", {name: "全部添加", exact: true}).click();
+    await row.getByRole("button", {name: "编辑模型 Lab tiered model", exact: true}).click();
+    const editor = row.getByRole("group", {name: "编辑模型 Lab tiered model", exact: true});
+    await expect(editor.getByLabel("计价币种", {exact: true})).toHaveValue("CNY");
+    await expect(editor.getByLabel("缓存写入单价", {exact: true})).toHaveValue("0");
+    await expect(editor.getByLabel("高档缓存读取单价", {exact: true})).toHaveValue("40");
+    await editor.getByLabel("计价币种", {exact: true}).selectOption("USD");
+    await editor.getByLabel("启用阶梯定价", {exact: true}).uncheck();
+    await editor.getByRole("button", {name: "保存模型修改", exact: true}).click();
+    await row.getByRole("button", {name: "编辑模型 Lab tiered model", exact: true}).click();
+    await expect(editor.getByLabel("计价币种", {exact: true})).toHaveValue("USD");
+    await expect(editor.getByLabel("启用阶梯定价", {exact: true})).not.toBeChecked();
+    expect(failures.messages).toEqual([]);
+});
+
 test("renders a provider row with its protocol, credential state and base URL", async ({page}) => {
     const failures = watchFailures(page);
     const preview = await openPanel(page, "populated");
 
-    const row = preview.locator("li", {hasText: PROVIDER_NAME});
+    const row = providerRow(page, preview);
     await expect(row).toContainText(PROVIDER_NAME);
     // 协议与凭证状态都用徽章写明，避免用户靠地址猜它走哪种请求体。
     await expect(row).toContainText("OpenAI Chat Completions");
@@ -49,7 +90,7 @@ test("renders a provider row with its protocol, credential state and base URL", 
 test("expands a provider into its models and its manual draft row", async ({page}) => {
     const failures = watchFailures(page);
     const preview = await openPanel(page, "populated");
-    const row = preview.locator("li", {hasText: PROVIDER_NAME});
+    const row = providerRow(page, preview);
 
     // 展开前不请求模型列表：十个服务商同时展开会连打十次读接口。
     await expect(row.getByRole("heading", {name: "模型"})).toHaveCount(0);
@@ -58,7 +99,8 @@ test("expands a provider into its models and its manual draft row", async ({page
     await expect(row.getByRole("button", {name: `收起「${PROVIDER_NAME}」的模型`})).toBeVisible();
     await expect(row).toContainText("DeepSeek Chat");
     await expect(row).toContainText("deepseek-chat");
-    await expect(row).toContainText("65536 / 8192");
+    await expect(row.locator("li", {hasText: "deepseek-chat"})).toContainText("上下文窗口：65,536 tokens");
+    await expect(row.locator("li", {hasText: "deepseek-chat"})).toContainText("输出上限：8,192 tokens");
 
     // 录入行仍是「一行一个模型」，预算是 placeholder 而不是预填值——留空即提交默认值。
     const draftId = row.locator('input[id^="model-id-provider-deepseek-"]');
@@ -126,7 +168,7 @@ test("editing preserves the saved key when the field is left blank", async ({pag
 test("picking discovery candidates appends them to the draft rows", async ({page}) => {
     const failures = watchFailures(page);
     const preview = await openPanel(page, "populated");
-    const row = preview.locator("li", {hasText: PROVIDER_NAME});
+    const row = providerRow(page, preview);
     const dialog = page.locator(DIALOG);
 
     await row.getByRole("button", {name: `展开「${PROVIDER_NAME}」的模型`}).click();
@@ -174,7 +216,7 @@ test("a refused delete keeps its reason on the page instead of a disappearing to
     // 取消不删：服务商还在列表里。
     await alertDialog.getByRole("button", {name: "取消"}).click();
     await expect(alertDialog).toHaveCount(0);
-    await expect(preview.locator("li", {hasText: PROVIDER_NAME})).toHaveCount(1);
+    await expect(providerRow(page, preview)).toHaveCount(1);
 
     await preview.getByRole("button", {name: `删除服务商 ${PROVIDER_NAME}`}).click();
     await alertDialog.getByRole("button", {name: "删除"}).click();
@@ -183,7 +225,7 @@ test("a refused delete keeps its reason on the page instead of a disappearing to
     await expect(alertDialog).toHaveCount(0);
     await expect(preview.getByRole("alert")).toContainText("这个模型仍是系统默认模型，请先到设置页更换或清除默认模型再删。");
     await expect(preview.getByRole("alert")).toContainText("系统默认模型仍指向它");
-    await expect(preview.locator("li", {hasText: PROVIDER_NAME})).toHaveCount(1);
+    await expect(providerRow(page, preview)).toHaveCount(1);
 
     expect(failures.messages).toEqual([]);
 });
@@ -228,7 +270,7 @@ test("the editor and the discovery dialog are reachable and closable by keyboard
     await expect(dialog).toHaveCount(0);
     await expect(addButton).toBeFocused();
 
-    const row = preview.locator("li", {hasText: PROVIDER_NAME});
+    const row = providerRow(page, preview);
     await row.getByRole("button", {name: `展开「${PROVIDER_NAME}」的模型`}).click();
     await row.getByRole("button", {name: "获取模型列表"}).click();
     await expect(dialog).toBeVisible();
@@ -253,7 +295,7 @@ test("the panel stays usable at the tablet viewport", async ({page}) => {
     const failures = watchFailures(page);
     const preview = await openPanel(page, "populated");
 
-    const row = preview.locator("li", {hasText: PROVIDER_NAME});
+    const row = providerRow(page, preview);
     await row.getByRole("button", {name: `展开「${PROVIDER_NAME}」的模型`}).click();
     await expect(row.locator('input[id^="model-id-provider-deepseek-"]')).toBeVisible();
     await expect(row.getByRole("button", {name: "全部添加"})).toBeVisible();

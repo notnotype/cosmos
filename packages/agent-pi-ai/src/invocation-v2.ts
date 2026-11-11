@@ -103,15 +103,39 @@ export class PiAiAgentInvocationV2Adapter implements AgentInvocationV2Port {
 }
 
 function calculateCost(
-    usage: { inputTokens: number; outputTokens: number },
+    usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number },
     model: AgentModelSnapshot,
-): { input: number; output: number; total: number; currency: string } | undefined {
-    if (model.inputPricePerMillion === null || model.outputPricePerMillion === null) {
+): AgentInvocationOutput["cost"] {
+    if (!isPrice(model.inputPricePerMillion) || !isPrice(model.outputPricePerMillion)
+        || (model.cacheReadPricePerMillion != null && !isPrice(model.cacheReadPricePerMillion))
+        || (model.cacheWritePricePerMillion != null && !isPrice(model.cacheWritePricePerMillion))
+        || (usage.cacheReadTokens > 0 && model.cacheReadPricePerMillion == null)
+        || (usage.cacheWriteTokens > 0 && model.cacheWritePricePerMillion == null)) {
         return undefined;
     }
-    const input = (usage.inputTokens / 1_000_000) * model.inputPricePerMillion;
-    const output = (usage.outputTokens / 1_000_000) * model.outputPricePerMillion;
-    return { input, output, total: input + output, currency: "USD" };
+    const highRates = { input: model.highInputPricePerMillion, output: model.highOutputPricePerMillion,
+        cacheRead: model.highCacheReadPricePerMillion, cacheWrite: model.highCacheWritePricePerMillion };
+    const threshold = model.tieredPricingThreshold;
+    if (model.tieredPricingEnabled === true && (typeof threshold !== "number" || !Number.isSafeInteger(threshold)
+        || threshold <= 0 || !Object.values(highRates).every(isPrice))) {
+        return undefined;
+    }
+    const promptTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+    const highTier = model.tieredPricingEnabled === true && promptTokens > (threshold ?? Infinity);
+    const rates = highTier ? highRates
+        : { input: model.inputPricePerMillion, output: model.outputPricePerMillion,
+            cacheRead: model.cacheReadPricePerMillion, cacheWrite: model.cacheWritePricePerMillion };
+    const input = (usage.inputTokens / 1_000_000) * (rates.input ?? 0);
+    const output = (usage.outputTokens / 1_000_000) * (rates.output ?? 0);
+    const cacheRead = (usage.cacheReadTokens / 1_000_000) * (rates.cacheRead ?? 0);
+    const cacheWrite = (usage.cacheWriteTokens / 1_000_000) * (rates.cacheWrite ?? 0);
+    const total = input + output + cacheRead + cacheWrite;
+    if (![input, output, cacheRead, cacheWrite, total].every(Number.isFinite)) return undefined;
+    return { input, output, cacheRead, cacheWrite, total, currency: model.currency ?? "USD" };
+}
+
+function isPrice(value: number | null | undefined): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function assertNotAborted(context: AgentInvocationContext): void {
@@ -209,14 +233,20 @@ function mapResponseV2(
                     ? "stop"
                     : null;
 
-    if (finishReason === null || response.usage.input < 0 || response.usage.output < 0) {
+    const tokenCounts = [response.usage.input, response.usage.output, response.usage.cacheRead,
+        response.usage.cacheWrite, response.usage.totalTokens];
+    const totalTokens = response.usage.input + response.usage.output + response.usage.cacheRead + response.usage.cacheWrite;
+    if (finishReason === null || tokenCounts.some((count) => !Number.isSafeInteger(count) || count < 0)
+        || !Number.isSafeInteger(totalTokens)) {
         throw new ActionExecutionError("malformed_payload", "pi-ai returned an unsupported response.", false);
     }
 
     const usage = {
         inputTokens: response.usage.input,
         outputTokens: response.usage.output,
-        totalTokens: response.usage.totalTokens,
+        cacheReadTokens: response.usage.cacheRead,
+        cacheWriteTokens: response.usage.cacheWrite,
+        totalTokens,
     };
     const cost = calculateCost(usage, model);
 

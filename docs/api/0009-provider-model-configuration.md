@@ -19,7 +19,17 @@
 | GET `/config/default-model` | 无 | `{modelId:string\|null}` | 旧读取保留 |
 | PUT `/config/default-model` | `{modelId:string\|null}` | `{modelId}` | 旧写入保留，共用选择有效性校验 |
 
-完整模型快照包含可选输入/输出每百万 token 价格，读取未知价格省略，0 保留。当前创建模型省略价格时，Prisma 缺省写入 0，后续是已知零价，不是未知；只有 null/缺失投影才省略价格，具体见 [DTO 补充](../spec/contracts/0001-public-contracts.md#task-42-当前合同补充)。已删除默认模型时保留 ID、模型为 null。非空选择在同一事务校验存在性与 Provider active 并 upsert；删除先完成则设置失败，设置先完成仍可随后删除并形成失效默认值。400/404/409/503、安全错误与 no-store 的当前合同见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)。Web/transport 使用 `getSystemConfig` / `updateSystemConfig`，PUT 确认响应不能按完整 GET DTO 解码。费用不由 Connection 或配置页面拥有；Story optional cost 的冻结目标见 [Story API](0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)，实现和运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录。
+完整模型快照包含普通四价、币种及阶梯配置，读取未知价格省略，0 保留。新建普通四价必填；旧模型保留两价，缓存未知不补零，具体见 [DTO 补充](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)。已删除默认模型时保留 ID、模型为 null。非空选择在同一事务校验存在性与 Provider active 并 upsert；删除先完成则设置失败，设置先完成仍可随后删除并形成失效默认值。400/404/409/503、安全错误与 no-store 的当前合同见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)。Web/transport 使用 `getSystemConfig` / `updateSystemConfig`，PUT 确认响应不能按完整 GET DTO 解码。费用不由 Connection 或配置页面拥有；Story optional cost 的冻结目标见 [Story API](0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)，实现和运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录。
+
+## 模型缓存与两档定价目标草案（2026-11-11）
+
+**已实现并通过本轮隔离验收**：Otirik 确认的[完整 Proposal](../proposals/model-cache-tiered-pricing-v1.md)复用 Task 42。以下行为已进入当前实现，精确合同见 [公共合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)；全仓回归、浏览器与组件实验室的分层证据见 Task 本轮过程，不代表真实 Provider 或部署验收。
+
+- 新建保留 `inputPricePerMillion`/`outputPricePerMillion`，新增 `cacheWritePricePerMillion`/`cacheReadPricePerMillion`；普通四价必填有限非负数，0 合法。`currency` 为 USD/CNY，不换汇。新增 `tieredPricingEnabled`（默认 false）、`tieredPricingThreshold`（正整数或 null）、`highInputPricePerMillion`/`highOutputPricePerMillion`/`highCacheWritePricePerMillion`/`highCacheReadPricePerMillion`（有限非负或 null）。启用须阈值和高档四价齐全；关闭时阈值和高档四价全为 null。全部显式列，UI 开启时预填阈值 272000，价格无截图默认值。
+- POST/PATCH/list/get 和默认模型投影保持一致；PATCH 价格配置须完整组原子替换，沿用 expectedVersion，不接收混合新旧档的局部价格修改；metadata-only 修改保留旧价。旧模型保留两价，缓存 NULL 未知、USD、阶梯关闭，主动保存价格时补齐普通四价。Web 新增编辑入口，保存回填并显示币种、四价和阈值摘要。
+- 实际 prompt 总输入 >阈值时整次调用四类费用全部按高档；272000 普通、272001 高档，无分段累进。新增 optional `usage.cacheWriteTokens/cacheReadTokens` 和 `cost.cacheWrite/cacheRead` 兼容历史，新运行输出完整分项，费用 total 为四项之和。input/output 任一价格未知始终省略整个 cost；缓存非零用量价格未知也省略 cost，缓存零用量对应未知价格费用为 0。历史实际 cost 不重算。总输入 = 普通 input + cacheWrite + cacheRead，output 不参与阈值；Leader 通过包管理器确认本地 pi-ai 为 0.55.4，并由核对代理确认该发布版本两种 OpenAI provider 的普通 input 扣除 cacheRead、cacheWrite 为 0，来源见 Proposal；SDK 映射依据与本轮运行验收分别记录于 Task。
+
+独立 additive SQL 已落地并有隔离验证，未迁移用户数据库或部署。配置、调用和 Web 已通过本轮构建、全仓回归及离线浏览器/组件实验室验收，证据见 [Task 本轮过程](../../.agents/tasks/42-default-model-ui-api/walkthrough.md)；预算、换汇、多阶与真实 Provider 外呼不在本轮范围。
 
 ## 所有者与首个消费者
 
@@ -28,10 +38,10 @@
 ## DTO 与输入约束
 
 - ProviderSnapshot：id、name、api（openai-completions/openai-responses）、baseUrl、version、state、credentialState（configured/cleanup_pending）、createdAt、updatedAt。不返回 secretRef、key、尾号或上游错误。state 的 schema 允许 active/deleting 两值，但同步删除不产生中间态，当前实现只会写出 active；保留 deleting 是为将来引入异步删除时不改 DTO。
-- ModelSnapshot：id、providerId、modelId（上游标识）、name、contextWindow、maxOutputTokens、可选 inputPricePerMillion/outputPricePerMillion、version、createdAt、updatedAt。POST/PATCH/list/get 一致返回已知价格（含 0），null/缺失价格省略。首版纯文本，无能力自动推断；输出上限不得超过上下文窗口。Provider 内 modelId 唯一，Provider 名称不是身份。两个时间戳与 ProviderSnapshot 一致：存储层一直记录它们，读取快照若漏掉会在严格校验处失败。
+- ModelSnapshot：id、providerId、modelId（上游标识）、name、contextWindow、maxOutputTokens、普通四价（未知省略）、币种与阶梯配置、version、createdAt、updatedAt。POST/PATCH/list/get 一致返回已知价格（含 0），null/缺失价格省略。首版纯文本，无能力自动推断；输出上限不得超过上下文窗口。Provider 内 modelId 唯一，Provider 名称不是身份。两个时间戳与 ProviderSnapshot 一致：存储层一直记录它们，读取快照若漏掉会在严格校验处失败。
 - 配置名称 1–200 字符；上游模型标识 1–200；baseUrl 最多 2048；token 上限为正安全整数；API key 非空、最多 8192 字符、禁止 CR/LF，不 trim 后改写真实值。模型支持范围由协议测试证明，不接受任意 JSON 配置。
 - CreateProvider：name/api/baseUrl/apiKey；UpdateProvider：expectedVersion 与可选 name/api/baseUrl/apiKey，至少一项修改。key 省略表示保留，空字符串不表示删除。只在这两个命令接收 key；所有对象 strict，拒绝额外字段。
-- CreateModel：modelId/name/contextWindow/maxOutputTokens 与可选 inputPricePerMillion/outputPricePerMillion（USD/每百万 token，非负）；UpdateModel：expectedVersion 和可选同类字段。创建省略价格命中存储默认 0，更新省略保留既有价格；模型不可移到其它 Provider。
+- CreateModel：modelId/name/contextWindow/maxOutputTokens 与普通四价必填；币种/阶梯的默认与完整性约束见[当前合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)。UpdateModel：expectedVersion + metadata 或完整价格组；metadata-only 保留旧价，模型不可移到其它 Provider。
 - 列表统一 {items,nextCursor}，limit 默认 50、最大 100；游标只含不透明标识，不含凭证；按 id 稳定排序，不宣称跨页事务快照。
 
 ## Product API 路由（/api/v1）

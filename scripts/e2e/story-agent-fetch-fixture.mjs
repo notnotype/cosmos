@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const originalFetch = globalThis.fetch;
 const requestSchema = z.object({
-    model: z.literal("synthetic-story-model"),
+    model: z.enum(["synthetic-story-model", "synthetic-story-model-at-threshold", "synthetic-story-model-above-threshold"]),
     messages: z.array(z.object({ role: z.string(), content: z.string().nullable().optional() }).passthrough()),
 }).passthrough();
 let calls = 0;
@@ -25,8 +25,15 @@ globalThis.fetch = async (input, init) => {
     const chunk = (delta, finishReason, usage) => ({ id: `chatcmpl-synthetic-${calls}`, object: "chat.completion.chunk",
         created: 1_793_000_000, model: body.model, choices: [{ index: 0, delta, finish_reason: finishReason }],
         ...(usage ? { usage } : {}) });
+    const usage = body.model === "synthetic-story-model"
+        ? { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30,
+            prompt_tokens_details: { cached_tokens: 0 } }
+        : { prompt_tokens: body.model === "synthetic-story-model-at-threshold" ? 272000 : 272001,
+            completion_tokens: 1,
+            total_tokens: body.model === "synthetic-story-model-at-threshold" ? 272001 : 272002,
+            prompt_tokens_details: { cached_tokens: 1 } };
     const events = [chunk({ role: "assistant", content: proposal }, null),
-        chunk({}, "stop", { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 })];
+        chunk({}, "stop", usage)];
     return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n", {
         headers: { "content-type": "text/event-stream" },
     });

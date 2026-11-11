@@ -18,6 +18,9 @@ function serviceWith(initialValue: string | null = null) {
         async getModelSelection(id: string) { return { model: {
             id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
             contextWindow: 128000, maxOutputTokens: 4096, version: 1,
+            currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+            highInputPricePerMillion: null, highOutputPricePerMillion: null,
+            highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
             createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
         }, providerState: "active" }; },
         async setDefaultModelWithValidation(id, validate) {
@@ -116,6 +119,9 @@ describe("SystemConfigController", () => {
             async getModelSelection(id: string) { return { model: {
                 id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
                 contextWindow: 128000, maxOutputTokens: 4096, version: 1,
+                currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+                highInputPricePerMillion: null, highOutputPricePerMillion: null,
+                highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
                 createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
             }, providerState: "active" }; },
             async setDefaultModelWithValidation(id, validate) {

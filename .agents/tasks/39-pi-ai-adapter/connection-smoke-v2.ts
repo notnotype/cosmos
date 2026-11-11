@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -17,7 +17,7 @@ import { createWorkerAgentInvocationV2Action } from "../../../apps/worker/src/ag
 import {
     ISOLATION_PARENT, SNAPSHOT_COMMIT, SYNTHETIC_CREDENTIAL,
     assertUsableCredential, createCountingLogger, createSafeDiagnostics, model, prepareDatabase, provider,
-    readCredentialWithoutEcho, validateRunnerInvocation, withBoundedProviderTransport,
+    readCredentialWithoutEcho, validateRunnerInvocation, withBoundedProviderTransport, modelPricingOverlayMetadata, snapshotPath,
 } from "./connection-smoke-harness.js";
 import type { DiagnosticStage } from "./connection-smoke-harness.js";
 
@@ -92,6 +92,8 @@ export async function configureModelConnection(
     await step("model_configure", () => models.create(V2_PROVIDER_ID, {
         modelId: model, name: "Task 39 v2 verification model",
         contextWindow: 262_144, maxOutputTokens: 64,
+        // These isolated fixture rates are unrelated to the provider's actual billing.
+        inputPricePerMillion: 0, outputPricePerMillion: 0, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0,
     }));
     const providerRow = await repository.prisma.modelProvider.findUnique({
         where: { id: V2_PROVIDER_ID }, select: { secretRef: true },
@@ -140,7 +142,7 @@ function expectAuthenticationRequired(error: unknown): boolean {
 export async function runOfflineV2Smoke() {
     await mkdir(ISOLATION_PARENT, { recursive: true });
     const root = await mkdtemp(join(ISOLATION_PARENT, V2_OFFLINE_ROOT_PREFIX));
-    const { databaseUrl, migrationCount } = await prepareDatabase(root);
+    const { databaseUrl, migrationCount } = await prepareDatabase(root, { modelPricingOverlay: true });
     const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     const logs: unknown[] = [];
     const repository = new PrismaCosmosRepository({ dataRoot: root, prisma, logger: createCountingLogger(logs) });
@@ -173,7 +175,7 @@ export async function runOfflineV2Smoke() {
         if (requests.length !== 2) throw new Error("Rejected calls still reached the SDK.");
         const result = {
             status: "completed", mode: "offline-v2", isolatedRoot: root, snapshotCommit: SNAPSHOT_COMMIT,
-            migrationCount, ...first, providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
+            migrationCount, schemaOverlay: modelPricingOverlayMetadata(), ...first, providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
             sdkCalls: requests.length,
             // 模型、地址与凭证都由模型解析结果决定，不是调用方声明的；Provider 记的是配置行 ID
             // （`V2_PROVIDER_ID`），不是上游模型品牌名。
@@ -195,6 +197,7 @@ export async function runOfflineV2Smoke() {
 export function requestPlanV2(root: string) {
     return {
         mode: "real-v2", isolatedRoot: root, snapshotCommit: SNAPSHOT_COMMIT,
+        schemaOverlay: modelPricingOverlayMetadata(), schemaOverlayManifest: "model-pricing-overlay-manifest.json",
         providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
         provider, model, api: "openai-completions", baseUrl: V2_BASE_URL,
         messages: [{ role: "user", content: "Reply with exactly: OK" }], tools: [], metadata: {},
@@ -207,7 +210,7 @@ export function requestPlanV2(root: string) {
 export async function prepareRealSmokeV2() {
     await mkdir(ISOLATION_PARENT, { recursive: true });
     const root = await mkdtemp(join(ISOLATION_PARENT, V2_ROOT_PREFIX));
-    const database = await prepareDatabase(root);
+    const database = await prepareDatabase(root, { modelPricingOverlay: true });
     await writeFile(join(root, V2_PLAN_FILE), JSON.stringify(requestPlanV2(root), null, 4), { flag: "wx" });
     return { status: "prepared-no-request", isolatedRoot: root, ...database, plan: requestPlanV2(root) };
 }
@@ -220,6 +223,14 @@ export async function validatePreparedRootV2(root: string): Promise<string> {
     }
     const plan = JSON.parse(await readFile(join(resolved, V2_PLAN_FILE), "utf8")) as unknown;
     if (JSON.stringify(plan) !== JSON.stringify(requestPlanV2(resolved))) throw new Error("Request plan changed.");
+    const overlay = modelPricingOverlayMetadata();
+    if (JSON.stringify(JSON.parse(await readFile(join(resolved, "model-pricing-overlay-manifest.json"), "utf8"))) !== JSON.stringify(overlay)) {
+        throw new Error("Model pricing overlay changed.");
+    }
+    for (const file of overlay.files) {
+        const bytes = await readFile(join(resolved, "model-pricing-schema", snapshotPath, file.path));
+        if (createHash("sha256").update(bytes).digest("hex") !== file.sha256) throw new Error("Model pricing overlay changed.");
+    }
     return resolved;
 }
 

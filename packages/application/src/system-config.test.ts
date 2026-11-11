@@ -7,6 +7,9 @@ const model: ConfiguredModelSnapshot = {
     contextWindow: 128000, maxOutputTokens: 4096, version: 1,
     createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
     inputPricePerMillion: 30, outputPricePerMillion: 60,
+    currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
 };
 
 function serviceWith(initialModelId: string | null = null) {

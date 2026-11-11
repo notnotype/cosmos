@@ -30,6 +30,8 @@ export async function configureStoryConnection(repository: PrismaCosmosRepositor
         command: { name: "Task40 isolated acceptance", api: "openai-completions", baseUrl: "https://api-slb.jiji.cc/v1", apiKey: credential } });
     await new ConfiguredModels(new PrismaConfiguredModelRepository(repository.prisma), () => configuredModelId).create(providerId, {
         modelId: acceptancePlan.model, name: "Task40 acceptance", contextWindow: 262_144, maxOutputTokens: acceptancePlan.maxOutputTokens,
+        // Isolated acceptance rates preserve the previous fixture defaults, not the provider's actual billing.
+        inputPricePerMillion: 0, outputPricePerMillion: 0, cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0,
     });
     return { modelId: configuredModelId, models: new PrismaAgentModelResolver(
         repository.prisma,

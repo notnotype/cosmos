@@ -245,7 +245,10 @@ describe("Task 39 model-scoped @2 smoke", () => {
         try {
             const result = await prepareRealSmokeV2();
             expect(result.status).toBe("prepared-no-request");
-            expect(result.migrationCount).toBe(43);
+            expect(result.migrationCount).toBe(44);
+            expect(result.plan.schemaOverlay).toMatchObject({ baseCommit: SNAPSHOT_COMMIT, migrationName: "20261111080000_task_42_cache_tiered_pricing", source: "current-working-tree" });
+            expect(result.plan.schemaOverlay.files.map((file) => file.path)).toEqual(["schema.prisma", "migrations/20261111080000_task_42_cache_tiered_pricing/migration.sql"]);
+            expect(result.plan.schemaOverlay.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256))).toBe(true);
             expect(await validatePreparedRootV2(result.isolatedRoot)).toBe(result.isolatedRoot);
             expect(result.plan).toEqual(requestPlanV2(result.isolatedRoot));
             // 预披露计划绑定服务端配置的模型与服务商，调用方不能覆盖地址或凭证。
@@ -279,7 +282,7 @@ describe("Task 39 model-scoped @2 smoke", () => {
         try {
             const result = await runOfflineV2Smoke();
             expect(result).toMatchObject({
-                mode: "offline-v2", status: "completed", migrationCount: 43,
+                mode: "offline-v2", status: "completed", migrationCount: 44,
                 providerId: V2_PROVIDER_ID, configuredModelId: V2_CONFIGURED_MODEL_ID,
                 secretReads: 1, sdkCalls: 2, outputMatchesExpected: true,
                 credentialAbsentFromOutput: true, resolvedFromModel: true, maxOutputTokensClamped: true,

@@ -5,6 +5,10 @@ const select = {
     id: true, providerId: true, modelId: true, name: true,
     contextWindow: true, maxOutputTokens: true, version: true,
     inputPricePerMillion: true, outputPricePerMillion: true,
+    cacheWritePricePerMillion: true, cacheReadPricePerMillion: true,
+    currency: true, tieredPricingEnabled: true, tieredPricingThreshold: true,
+    highInputPricePerMillion: true, highOutputPricePerMillion: true,
+    highCacheWritePricePerMillion: true, highCacheReadPricePerMillion: true,
     createdAt: true, updatedAt: true,
 } as const;
 
@@ -14,6 +18,10 @@ type ModelRow = {
     id: string; providerId: string; modelId: string; name: string;
     contextWindow: number; maxOutputTokens: number; version: number;
     inputPricePerMillion?: DecimalValue | null; outputPricePerMillion?: DecimalValue | null;
+    cacheWritePricePerMillion?: DecimalValue | null; cacheReadPricePerMillion?: DecimalValue | null;
+    currency?: string; tieredPricingEnabled?: boolean; tieredPricingThreshold?: bigint | number | null;
+    highInputPricePerMillion?: DecimalValue | null; highOutputPricePerMillion?: DecimalValue | null;
+    highCacheWritePricePerMillion?: DecimalValue | null; highCacheReadPricePerMillion?: DecimalValue | null;
     createdAt: Date; updatedAt: Date;
 };
 
@@ -21,15 +29,14 @@ type ModelClient = {
     configuredModel: {
         findMany(input: { where: { providerId: string }; orderBy: { id: "asc" }; select: typeof select }): Promise<ModelRow[]>;
         findFirst(input: { where: { id: string; providerId: string }; select: typeof select }): Promise<ModelRow | null>;
-        create(input: { data: {
-            id: string; providerId: string; modelId: string; name: string;
-            contextWindow: number; maxOutputTokens: number; inputPricePerMillion?: number; outputPricePerMillion?: number;
+        create(input: { data: { id: string; providerId: string } & Omit<CreateConfiguredModelCommand, "tieredPricingThreshold"> & {
+            tieredPricingThreshold?: bigint | null;
         }; select: typeof select }): Promise<ModelRow>;
-        updateMany(input: { where: { id: string; providerId: string; version: number }; data: {
-            modelId?: string; name?: string; contextWindow?: number; maxOutputTokens?: number;
-            inputPricePerMillion?: number; outputPricePerMillion?: number;
-            version: { increment: 1 };
-        } }): Promise<{ count: number }>;
+        updateMany(input: { where: { id: string; providerId: string; version: number }; data:
+            Omit<UpdateConfiguredModelCommand, "expectedVersion" | "tieredPricingThreshold"> & {
+                tieredPricingThreshold?: bigint | null; version: { increment: 1 };
+            };
+        }): Promise<{ count: number }>;
         deleteMany(input: { where: { id: string; providerId: string; version: number } }): Promise<{ count: number }>;
     };
 };
@@ -62,6 +69,14 @@ function snapshot(row: ModelRow): Record<string, unknown> {
         createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
         ...(row.inputPricePerMillion == null ? {} : { inputPricePerMillion: Number(row.inputPricePerMillion) }),
         ...(row.outputPricePerMillion == null ? {} : { outputPricePerMillion: Number(row.outputPricePerMillion) }),
+        ...(row.cacheWritePricePerMillion == null ? {} : { cacheWritePricePerMillion: Number(row.cacheWritePricePerMillion) }),
+        ...(row.cacheReadPricePerMillion == null ? {} : { cacheReadPricePerMillion: Number(row.cacheReadPricePerMillion) }),
+        currency: row.currency ?? "USD", tieredPricingEnabled: row.tieredPricingEnabled ?? false,
+        tieredPricingThreshold: row.tieredPricingThreshold == null ? null : Number(row.tieredPricingThreshold),
+        highInputPricePerMillion: row.highInputPricePerMillion == null ? null : Number(row.highInputPricePerMillion),
+        highOutputPricePerMillion: row.highOutputPricePerMillion == null ? null : Number(row.highOutputPricePerMillion),
+        highCacheWritePricePerMillion: row.highCacheWritePricePerMillion == null ? null : Number(row.highCacheWritePricePerMillion),
+        highCacheReadPricePerMillion: row.highCacheReadPricePerMillion == null ? null : Number(row.highCacheReadPricePerMillion),
     };
 }
 
@@ -80,8 +95,13 @@ export class PrismaConfiguredModelRepository implements ConfiguredModelRepositor
 
     async create(input: { id: string; providerId: string; fields: CreateConfiguredModelCommand }): Promise<unknown> {
         try {
+            const { tieredPricingThreshold, ...fields } = input.fields;
             return snapshot(await this.client.configuredModel.create({
-                data: { id: input.id, providerId: input.providerId, ...input.fields }, select,
+                data: { id: input.id, providerId: input.providerId, ...fields,
+                    ...(tieredPricingThreshold === undefined ? {} : {
+                        tieredPricingThreshold: tieredPricingThreshold === null ? null : BigInt(tieredPricingThreshold),
+                    }),
+                }, select,
             }));
         } catch (error) {
             if (isDuplicateModel(error)) {
@@ -92,9 +112,14 @@ export class PrismaConfiguredModelRepository implements ConfiguredModelRepositor
     }
 
     async update(input: { id: string; providerId: string; expectedVersion: number; fields: Omit<UpdateConfiguredModelCommand, "expectedVersion"> }): Promise<unknown> {
+        const { tieredPricingThreshold, ...fields } = input.fields;
         const changed = await this.client.configuredModel.updateMany({
             where: { id: input.id, providerId: input.providerId, version: input.expectedVersion },
-            data: { ...input.fields, version: { increment: 1 } },
+            data: { ...fields, version: { increment: 1 },
+                ...(tieredPricingThreshold === undefined ? {} : {
+                    tieredPricingThreshold: tieredPricingThreshold === null ? null : BigInt(tieredPricingThreshold),
+                }),
+            },
         });
         if (changed.count !== 1) return conflict();
         const row = await this.get(input.providerId, input.id);

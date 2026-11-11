@@ -91,13 +91,21 @@ Asset download 中未被 client 封装的部分不由它承担。
 
 设置页通过 `getSystemConfig()` 读取当前默认模型，并列出 active Provider 下可选模型。当前详情显示名称、上游标识、服务商、上下文窗口、输出上限、已知单价及可展开的版本/时间戳；未知单价不补零。选项改变先形成草稿，点击保存才调用 `updateSystemConfig({defaultModelId})`；保存中禁用选择和按钮，成功后更新当前值。选“未设置”要确认后才写 null；取消确认不清除。加载失败可重新加载；保存失败保留草稿，按 400/404/409/503 显示安全错误，可改选或重载后重试。当前 ID 已失效时保留提示，允许明确清除或替换，不自动换模型。
 
-Story 生成面板读取系统默认模型显示预估，但请求不传 modelId，服务端使用执行时解析的默认配置；没有临时模型下拉，改默认需回设置页。预估只按纯文本情景：输入 1000–4000、输出 256–1024 token，并按模型上下文及输出上限收紧；须两项价格都已知且上下文至少 2 token，否则显示无法估算。该区间不是实际分词、费用上限或结算承诺，查询配置失败、未设置默认和未知价格分别降级。
+Story 生成面板读取系统默认模型显示预估，但请求不传 modelId，服务端使用执行时解析的默认配置；没有临时模型下拉，改默认需回设置页。预估只按纯文本情景：输入 1000–4000、输出 256–1024 token，并按模型上下文及输出上限收紧；须普通输入/输出两价为有限非负数且上下文至少 2 token；普通缓存价格未知或非法不影响此无缓存预估。启用阶梯时还须合法阈值和完整高档四价，否则显示无法估算。预估明确不使用缓存，各端点按自身输入量选档；阈值低于某端点输入时该端点用高档，不能一概按普通档估算。币种来自模型，不换汇。该区间不是实际分词、费用上限或结算承诺，查询配置失败、未设置默认和未知价格分别降级。
 
-Story 实际费用只显示在持久候选卡片，generation 区域只显示状态；读取 `record.candidate.cost` 的 input/output/total/currency，不由浏览器按当前价重算。缺失时不渲染实际费用；0 正常显示，极小正数小于 0.00000001 时显示 `<0.00000001`，其余金额最多 8 位小数并去尾零。费用是按调用 usage 与当时配置价格计算的调用结果，不是服务商账单。刷新或重新打开 Story 后从候选列表恢复；pending/accepted/rejected 候选的既有金额不因决定而重算。实现与测试锚点：[持久候选展示](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.tsx)、[费用组件测试](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts)、[候选展示测试](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts)。
+Story 实际费用只显示在持久候选卡片，generation 区域只显示状态；读取 `record.candidate.cost` 的 input/output/total/currency，并在 cacheWrite/cacheRead 存在时显示缓存分项；历史缺项不显示该分项、不补 0，不由浏览器按当前价重算。缺失时不渲染实际费用；0 正常显示，极小正数小于 0.00000001 时显示 `<0.00000001`，其余金额最多 8 位小数并去尾零。费用是按调用 usage 与当时配置价格计算的调用结果，不是服务商账单。刷新或重新打开 Story 后从候选列表恢复；pending/accepted/rejected 候选的既有金额不因决定而重算。实现与测试锚点：[持久候选展示](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.tsx)、[费用组件测试](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts)、[候选展示测试](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts)。
 
 Connection 面板只管理外部账号授权、连接状态与登录探测，不再用于选模型；模型目录与默认模型设置独立管理。费用与成功状态的服务端约束见 [Product API](0002-product-api-http.md#task-42-当前合同补充)，预估不作为调用结果。
 
-重建验收：加载详情→改选但未保存→保存成功；清除确认取消/确认；加载与保存失败恢复；失效默认 ID 提示；缺价与零单价预估；连接列表无模型选择。实现/测试锚点：[默认设置面板](../../../apps/web/src/components/cosmos/default-model-panel.tsx)、[选项与错误处理](../../../apps/web/src/components/cosmos/default-model-settings.ts)、[模型详情](../../../apps/web/src/components/cosmos/model-details.tsx)、[费用估算](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.tsx)、[设置测试](../../../apps/web/src/components/cosmos/default-model-panel.test.ts)。上述是从代码核对的行为，本轮运行证据归 [Task 42](../../../.agents/tasks/42-default-model-ui-api/README.md)。
+重建验收：加载详情→改选但未保存→保存成功；清除确认取消/确认；加载与保存失败恢复；失效默认 ID 提示；缺价与零单价预估；连接列表无模型选择。实现/测试锚点：[默认设置面板](../../../apps/web/src/components/cosmos/default-model-panel.tsx)、[选项与错误处理](../../../apps/web/src/components/cosmos/default-model-settings.ts)、[模型详情](../../../apps/web/src/components/cosmos/model-details.tsx)、[费用估算](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.tsx)、[设置测试](../../../apps/web/src/components/cosmos/default-model-panel.test.ts)。上述是从代码核对的行为，本轮运行证据归 [Task 42 本轮过程](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)。
+
+## 模型定价编辑当前合同
+
+模型目录支持普通四价、币种、阶梯开关、阈值和完整高档四价的创建与编辑；字段约束由 [公共合同](../contracts/0001-public-contracts.md#模型定价与调用费用当前合同)拥有。普通四价必填，零价合法，不用截图示例预填；开启阶梯时默认阈值 272000，关闭提交 null 阈值/高档。模型详情与默认模型设置摘要独立展示计价币种和阶梯开启/关闭，即使所有价格未知也显示；普通四价未知明确显示未知，启用时继续展示阈值与完整高档四价。
+
+编辑从模型快照回填；只改名称等 metadata 时保留原价格未知状态，不强迫旧模型补缓存价格。主动改价格配置须补齐普通四价并提交完整价格组。保存成功按服务端快照更新，失败保留草稿；409 version_conflict 明示冲突且不自动重试，显式重新加载需确认放弃当前草稿，再读取最新快照供核对。保存动作不调用真实模型。
+
+重建验收覆盖创建/编辑保存与回填、启用/关闭阶梯、零价/未知、旧模型 metadata-only、409 保稿及重新加载确认、设置摘要高档四价、预估端点跨阈值和实际费用历史缺项。实现锚点：[模型列表](../../../apps/web/src/components/cosmos/provider-models-section.tsx)、[编辑行](../../../apps/web/src/components/cosmos/provider-model/configured-model-row.tsx)、[价格表单](../../../apps/web/src/components/cosmos/provider-model/model-pricing-fields.tsx)、[草稿命令](../../../apps/web/src/components/cosmos/provider-model-draft.ts)、[模型详情](../../../apps/web/src/components/cosmos/model-details.tsx)。功能已实现，整体验证进行中，浏览器实际运行证据与全仓结果由 [Task 42 本轮过程](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)记录，不能把测试用例已收集视为浏览器通过。
 
 ## 非目标/边界
 

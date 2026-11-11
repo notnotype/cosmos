@@ -18,7 +18,7 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         const model = {
             modelId: "synthetic-model", modelName: "Synthetic", providerId: "synthetic-provider", api: "openai-completions" as const,
             baseUrl: "https://synthetic.invalid/v1", contextWindow: 4096, maxOutputTokens: 256, secretRef: "opaque-ref",
-            inputPricePerMillion: 1, outputPricePerMillion: 1,
+            inputPricePerMillion: 10_000, outputPricePerMillion: 20_000,
         };
         const models = { resolve: vi.fn(async (id: string | null) => id === modelId ? model : null) };
         const complete = vi.fn(async () => ({
@@ -37,12 +37,16 @@ it("queues once, resumes through the durable Worker and requires a human decisio
                 read: async () => "synthetic-key", put: async () => { throw new Error("Unexpected write"); }, delete: async () => false,
             }, client: { complete } }), application.createStoryAgentSaveAction({ saveGenerated: async (candidate, fence) => {
                 persisted = { candidate, fence };
-                return candidates.saveGenerated(candidate, fence);
+                const record = await candidates.saveGenerated(candidate, fence);
+                expect(await candidates.saveGenerated(candidate, fence)).toEqual(record);
+                await expect(candidates.saveGenerated({ ...candidate,
+                    cost: { input: 9, output: 9, total: 18, currency: "USD" } }, fence)).rejects.toThrow("replay mismatch");
+                return record;
             } })],
             leaseMs: 60_000,
         };
         const host = createWorkflowHost({ ...options, owner: "enqueue-host" });
-        const control = new application.StoryAgentWorkflowControl({ store: host.store,
+        const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates,
             stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
             content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected full content read"); } }),
         });
@@ -56,9 +60,33 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         const recovered = createWorkflowHost({ ...options, owner: "recovered-worker" });
         expect((await drainWorkflow(recovered, queued.runId)).status).toBe("completed");
         const finished = await control.read("story", queued.runId);
-        expect(finished).toMatchObject({ status: "completed", candidateId: `story-candidate-${queued.runId}` });
+        expect(finished).toMatchObject({ status: "completed", candidateId: `story-candidate-${queued.runId}`,
+            cost: { input: 0.01, output: 0.02, total: 0.03, currency: "USD" } });
         expect(complete).toHaveBeenCalledOnce();
         expect(await control.enqueue(request)).toEqual(finished);
+        const restartedControl = new application.StoryAgentWorkflowControl({ store: recovered.store,
+            candidates: new PrismaStoryAgentCandidateRepository(repository.prisma),
+            stories: { readStory: async () => { throw new Error("Historical reads must use the durable snapshot"); } },
+            content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }),
+        });
+        model.inputPricePerMillion = 999;
+        model.outputPricePerMillion = 999;
+        expect(await restartedControl.read("story", queued.runId)).toEqual(finished);
+        const saved = await candidates.get(finished.candidateId!);
+        expect(saved?.cost).toEqual(finished.cost);
+        const get = vi.spyOn(candidates, "get");
+        for (const value of [null, { ...saved!, id: "other-candidate" }, { ...saved!, storyId: "other-story" },
+            { ...saved!, storyRevisionId: "other-revision" },
+            { ...saved!, proposal: { task: "story.review-content-quality" as const, findings: [] } }]) {
+            get.mockResolvedValueOnce(value);
+            expect(await control.read("story", queued.runId)).not.toHaveProperty("cost");
+        }
+        const { cost: _oldCost, ...legacy } = saved!;
+        get.mockResolvedValueOnce(legacy);
+        expect(await control.read("story", queued.runId)).not.toHaveProperty("cost");
+        get.mockResolvedValueOnce({ ...saved!, cost: { input: 0, output: 0, total: 0, currency: "USD" } });
+        expect(await control.read("story", queued.runId)).toHaveProperty("cost.total", 0);
+        get.mockRestore();
         expect(persisted).toBeDefined();
         await expect(candidates.saveGenerated(persisted!.candidate, persisted!.fence)).rejects.toThrow("Workflow Run fence lost or Kernel revision changed.");
         expect(await repository.prisma.storyAgentCandidate.count()).toBe(1);
@@ -119,7 +147,7 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
                     return record;
                 } })],
             });
-            const control = new application.StoryAgentWorkflowControl({ store: host.store,
+            const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates,
                 stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
                 content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }),
             });
@@ -136,10 +164,15 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
             }
             const result = await control.read("story", queued.runId);
             expect(result).toMatchObject({ status: mode === "cancel" ? "cancelled" : "failed", candidateId: null });
+            expect(result).not.toHaveProperty("cost");
             expect(await host.backend.loadRun(queued.runId)).toMatchObject({ status: result.status });
             expect(JSON.stringify(result)).not.toContain("SYNTHETIC-PRIVATE-ERROR");
             expect(complete).toHaveBeenCalledTimes(mode === "revoked" ? 0 : 1);
             expect(await repository.prisma.storyAgentCandidate.count()).toBe(mode === "save-unknown" ? 1 : 0);
+            if (mode === "save-unknown") {
+                const orphan = await candidates.get(`story-candidate-${queued.runId}`);
+                expect(orphan).toHaveProperty("cost");
+            }
             expect(await repository.prisma.storyRevision.count()).toBe(1);
         }
     });

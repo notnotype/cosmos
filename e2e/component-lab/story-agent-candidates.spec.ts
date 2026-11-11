@@ -12,7 +12,7 @@ for (const sourceStatus of ["superseded", "unavailable"] as const) {
             await page.goto(`/dev/components?component=story-agent-candidates&scene=interactive&viewport=${width}`);
             const preview = await expectSinglePreview(page);
             await preview.getByLabel("模拟来源证据", { exact: true }).selectOption(sourceStatus);
-            await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
+            await expect(preview.getByLabel("模型连接", { exact: true })).toHaveCount(0);
             await preview.getByRole("button", { name: "生成建议", exact: true }).click();
             await expect(preview).toContainText(sourceStatus === "superseded" ? "基于旧版内容表示" : "原输入证据暂不可用");
             await expect(preview.getByRole("button", { name: "接受建议", exact: true })).toBeDisabled();
@@ -41,8 +41,8 @@ for (const width of [320, 768, 1024, 1440]) {
         const preview = await expectSinglePreview(page);
         await expect(preview.getByText("暂无建议。", { exact: true })).toBeVisible();
         const generate = preview.getByRole("button", { name: "生成建议", exact: true });
-        await expect(generate).toBeDisabled();
-        await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
+        await expect(generate).toBeEnabled();
+        await expect(preview.getByLabel("模型连接", { exact: true })).toHaveCount(0);
         await generate.focus();
         await expect(generate).toBeFocused();
         await generate.press("Enter");
@@ -69,7 +69,7 @@ test("lost enqueue response replays the same intent and refresh resumes the know
     let preview = await expectSinglePreview(page);
     await preview.getByLabel("模拟入队响应丢失").check();
     await preview.getByLabel("模拟任务运行中").check();
-    await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
+    await expect(preview.getByLabel("模型连接", { exact: true })).toHaveCount(0);
     const generate = preview.getByRole("button", { name: "生成建议", exact: true });
     await generate.click();
     await expect(preview.getByRole("alert")).toContainText("尚未确认入队结果");
@@ -90,7 +90,7 @@ test("failed generation has no candidate and permits an explicit new request", a
     await page.goto("/dev/components?component=story-agent-candidates&scene=interactive&viewport=1024");
     const preview = await expectSinglePreview(page);
     await preview.getByLabel("模拟生成失败").check();
-    await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
+    await expect(preview.getByLabel("模型连接", { exact: true })).toHaveCount(0);
     const generate = preview.getByRole("button", { name: "生成建议", exact: true });
     await generate.click();
     await expect(preview).toContainText("生成失败或结果未确认");
@@ -102,15 +102,24 @@ test("failed generation has no candidate and permits an explicit new request", a
     await expect(preview.getByLabel("生成任务数")).toHaveText("2");
 });
 
-test("an unknown save receipt still refreshes committed pending candidates", async ({ page }) => {
-    await page.goto("/dev/components?component=story-agent-candidates&scene=interactive&viewport=1024");
-    const preview = await expectSinglePreview(page);
-    await preview.getByLabel("模拟候选已保存但回执失败").check();
-    await preview.getByLabel("模型连接", { exact: true }).selectOption("lab-model");
-    await preview.getByRole("button", { name: "生成建议", exact: true }).click();
-    await expect(preview.getByRole("heading", { name: "建议标题", exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(preview).not.toContainText("未保存建议");
-    await expect(preview.getByLabel("生成任务数")).toHaveText("1");
-    await preview.getByRole("button", { name: "拒绝建议", exact: true }).click();
-    await expect(preview.getByText("已拒绝", { exact: true })).toBeVisible();
-});
+for (const {mode, text} of [
+    {mode: "known", text: "实际成本：0.46 USD（输入：0.12，输出：0.34）"},
+    {mode: "zero", text: "实际成本：0 USD（输入：0，输出：0）"},
+    {mode: "missing", text: null},
+] as const) {
+    test(`candidate actual cost displays ${mode} amount`, async ({page}) => {
+        await page.goto("/dev/components?component=story-agent-candidates&scene=interactive&viewport=1024");
+        const preview = await expectSinglePreview(page);
+        await expect(preview.getByLabel("模型连接", {exact: true})).toHaveCount(0);
+        await preview.getByLabel("模拟实际成本", {exact: true}).selectOption(mode);
+        await preview.getByRole("button", {name: "生成建议", exact: true}).click();
+        const candidate = preview.locator("article");
+        await expect(candidate.getByRole("heading", {name: "建议标题", exact: true})).toBeVisible();
+        if (text === null) {
+            await expect(candidate.getByText("实际成本", {exact: false})).toHaveCount(0);
+        } else {
+            await expect(candidate.getByText(text, {exact: true})).toBeVisible();
+            await expect(candidate).toContainText("按本次调用用量和调用时配置价格计算，非服务商结算账单。");
+        }
+    });
+}

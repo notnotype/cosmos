@@ -107,7 +107,7 @@ test("creating a provider never persists the key in the form after closing", asy
     expect(failures.messages).toEqual([]);
 });
 
-test("editing keeps the saved key when the field is left blank and names the affected connections", async ({page}) => {
+test("editing preserves the saved key when the field is left blank", async ({page}) => {
     const failures = watchFailures(page);
     const preview = await openPanel(page, "populated");
     const dialog = page.locator(DIALOG);
@@ -119,9 +119,6 @@ test("editing keeps the saved key when the field is left blank and names the aff
     await expect(dialog.locator("#provider-api-key")).toHaveValue("");
     await expect(dialog.locator("#provider-name")).toHaveValue(PROVIDER_NAME);
     await expect(dialog.locator("#provider-base-url")).toHaveValue("https://api.deepseek.example/v1");
-
-    // 界面临时 join 连接列表与模型列表，告诉用户「改地址会影响谁」。
-    await expect(dialog).toContainText("有 1 个连接正在使用这个服务商的模型，改地址或协议会一起生效。");
 
     expect(failures.messages).toEqual([]);
 });
@@ -182,10 +179,10 @@ test("a refused delete keeps its reason on the page instead of a disappearing to
     await preview.getByRole("button", {name: `删除服务商 ${PROVIDER_NAME}`}).click();
     await alertDialog.getByRole("button", {name: "删除"}).click();
 
-    // 409 in_use：原因是常驻的 role="alert"，不是几秒就消失的 toast——用户要照着它去换连接。
+    // 默认模型引用会拒绝删除，原因必须常驻，用户才能去设置页更换或清除。
     await expect(alertDialog).toHaveCount(0);
-    await expect(preview.getByRole("alert")).toContainText("这个模型还有连接在用，先把它从连接里换掉再删。");
-    await expect(preview.getByRole("alert")).toContainText("至少一个使用这个模型的连接还指向它");
+    await expect(preview.getByRole("alert")).toContainText("这个模型仍是系统默认模型，请先到设置页更换或清除默认模型再删。");
+    await expect(preview.getByRole("alert")).toContainText("系统默认模型仍指向它");
     await expect(preview.locator("li", {hasText: PROVIDER_NAME})).toHaveCount(1);
 
     expect(failures.messages).toEqual([]);
@@ -266,5 +263,31 @@ test("the panel stays usable at the tablet viewport", async ({page}) => {
     const box = await context.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThan(80);
 
+    expect(failures.messages).toEqual([]);
+});
+
+
+test("clears the default model only after confirmation", async ({page}) => {
+    const failures = watchFailures(page);
+    await page.goto("/dev/components?component=default-model-panel");
+    const preview = await expectSinglePreview(page);
+    const selector = preview.getByRole("combobox", {name: "默认模型"});
+
+    await expect(selector).toHaveValue("model-chat");
+    await selector.selectOption("");
+    await preview.getByRole("button", {name: "保存"}).click();
+
+    const dialog = page.locator('[data-slot="alert-dialog-content"]');
+    await expect(dialog).toContainText("清除默认模型？");
+    await expect(dialog).toContainText("未指定模型的 Story 生成将无法运行");
+    await dialog.getByRole("button", {name: "取消"}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(selector).toHaveValue("");
+
+    await preview.getByRole("button", {name: "保存"}).click();
+    await page.locator('[data-slot="alert-dialog-content"]')
+        .getByRole("button", {name: "确认清除"}).click();
+    await expect(preview.getByRole("status")).toContainText("已保存");
+    await expect(preview.getByRole("region", {name: "当前默认模型"})).toContainText("未设置");
     expect(failures.messages).toEqual([]);
 });

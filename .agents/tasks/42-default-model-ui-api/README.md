@@ -1,10 +1,66 @@
 # Task 42：默认模型配置 UI 与 API 实现
 
-> 状态：**✅ 已完成**（2026-11-10）
+> 状态：**已完成：Story 实际成本、E2E 与规范同步，离线验收通过**（2026-11-11）
 >
 > 编号 42 由维护者分配；本 Task 基于 Task 41 的基础设施，完成用户可见的默认模型配置功能。
 >
-> **验证结果**：68 files / 437 tests passed | 类型检查全部通过 | 隔离浏览器验证通过
+> **既有证据**：后端相关回归 30 files / 194 tests；Web + transport 38 files / 243 tests。两组是不同测试范围，不能相加作为全仓结果；本轮验证见下方收尾切片。
+
+## 当前切片：Task 42 收尾（2026-11-11）
+
+- 用户请求原话：“你作为leader，负责分派和管理子Agent，接下来带领你的团队完成：1. 前后端接通Story 实际成本。2.E2E 测试待更新。3.文档更新。”
+- 复用理由：三项均是本 Task 上轮明确未交付的范围，重新打开 Task 42，不另造任务编号。
+- 生命周期：核对合同、冻结费用传递与消费者，随后实施、运行验收和独立审查。
+- 连贯目标：在现有默认模型配置基础上完整显示本次 Story 调用的费用，并使测试与规范匹配当前产品。
+- 可观察验收（最多三条）：
+  1. Story 调用已有费用从 durable 结果传到 HTTP 与 Web；缺失不填零，零费用保留，不按当前价格重算旧调用。
+  2. 陈旧连接/默认模型 E2E 更新为实际外部账号行为；离线隔离验证费用和现有配置流程。
+  3. 当前规范、项目状态与实际交付一致，适用检查通过且未验证层明确记录。
+- 实施来源分支：`feat/t42-story-cost-e2e-docs`，基线 `12f730c`；提交前已 fetch，本地 master 领先 origin/master 6 个提交、落后 0 个，保留本地基线。
+- 写入划分：后端唯一维护公共 Story DTO、application 与仓储/API；前端仅 Web/transport；测试仅 E2E；文档仅 docs 与项目状态；Leader 唯一维护本 Task。所有代理登记完整基线和隔离数据根。
+- 依赖顺序：后端冻结 cost 合同 → 前端消费与费用 E2E → 统一构建运行验证 → 规范最终核对。连接/设置 E2E 和已有行为文档可先独立更新。
+- 核心文件候选：Story DTO、候选完成投影、生成查询投影、候选 UI、相关 E2E 与其 canonical spec。
+- 不在范围内：预算/累计账单、历史费用回填、数据库迁移、真实 Provider 外呼、部署。费用来自调用结果，不能把它当服务商结算账单。
+- 验证层级：合同/业务/仓储单元，真实 HTTP/Worker 离线进程 E2E，浏览器与组件实验室聚焦 E2E，类型/构建、文档检查、独立审查。
+- 文档影响：**需更新**。接受上轮后端和前端提出的新 API、DTO、默认模型设置、连接清理与费用说明建议，由专职文档工程师核对源码后执行。
+- 维护者随后明确要求：“提交和合并改动。”据此授权本地提交并合并 master，实际提交身份以 Git 日志为准；未授权 push、PR 或部署。原有未跟踪 `CON` 保留，不暂存、不删除。
+- 工程细节已冻结：candidateJson 为费用持久化真值；完成态通过同 run 的固定候选 ID、Story、Story revision 与 task 核对后投影。
+
+### 已冻结方案与执行计划
+
+用户本轮明确要求接通既有费用展示，沿用已接受的 Task 42 目标，不扩大到账单系统。比较仅内存透传、另建费用表和扩展既有候选 JSON 三种做法后，采用既有候选 JSON：它已有持久化和幂等回放语义，无需 schema 或数据迁移。
+
+- 费用合同：Candidate 与 Generation 增加可选 `cost`，复用 invocation 现有 `{input, output, total, currency}` schema。调用完成投影保留原值到 `candidateJson`；Generation 仅 completed 且候选 ID/Story 匹配时读取相同费用。缺失省略，0 合法，重放不重新计算费用；失败或取消不公开成功费用。
+- 后端 owner：`18ae46e6`；测试 owner：`daf6b6ed`；前端 owner：`578528e7`；文档 owner：`e67b965e`（原绑定启动失败后使用可用路由）。补救 writer 共用上述工作区/分支/基线：`0fd9defd` 仅 `application/src/connection-probe{,.test}.ts`（内存测试）；`c6c2794d` 仅 `storage-prisma/src/configured-model-repository{,-client.test}.ts`（隔离根 `.agent/tmp/task39-configured-model-*`）。
+- 验收不发真实 Provider 请求。费用离线链路沿用 Worker HTTP/SSE fixture 的 10 输入 / 20 输出 token；输入/输出单价为每百万 1.25/2.5 USD 时，应得到 0.0000125 / 0.00005 / 0.0000625 USD。
+
+1. 后端：持久候选费用、完成态查询投影及 API 装配；补行为测试与类型检查。
+2. 前端：每个持久候选复用费用组件；验证缺失、零值、极小正数与 Web 类型。
+3. E2E：更新账号、默认设置与 Story 费用；先收集，再统一构建运行 Lab 与真实隔离 API/Worker/Web。保留账号授权、失效及登录探测行为。
+4. 文档：专职代理核对当前规范、项目状态与原始需求，检查链接和尺寸。
+5. Leader：核对 scope 与费用错误归属，安排独立 spec/质量审查；运行全仓单元、类型与构建，收集每个相关后台 job，记录失败与未运行层。没有授权的 commit/push/merge 保持未执行。
+
+### 实施与阶段证据
+
+- 后端与前端已停止写入。费用完整传到持久候选，UI 每条候选显示一次；历史缺失省略，零值与极小正数区分。Generation 失败时即使存有孤儿候选也省略费用。
+- 后端聚焦最终命令：`bunx vitest run packages/contracts/src/story-agent.test.ts packages/application/src/story-agent.test.ts packages/storage-prisma/src/story-agent-candidates.test.ts apps/worker/src/story-agent-workflow.test.ts apps/api/src/app.controller.structured-content.test.ts`，5 files / 38 tests passed；独立审查员重新运行相同范围也通过，当前 spec 与质量两轴无确认 finding。
+- 类型命令：`bun run typecheck:contracts`、`bun run typecheck:application`、`bun run typecheck:storage`、`bun run --cwd apps/api typecheck`、`bun run --cwd apps/worker typecheck` 均 exit 0。
+- 前端聚焦最终命令：`bun run test -- apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts apps/web/src/component-lab/agent-candidate-fixture-api.test.ts packages/transport-http/src/client-content.test.ts`，4 files / 43 tests passed；`bun run --cwd apps/web tsc --noEmit` 与修改的 8 个 Web 文件 ESLint 均 exit 0。
+- 价格补救后 `bun run build:api && bun run build:worker` 全部 exit 0（18.107s / 3.637s），含公共包/storage 新产物重建。
+- **最终全仓** `bun run test`：**229 files / 1411 tests passed**（exit 0；Vitest 229.65s，实耗 3m50.156s），包含最后价格投影修复。前期 fixture 签名施工错误、中间 1409/1411 结果均由此次稳定验证取代。
+- 执行器偏差：Bash 新作业遇 Niubash 准备失败，命令未执行；改由有正常 PowerShell 工具的审查员接管，未更改 runtime 或权限。
+- 边界：同 fence 同候选回放与变更费用拒绝已验证；探索“保存后回执未知再自动重试 completed”实际为 failed，未改 runtime，不声称自动重试成功。Node 替代 OpenCLI 执行 `bilibili me` 产生合成失败，只验证错误/检查时间写回；早先“版本校验失败”归因已更正。真实 Provider/来源/账号登录未验。
+
+- 文档检查 `bun run docs:check` exit 1：22 条 Task 40 既有断链；`bun run docs:check:ci --base 12f730c9ba5381e6b84a9bbb2fd6d9cfcf3aefb9` 同 22 条且 `changedFiles=[]`、`addedFiles=[]`、`anchorSources=[]`，证明基线已存在。尺寸末版复验 exit 1：项目状态已退出警戒，唯一失败为 Task 40 未改封口分册 30.35 KB / 约 9.9k token；CONTEXT 基线增长仅 warning。未扩大范围或增 baseline 遮蔽。末版 `git diff --check` exit 0。
+
+- `bunx playwright test --config playwright.component-lab.config.ts connection-panel.spec.ts model-configuration.spec.ts story-agent-candidates.spec.ts`：33 tests / 3 files，33 passed（28.7s，exit 0）；browser `--list` 为 4 tests / 3 files。
+- browser 首轮 4 failed（1m06.02s）：账号 ID 查找、探测请求、零价期望和 Provider 清理错误；第二轮 1 passed / 3 failed（36.59s）：确认探测 POST 202 / GET 200 后，超长 `result.reason` 违反 DTO 500 字限制，另有二次清理与费用定位器问题。后端 owner `0fd9defd` 已在探测边界截断，同值用于持久 `lastError` 与返回 reason；回归先 RED 2 failed / 7 passed，再 GREEN 9/9，类型通过、独立复审无 finding。API/Worker 已重建，最终全仓与 browser 待收齐。
+
+- browser 第三轮：3 passed / 1 failed（25.71s）。trace 证实 POST/PATCH 已存价格但响应漏字段；PATCH v2 缺 prices 先断言失败，旧 v1 清理再冲突遮蔽。`c6c2794d` 补仓储 select/snapshot；真实 SQLite 聚焦 `bunx vitest run packages/storage-prisma/src/configured-model-repository-client.test.ts` 先 RED 缺字段，再 GREEN 1/1，覆盖 CRUD/零价/null；`bun run typecheck:storage` exit 0。测试先记录响应版本，仍严格校验价格。独立复审无功能 finding；失败日志有界保留于错误后清理隔离根。
+
+- 最终 browser：`bunx playwright test --config playwright.config.ts story-agent-generation.spec.ts connection-visibility.spec.ts default-model-settings.spec.ts`，4 tests / 3 files，**4 passed**（22.65s，exit 0）；环境 `COSMOS_E2E_WEB_PORT=4174`、`COSMOS_OPENCLI_PATH=C:/Program Files/nodejs/node.exe`、`COSMOS_ALLOW_REAL_NETWORK=false`。Next 生产 Web 构建通过；旧 4173 被未知进程占用的启动未执行测试，改独立端口且未动原进程。
+
+三项交付已完成，项目状态与当前规范已同步。独立审查在 spec 与质量两轴无确认功能 finding；探测和价格补救已复审，失败诊断日志建议已闭环。真实 Provider/来源/账号登录、部署与远端 CI 未运行；文档门禁保留上述 Task 40 基线阻断。下方 2026-11-10 报告仅供历史追溯，当前判定以本节为准。
 
 ## User Request / Topic
 

@@ -49,6 +49,10 @@ describe("structured content endpoint", () => {
         expect(enqueue).toHaveBeenCalledWith({ ...modelRequest, storyId: "story-1", idempotencyKey: "key" });
         await expect(controller.storyAgentGeneration("story-1", "run-1")).resolves.toEqual(queued);
         expect(read).toHaveBeenCalledWith("story-1", "run-1");
+        const completed = { ...queued, status: "completed" as const, candidateId: "candidate-1",
+            cost: { input: 0.01, output: 0.02, total: 0.03, currency: "USD" } };
+        read.mockResolvedValueOnce(completed);
+        await expect(controller.storyAgentGeneration("story-1", "run-1")).resolves.toEqual(completed);
         expect(Reflect.getMetadata("__httpCode__", controller.proposeStoryAgentCandidate)).toBe(202);
         enqueue.mockRejectedValueOnce(new WorkflowHostError("conflict", "Unavailable connection"));
         await expect(controller.proposeStoryAgentCandidate("story-1", body, "key")).rejects.toMatchObject({ status: 409 });

@@ -6,7 +6,7 @@
 
 ## 最后更新
 
-2026-10-23（Task 39：Provider/model 配置 DTO、命令与发现快照）。
+2026-11-11（Task 42：SystemConfig DTO 与模型选择当前合同补充）。
 
 ## 组件定位
 
@@ -41,6 +41,19 @@
 → 概念与定义、协议和内容基础类型、Source 与采集命令、状态和查询 DTO 已归档:[part-01-base-types.md](0001-public-contracts/part-01-base-types.md)
 → Feed、Entry、Story 与事件 DTO、Action、重试与可序列化引用 已归档:[part-02-content-dtos.md](0001-public-contracts/part-02-content-dtos.md)
 → 外部行为、输入、输出、状态与持久化、状态转换、副作用、错误与降级、依赖、配置、重建验收、实现与测试锚点 已归档:[part-03-behaviour-and-acceptance.md](0001-public-contracts/part-03-behaviour-and-acceptance.md)
+
+## Task 42 当前合同补充
+
+本节取代封口分册中冲突的默认模型与 Connection 选模型说明；公共 JSON 形状以本节及[源码](../../../packages/contracts/src/system-config.ts)为准，HTTP 状态与事务行为由 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)拥有。
+
+- 系统配置（`SystemConfigDto`）为 strict `{defaultModelId:string|null, defaultModel:ConfiguredModelSnapshot|null}`。两字段必需；已删除模型的旧 ID 仍可读取，模型投影为 null。快照包含模型 ID/Provider ID、上游标识、名称、上下文窗口、最大输出、版本、时间戳及可选输入/输出每百万 token 价格；未知价格省略，0 保留，不包含凭证。这里的“未知”描述读取投影：存储为 null/旧记录缺字段时省略；当前 Prisma 创建模型时省略价格会命中 Decimal? `@default(0)`，读取为已知 0，不能把未填写创建价格当作未知价格 fixture（见[存储定义](../../../packages/storage-prisma/prisma/schema.prisma#L132)）。
+- 更新配置（`UpdateSystemConfigCommand`）为 strict `{defaultModelId:string|null}`；非空 ID 长 1–200、必须等于其 trim 值并通过控制字符约束，null 清除。完整 GET DTO 与 PUT 的 `{defaultModelId}` 确认响应不是同一个形状。
+- Agent invocation v2 与 Story 生成使用可选本地 `modelId`，省略走默认模型；Story strict 请求为 `{task,sources?,modelId?}`，generation 不再含 connectionId。Connection 不拥有模型选择。
+- Story 候选（`StoryAgentCandidate.cost?`）与生成投影（`StoryAgentGeneration.cost?`）复用 `agentInvocationOutputSchema.shape.cost.unwrap()`：strict `{input,output,total,currency}`，金额为非负数，币种字符串默认 USD；不新增不同费用类型。0 合法，旧记录或缺失费用省略字段，不填 null 或零，不以当前模型价格回算。Candidate 费用随既有 JSON 持久化；Generation 只在 completed 且候选身份、Story、Story Revision 与 task 均匹配时读取费用，失败/取消省略。精确投影条件见 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)，冻结目标及 conformance 见 [Story API](../../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)。
+
+- 连接探测结果 `ConnectionProbeResult.reason` 最多 500 字符；[Application 探测边界](../../../packages/application/src/connection-probe.ts#L72)对适配器 reason 统一 `slice(0,500)` 后，用同值返回结果并写入连接 `lastError`；active 时两者均为 null，`checkedAt` 写回 `lastCheckedAt`。该限制只约束探测写回，不能推导整个 Connection.lastError 字段或人工更新也最多 500。重建须覆盖超长 outcome 原因与 ConnectorExecutionError 原因的截断、返回/持久值一致及 active 清空，见[探测测试](../../../packages/application/src/connection-probe.test.ts)。
+
+验收锚点：[SystemConfig DTO 测试](../../../packages/contracts/src/system-config.test.ts)、[Story DTO](../../../packages/contracts/src/story-agent.ts)。重建至少验证 strict 额外字段拒绝、null 与缺失区别、未知价格省略及 0 合法。contracts 本身无持久状态、不执行设置、删除或费用计算。
 
 ## 非目标/边界
 

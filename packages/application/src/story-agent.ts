@@ -73,7 +73,7 @@ export function completeStoryAgentProposal(
         producer: "agent", producerVersion: "story-agent@1", provider: output.provider, model: output.model,
         inputSources: views.map((view) => ({ entryRevisionId: view.entryRevisionId,
             representationVersion: view.representation?.representationVersion })),
-        confidence: null, proposal, createdAt: identity.createdAt,
+        confidence: null, proposal, ...(output.cost ? { cost: output.cost } : {}), createdAt: identity.createdAt,
     });
 }
 

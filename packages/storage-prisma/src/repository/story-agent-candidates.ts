@@ -30,6 +30,11 @@ export class PrismaStoryAgentCandidateRepository implements StoryAgentCandidateR
         return this.persist(candidate, fence);
     }
 
+    async get(candidateId: string): Promise<StoryAgentCandidate | null> {
+        const row = await this.prisma.storyAgentCandidate.findUnique({ where: { id: candidateId } });
+        return row ? parseCandidate(row.candidateJson) : null;
+    }
+
     private async persist(candidate: StoryAgentCandidate, fence?: import("@cosmos/application").HostActionExecutionFence): Promise<StoryAgentCandidateRecord> {
         const parsed = storyAgentCandidateSchema.parse(candidate);
         const row = await this.prisma.$transaction(async (tx) => {

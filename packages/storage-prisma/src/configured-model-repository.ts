@@ -3,12 +3,17 @@ import type { CreateConfiguredModelCommand, UpdateConfiguredModelCommand } from 
 
 const select = {
     id: true, providerId: true, modelId: true, name: true,
-    contextWindow: true, maxOutputTokens: true, version: true, createdAt: true, updatedAt: true,
+    contextWindow: true, maxOutputTokens: true, version: true,
+    inputPricePerMillion: true, outputPricePerMillion: true,
+    createdAt: true, updatedAt: true,
 } as const;
+
+type DecimalValue = number | string | { toString(): string };
 
 type ModelRow = {
     id: string; providerId: string; modelId: string; name: string;
     contextWindow: number; maxOutputTokens: number; version: number;
+    inputPricePerMillion?: DecimalValue | null; outputPricePerMillion?: DecimalValue | null;
     createdAt: Date; updatedAt: Date;
 };
 
@@ -18,10 +23,11 @@ type ModelClient = {
         findFirst(input: { where: { id: string; providerId: string }; select: typeof select }): Promise<ModelRow | null>;
         create(input: { data: {
             id: string; providerId: string; modelId: string; name: string;
-            contextWindow: number; maxOutputTokens: number;
+            contextWindow: number; maxOutputTokens: number; inputPricePerMillion?: number; outputPricePerMillion?: number;
         }; select: typeof select }): Promise<ModelRow>;
         updateMany(input: { where: { id: string; providerId: string; version: number }; data: {
             modelId?: string; name?: string; contextWindow?: number; maxOutputTokens?: number;
+            inputPricePerMillion?: number; outputPricePerMillion?: number;
             version: { increment: 1 };
         } }): Promise<{ count: number }>;
         deleteMany(input: { where: { id: string; providerId: string; version: number } }): Promise<{ count: number }>;
@@ -54,6 +60,8 @@ function snapshot(row: ModelRow): Record<string, unknown> {
         id: row.id, providerId: row.providerId, modelId: row.modelId, name: row.name,
         contextWindow: row.contextWindow, maxOutputTokens: row.maxOutputTokens, version: row.version,
         createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+        ...(row.inputPricePerMillion == null ? {} : { inputPricePerMillion: Number(row.inputPricePerMillion) }),
+        ...(row.outputPricePerMillion == null ? {} : { outputPricePerMillion: Number(row.outputPricePerMillion) }),
     };
 }
 

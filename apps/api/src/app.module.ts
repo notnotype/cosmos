@@ -55,6 +55,7 @@ export const cosmosSystemConfig = new SystemConfigService(new PrismaSystemConfig
 export const cosmosStoryAgentCandidates = new StoryAgentCandidates(new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma));
 export const cosmosStoryAgentControl = new StoryAgentWorkflowControl({
     store: cosmosWorkflowStore, content: cosmosContentQuery,
+    candidates: new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma),
     stories: { readStory: async (storyId) => {
         const detail = await cosmosRepository.story(storyId);
         if (!detail) return null;

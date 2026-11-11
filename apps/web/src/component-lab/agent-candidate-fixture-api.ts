@@ -2,6 +2,14 @@ import { z } from "zod";
 import { storyAgentCandidateRecordSchema, storyAgentGenerationRequestSchema,
     storyAgentGenerationSchema, type StoryAgentCandidateRecordContract, type StoryAgentGenerationRequest, type StoryDetail } from "@cosmos/contracts";
 
+export type AgentCandidateFixtureBehavior = {
+    loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean;
+    sourceStatus: "current" | "superseded" | "unavailable";
+    costMode: "known" | "zero" | "missing";
+};
+const knownCost = { input: 0.12, output: 0.34, total: 0.46, currency: "USD" };
+const zeroCost = { input: 0, output: 0, total: 0, currency: "USD" };
+
 const storeSchema = z.object({ records: storyAgentCandidateRecordSchema.array(), jobs: z.object({
     key: z.string(), generation: storyAgentGenerationSchema,
 }).array() });
@@ -20,7 +28,7 @@ function candidate(story: StoryDetail, id: string): StoryAgentCandidateRecordCon
     } };
 }
 export function createAgentCandidateFixtureApi(story: StoryDetail,
-    behavior: { loseResponse: boolean; hold: boolean; fail: boolean; saveThenFail: boolean; sourceStatus: "current" | "superseded" | "unavailable" }, onCount: (count: number) => void) {
+    behavior: AgentCandidateFixtureBehavior, onCount: (count: number) => void) {
     return {
         async getSystemConfig() {
             return {
@@ -61,6 +69,11 @@ export function createAgentCandidateFixtureApi(story: StoryDetail,
                     const candidateId = `candidate-${runId}`;
                     if (job.generation.status === "completed") job.generation.candidateId = candidateId;
                     const record = candidate(story, candidateId);
+                    const cost = behavior.costMode === "known" ? knownCost : behavior.costMode === "zero" ? zeroCost : undefined;
+                    if (cost) {
+                        record.candidate.cost = cost;
+                        if (job.generation.status === "completed") job.generation.cost = cost;
+                    }
                     record.sourceStatus = behavior.sourceStatus;
                     if (behavior.sourceStatus !== "current") record.candidate.inputSources = [{ entryRevisionId: "lab-old-source", representationVersion: 1 }];
                     data.records.unshift(record);

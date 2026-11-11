@@ -6,10 +6,17 @@ import { Button } from "@/components/ui/button";
 import { messages } from "@/copy/messages";
 import { selectReadingSources } from "../story-source-reader";
 import { useStoryAgentGeneration, type GenerationClient } from "./use-story-agent-generation";
-import { StoryGenerationEstimate } from "./story-generation-cost";
+import { StoryGenerationActualCost, StoryGenerationEstimate } from "./story-generation-cost";
 
 const copy = messages.reading.candidates;
 const taskLabels: Record<StoryAgentTask, string> = copy.tasks;
+
+export function StoryAgentCandidatePreview({ record }: { record: StoryAgentCandidateRecordContract }) {
+    return <>
+        <ProposalPreview record={record} />
+        <StoryGenerationActualCost cost={record.candidate.cost} />
+    </>;
+}
 
 function ProposalPreview({ record }: { record: StoryAgentCandidateRecordContract }) {
     const proposal = record.candidate.proposal;
@@ -126,7 +133,7 @@ function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: Pa
         {records?.length === 0 && <p className="text-sm text-muted-foreground">{copy.empty}</p>}
         {records?.map((record) => <article key={record.candidate.id} className="space-y-3 border-t border-border pt-4 text-sm [overflow-wrap:anywhere]">
             <div className="flex flex-wrap gap-2"><h3 className="font-medium">{taskLabels[record.candidate.proposal.task]}</h3><span className="text-muted-foreground">{copy.statuses[record.status]}</span></div>
-            <ProposalPreview record={record} />
+            <StoryAgentCandidatePreview record={record} />
             {record.sourceStatus === "superseded" && <p role="status">{copy.sourceSuperseded}</p>}
             {record.sourceStatus === "unavailable" && <p role="status">{copy.sourceUnavailableEvidence}</p>}
             <p className="text-xs text-muted-foreground">{record.candidate.provider} · {record.candidate.model} · {record.candidate.createdAt}</p>

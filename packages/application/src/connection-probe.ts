@@ -70,7 +70,8 @@ export class ConnectionProbeService {
             probe = { outcome: "error", reason: error.message };
         }
         const account = probe.account ?? connection.account;
-        const reason = probe.reason ?? null;
+        // Public probe results and persisted connection diagnostics share the same 500-character limit.
+        const reason = probe.reason?.slice(0, 500) ?? null;
         const status = probe.outcome === "active"
             ? "active"
             : probe.outcome === "expired" ? "expired" : "error";

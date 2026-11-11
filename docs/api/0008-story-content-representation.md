@@ -3,6 +3,8 @@
 > 状态：Task 40 已实现接口与生产接线；隔离产品生成链通过，整体验收进行中，不代表真实 Provider 验收或已部署。
 >
 > 依据：[已接受目标](../aegis/specs/2026-10-08-story-content-representation-design.md)、[架构](../aegis/specs/2026-10-08-story-content-representation-architecture.md)、[Task 40](../../.agents/tasks/40-story-content-representation/README.md)。
+>
+> **Task 42 更正优先**：本文下方旧表的 connectionId、连接解析模型和“仅返回”字段清单已被[费用合同与模型选择补充](#task-42-费用合同已冻结目标实施与验收进行中)替代；当前可调用形状见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)，不能按旧表发送请求。
 
 ## 所有权与首个消费者
 
@@ -50,6 +52,16 @@ Contracts 唯一拥有跨边界 JSON schema；Application ContentQuery 统一提
 所有请求对象严格校验，不能携带自定义 actor、profile、provider 或授权字段。模型/地址/凭证由所选连接在 Worker 调用时解析，权限与预算由主机授予。浏览器发送前保留同键意图，响应丢失只恢复原请求；已知 Run 刷新仅查询，不自动重新生成。失败/取消可能晚于候选提交，因此任务投影没有 candidateId 不等于候选列表为空；所有终态重新读取候选列表，外呼结果不确定时禁止自动重发。质量检查候选可查看、拒绝；接受返回 unsupported/409，因为当前没有对应正式写入命令。摘要接受保留候选未拥有的既有时间范围。精确来源证据和候选 JSON 保留原输入版本，不随当前表示切换而改写。候选记录增加可选只读 `sourceStatus: current/superseded/unavailable`；当前服务始终计算并返回，旧记录/测试消费者缺字段不伪造已验证状态。该投影不进入 candidate JSON、不写回审计：无来源输入为 current；所有历史输入仍可用且为来源当前修订/当前表示时为 current；任一输入已非当前为 superseded；任一精确表示缺失、损坏、failed 或原始证据引用缺失为 unavailable（优先于 superseded）。Web 对后两者提示旧版/待重新验证，保留原版本详情及人工拒绝；接受在同一事务重新验证，只允许 current，过期返回 409，无正式写入或决定审计。已经 accepted/rejected 的历史记录不被撤销或改写。
 
 `story.summarize`、`story.extract-relations`、`story.review-content-quality` 生成候选；用户接受由正式命令处理并记录审计。候选绑定实际输入版本，重复接受不重复正式写入，基线变化必须拒绝或明确要求重新验证，不自动套用。Agent 不可直接改写 Observation、EntryRevision、权限或已接受事实。
+
+## Task 42 费用合同（已冻结目标，实施与验收进行中）
+
+本节替代上文涉及 Connection 选模型的旧说明：生成请求为 strict `{task, sources?, modelId?}`，不再接收 `connectionId`；省略 `modelId` 时由系统默认模型解析，Worker 读取对应模型与 Provider 凭证。当前接口状态以 [Product API 当前补充](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)为准。
+
+- `StoryAgentCandidate.cost?` 与 `StoryAgentGeneration.cost?` 复用 invocation 输出费用 `{input, output, total, currency}`；字段可选，金额允许 0，缺失省略，不补零。这是调用记录的费用，不是服务商结算账单。
+- 完成候选时把调用输出费用原样保存到既有 `candidateJson`，不新增表或数据库迁移；候选 JSON 是费用真值，重启和重放读取原值，不按当前价格重新计算。
+- generation 仅在 `completed` 且候选 ID 为 `story-candidate-${runId}`、候选 Story、Story Revision 及提案 task 均与冻结 Run 输入匹配时投影费用；失败、取消、无关联候选和旧记录不带费用。候选列表独立保留已持久化候选及其费用，不能从生成终态反推列表为空。
+- 首个 Web 消费者是持久候选卡片；generation 区域仅显示状态，避免重复展示费用，刷新后从候选读取费用。无费用不渲染实际费用，0 与极小正数不得混淆。
+- 离线验收目标：真实 API/Worker 与 fake HTTP Provider 返回 usage 输入 10 / 输出 20，每百万 token 单价 1.25 / 2.5 USD，得到 input=0.0000125、output=0.00005、total=0.0000625、currency=USD；覆盖缺失、0、成功状态、跨 Run 拒绝和重启重放。此处是验收目标，实际运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录，不表示真实外呼已验证。
 
 ## Conformance 场景
 

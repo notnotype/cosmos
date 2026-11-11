@@ -45,6 +45,19 @@ describe("StoryAgent candidate boundary", () => {
         expect(invocationContext).toBe(context);
         expect(candidate).toMatchObject({ provider: "fake", model: "fixture" });
     });
+    it.each([
+        { label: "configured cost", cost: { input: 0.01, output: 0.02, total: 0.03, currency: "USD" }, expected: { input: 0.01, output: 0.02, total: 0.03, currency: "USD" } },
+        { label: "zero cost", cost: { input: 0, output: 0, total: 0, currency: "USD" }, expected: { input: 0, output: 0, total: 0, currency: "USD" } },
+        { label: "missing price", cost: undefined, expected: undefined },
+    ])("preserves $label on the generated candidate", async ({ cost, expected }) => {
+        const f = fixture({ ...summary, keyFacts: [] });
+        f.invoke.mockResolvedValueOnce({ content: JSON.stringify({ ...summary, keyFacts: [] }), toolCalls: [],
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, provider: "fake", model: "fixture",
+            ...(cost ? { cost } : {}), finishReason: "stop", metadata: {} });
+        const candidate = await f.agent.propose({ storyId: "story-1", task: "story.summarize" }, host, context);
+        if (expected) expect(candidate.cost).toEqual(expected);
+        else expect(candidate).not.toHaveProperty("cost");
+    });
     it("omits modelId from invocation when the host delegates to the system default", async () => {
         const f = fixture({ ...summary, keyFacts: [] });
         await f.agent.propose({ storyId: "story-1", task: "story.summarize" }, { ...host, modelId: undefined }, context);

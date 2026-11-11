@@ -46,6 +46,7 @@ export const reading = {
             estimated: "预估成本",
             unavailable: "价格信息不可用",
             actual: "实际成本",
+            actualBasis: "按本次调用用量和调用时配置价格计算，非服务商结算账单。",
             input: "输入",
             output: "输出",
             assumptions: (inputMin: number, inputMax: number, outputMin: number, outputMax: number) =>

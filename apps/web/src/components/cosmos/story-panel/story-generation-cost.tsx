@@ -2,7 +2,10 @@ import type { AgentInvocationOutput, ConfiguredModelSnapshot } from "@cosmos/con
 import { messages } from "@/copy/messages";
 
 const copy = messages.reading.candidates.cost;
-const amount = (value: number) => value.toFixed(8).replace(/\.?0+$/, "") || "0";
+const amount = (value: number) => {
+    if (value > 0 && value < 0.00000001) return "<0.00000001";
+    return value.toFixed(8).replace(/\.?0+$/, "") || "0";
+};
 
 export function estimateStoryGenerationCost(model: ConfiguredModelSnapshot) {
     const inputPrice = model.inputPricePerMillion;
@@ -38,7 +41,8 @@ export function StoryGenerationEstimate({ model, loading = false, failed = false
 
 export function StoryGenerationActualCost({ cost }: { cost?: AgentInvocationOutput["cost"] }) {
     if (!cost) return null;
-    return <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-        {copy.actual}：{amount(cost.total)} {cost.currency}（{copy.input}：{amount(cost.input)}，{copy.output}：{amount(cost.output)}）
-    </p>;
+    return <div className="space-y-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+        <p>{copy.actual}：{amount(cost.total)} {cost.currency}（{copy.input}：{amount(cost.input)}，{copy.output}：{amount(cost.output)}）</p>
+        <p>{copy.actualBasis}</p>
+    </div>;
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentInvocationOutputSchema } from "./agent.js";
 import { evidenceRefSchema } from "./content-representation.js";
 import { entryRelationTypeSchema } from "./entry-relation.js";
 
@@ -20,11 +21,14 @@ export const storyAgentGenerationRequestSchema = storyAgentRequestSchema.extend(
     modelId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
+const storyAgentCostSchema = agentInvocationOutputSchema.shape.cost.unwrap();
+
 export const storyAgentGenerationSchema = z.object({
     runId: z.string().min(1), storyId: z.string().min(1), task: storyAgentTaskSchema,
     status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
     candidateId: z.string().nullable(),
     errorCode: z.enum(["generation_failed"]).nullable(),
+    cost: storyAgentCostSchema.optional(),
 }).strict();
 export type StoryAgentGenerationRequest = z.infer<typeof storyAgentGenerationRequestSchema>;
 export type StoryAgentGeneration = z.infer<typeof storyAgentGenerationSchema>;
@@ -69,6 +73,7 @@ export const storyAgentCandidateSchema = z.object({
     inputSources: storyAgentSourceBindingSchema.array().max(100),
     confidence: z.number().min(0).max(1).nullable(),
     proposal: storyAgentProposalSchema,
+    cost: storyAgentCostSchema.optional(),
     createdAt: z.string().datetime(),
 }).strict();
 

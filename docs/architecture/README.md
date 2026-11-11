@@ -58,6 +58,10 @@ Worker → Connector / Workflow → 持久化数据
 - 当前 Worker 运行与组合边界见 [Worker process spec](../spec/runtime/0001-worker-process.md)、[Workflow Host composition spec](../spec/runtime/0002-workflow-host-composition.md)、[Connector runtime spec](../spec/application/0001-connector-runtime.md) 和 [Ingest Workflow spec](../spec/application/0006-ingest-workflow.md)。
 - API 不直接执行外部采集；采集任务由持久化的 Job/Workflow 交给 Worker 执行。这一边界同时由[总体架构不变量](0001-cosmos-foundation.md#21-架构不变量)和 [ADR-0003](../adr/0003-service-worker-api-boundaries.md) 约束。
 
+## Story 调用费用的持久化边界（Task 42 已接受目标）
+
+Story Workflow 由 Worker 调用模型，Application 校验提案后将 invocation 的可选费用与候选一起写入既有候选 JSON；候选持久记录拥有该次费用真值，Web 和 HTTP 只读取投影。费用不进入新的账单表、不需要数据库迁移，也不按查询时的模型价格重新计算。generation 只在 completed 且候选 ID、Story、Story Revision 与 task 均匹配冻结 Run 输入时返回费用；缺失与 0 分开处理，失败/取消不公开成功费用。Web 首个消费者是持久候选卡片，generation 区域只显示状态，刷新/重启沿候选读取恢复。已接受目标见 [Story API Draft](../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)；本轮代码核对后，当前行为分别由 [HTTP 规格](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)及 [Web 规格](../spec/interfaces/0005-web-client.md#task-42-当前合同补充)承载。实现存在不替代运行验证，Task 完成仍须按各层证据判定。
+
 ## 当前已实现
 
 当前代码和规格已能支持以下边界（具体字段、状态和验收仍以对应 spec 为准）：

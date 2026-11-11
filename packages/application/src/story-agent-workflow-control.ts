@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { UuidIdGenerator, type JsonValue } from "@notnotype/nb-workflow";
-import { storyAgentGenerationRequestSchema, storyAgentGenerationSchema, type StoryAgentGeneration,
+import { storyAgentGenerationRequestSchema, storyAgentGenerationSchema, type StoryAgentCandidate, type StoryAgentGeneration,
     type StoryAgentGenerationRequest } from "@cosmos/contracts";
 import type { ContentQuery } from "./content-query.js";
 import type { StoryAgentSnapshotReader } from "./story-agent.js";
@@ -19,6 +19,7 @@ export class StoryAgentWorkflowControl {
     constructor(private readonly options: {
         store: WorkflowHostStore;
         stories: StoryAgentSnapshotReader; content: ContentQuery;
+        candidates?: { get(candidateId: string): Promise<StoryAgentCandidate | null> };
     }) {}
 
     async enqueue(input: StoryAgentGenerationRequest & { storyId: string; idempotencyKey: string }): Promise<StoryAgentGeneration> {
@@ -70,12 +71,20 @@ export class StoryAgentWorkflowControl {
         }
     }
 
-    private project(envelope: WorkflowEnvelope): StoryAgentGeneration {
+    private async project(envelope: WorkflowEnvelope): Promise<StoryAgentGeneration> {
         const { request, prepared, candidateId } = storyAgentWorkflowInputSchema.parse(envelope.inputSnapshot);
         const status = ["completed", "failed", "cancelled", "queued"].includes(envelope.status) ? envelope.status : "running";
-        return storyAgentGenerationSchema.parse({ runId: envelope.runId, storyId: prepared.story.storyId,
-            task: request.task, status,
-            candidateId: status === "completed" ? candidateId : null, errorCode: status === "failed" ? "generation_failed" : null });
+        const generation = { runId: envelope.runId, storyId: prepared.story.storyId, task: request.task, status,
+            candidateId: status === "completed" ? candidateId : null, errorCode: status === "failed" ? "generation_failed" : null };
+        if (status !== "completed" || candidateId !== `story-candidate-${envelope.runId}` || !this.options.candidates) {
+            return storyAgentGenerationSchema.parse(generation);
+        }
+        const candidate = await this.options.candidates.get(candidateId);
+        if (!candidate || candidate.id !== candidateId || candidate.storyId !== prepared.story.storyId
+            || candidate.storyRevisionId !== prepared.story.storyRevisionId || candidate.proposal.task !== request.task) {
+            return storyAgentGenerationSchema.parse(generation);
+        }
+        return storyAgentGenerationSchema.parse({ ...generation, ...(candidate.cost ? { cost: candidate.cost } : {}) });
     }
 }
 

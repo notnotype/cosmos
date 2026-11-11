@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { closeSync, openSync, readFileSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,11 @@ function run(root: string, label: string, args: string[], environment: NodeJS.Pr
     const log = openSync(join(root, `${label}.log`), "wx");
     try {
         const result = spawnSync(process.execPath, args, { cwd: root, env: environment, stdio: ["ignore", log, log], timeout: 120_000 });
-        if (result.error || result.status !== 0) throw new Error(`Isolated ${label} failed; inspect ${join(root, `${label}.log`)}`);
+        if (result.error || result.status !== 0) {
+            const logPath = join(root, `${label}.log`);
+            const tail = readFileSync(logPath, "utf8").slice(-4000);
+            throw new Error(`Isolated ${label} failed. Log tail:\n${tail}`);
+        }
     } finally { closeSync(log); }
 }
 
@@ -65,13 +69,21 @@ const client = new PrismaClient({ datasources: { db: { url: process.env.DATABASE
 try {
   const provider = await client.modelProvider.create({ data: { id: "provider", name: "Synthetic", api: "openai-completions", baseUrl: "https://example.invalid/v1" } });
   const repo = new PrismaConfiguredModelRepository(client);
-  const created = await repo.create({ id: "model", providerId: provider.id, fields: { modelId: "org/model", name: "Model", contextWindow: 4096, maxOutputTokens: 128 } }) as { id: string; providerId: string; modelId: string; name: string; contextWindow: number; maxOutputTokens: number; version: number; createdAt: string; updatedAt: string };
-  assert.deepEqual(created, { id: "model", providerId: "provider", modelId: "org/model", name: "Model", contextWindow: 4096, maxOutputTokens: 128, version: 1, createdAt: created.createdAt, updatedAt: created.updatedAt });
+  const created = await repo.create({ id: "model", providerId: provider.id, fields: { modelId: "org/model", name: "Model", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: 1.25, outputPricePerMillion: 2.5 } }) as { id: string; providerId: string; modelId: string; name: string; contextWindow: number; maxOutputTokens: number; version: number; createdAt: string; updatedAt: string; inputPricePerMillion?: number; outputPricePerMillion?: number };
+  assert.deepEqual(created, { id: "model", providerId: "provider", modelId: "org/model", name: "Model", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: 1.25, outputPricePerMillion: 2.5, version: 1, createdAt: created.createdAt, updatedAt: created.updatedAt });
   assert.match(created.createdAt, /^\\d{4}-\\d{2}-\\d{2}T/);
   assert.equal(created.updatedAt, created.createdAt);
-  const listed = await repo.list(provider.id); assert.equal(listed.length, 1);
-  const updated = await repo.update({ id: "model", providerId: provider.id, expectedVersion: 1, fields: { name: "Renamed" } }) as { name: string; version: number };
-  assert.equal(updated.name, "Renamed"); assert.equal(updated.version, 2);
+  const listed = await repo.list(provider.id); assert.equal(listed.length, 1); assert.deepEqual(listed[0], created); assert.deepEqual(await repo.get(provider.id, "model"), created);
+  const updated = await repo.update({ id: "model", providerId: provider.id, expectedVersion: 1, fields: { name: "Renamed", inputPricePerMillion: 9, outputPricePerMillion: 18 } }) as { name: string; version: number; inputPricePerMillion?: number; outputPricePerMillion?: number };
+  assert.deepEqual({ name: updated.name, version: updated.version, inputPricePerMillion: updated.inputPricePerMillion, outputPricePerMillion: updated.outputPricePerMillion }, { name: "Renamed", version: 2, inputPricePerMillion: 9, outputPricePerMillion: 18 });
+   const zero = await client.configuredModel.create({ data: { id: "zero", providerId: provider.id, modelId: "org/zero", name: "Zero", contextWindow: 4096, maxOutputTokens: 128 } });
+   assert.deepEqual(await repo.get(provider.id, "zero"), { id: "zero", providerId: provider.id, modelId: "org/zero", name: "Zero", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: 0, outputPricePerMillion: 0, version: 1, createdAt: zero.createdAt.toISOString(), updatedAt: zero.updatedAt.toISOString() });
+   const explicitZero = await client.configuredModel.create({ data: { id: "explicit-zero", providerId: provider.id, modelId: "org/explicit-zero", name: "Explicit zero", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: 0, outputPricePerMillion: 0 } });
+   assert.deepEqual(await repo.get(provider.id, "explicit-zero"), { id: explicitZero.id, providerId: provider.id, modelId: "org/explicit-zero", name: "Explicit zero", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: 0, outputPricePerMillion: 0, version: 1, createdAt: explicitZero.createdAt.toISOString(), updatedAt: explicitZero.updatedAt.toISOString() });
+   await client.configuredModel.create({ data: { id: "unknown", providerId: provider.id, modelId: "org/unknown", name: "Unknown", contextWindow: 4096, maxOutputTokens: 128, inputPricePerMillion: null, outputPricePerMillion: null } });
+   const unknown = await repo.get(provider.id, "unknown") as Record<string, unknown>;
+   assert.equal("inputPricePerMillion" in unknown, false); assert.equal("outputPricePerMillion" in unknown, false);
+   assert.equal(typeof updated.inputPricePerMillion, "number"); assert.equal(typeof updated.outputPricePerMillion, "number");
   await assert.rejects(repo.update({ id: "model", providerId: provider.id, expectedVersion: 1, fields: { name: "stale" } }), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "version_conflict");
   await assert.rejects(repo.delete({ id: "model", providerId: provider.id, expectedVersion: 1 }), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "version_conflict");
   await repo.delete({ id: "model", providerId: provider.id, expectedVersion: 2 });
@@ -86,8 +98,8 @@ describe("isolated ConfiguredModel Prisma repository", () => {
         if (process.release.name !== "node" || process.versions.bun !== undefined) throw new Error("Run with Node-hosted Vitest.");
         await mkdir(temporaryParent, { recursive: true });
         const root = await mkdtemp(join(temporaryParent, "task39-configured-model-"));
-        console.info(`Retained isolated configured-model root: ${root}`);
-        const env = environment(root);
+        try {
+            const env = environment(root);
         const schema = await snapshot(root);
         await writeFile(join(root, "configured-model-repository.ts"), await readFile(adapterSource, "utf8"));
         const cli = resolvePrismaCliPath();
@@ -97,6 +109,9 @@ describe("isolated ConfiguredModel Prisma repository", () => {
         run(root, "typecheck", [require.resolve("typescript/bin/tsc"), "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--types", "node", "--noEmit", join(root, "verify.mts")], env);
         run(root, "compile", [require.resolve("typescript/bin/tsc"), "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--types", "node", join(root, "verify.mts")], env);
         run(root, "verify", [join(root, "verify.mjs")], env);
-        expect(JSON.parse(await readFile(join(root, "verification.json"), "utf8"))).toEqual({ status: "passed", repository: true, nonSecretFieldsOnly: true, providerScoped: true, cas: true, providerRequested: false });
+            expect(JSON.parse(await readFile(join(root, "verification.json"), "utf8"))).toEqual({ status: "passed", repository: true, nonSecretFieldsOnly: true, providerScoped: true, cas: true, providerRequested: false });
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
     }, 240_000);
 });

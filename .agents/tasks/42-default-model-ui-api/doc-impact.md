@@ -1,83 +1,41 @@
 # Task 42 文档影响分析
 
-## 需要更新的文档
+## 当前结论（2026-11-11）
 
-### 1. API 规范
+**需更新，已完成同步**。本轮重新打开 Task 42，完成 Story 实际成本、E2E 与上轮未同步的规范；专职文档代理完成公共合同、HTTP/客户端、Web、架构入口、原话追加及项目状态更新。唯一实施过程、分层验证与既有门禁问题记录位于 [Task 42 README](README.md)。
 
-**文件**: `docs/api/0009-provider-model-configuration.md`
+## 权责与顺序
 
-**更新内容**:
-- 新增 SystemConfig API 端点描述
-  - `GET /api/v1/system/config`
-  - `PUT /api/v1/system/config`
-- Request/Response 格式
-- 错误码说明
-- 使用示例
+- Leader 维护本 Task 记录和本影响清单；业务实现代理只提交文档建议。
+- 专职文档代理核对源码与测试，维护 `docs/` 的当前规范及项目状态。
+- 公共费用合同先冻结并记录 API/架构目标，代码行为落地后更新当前规范。
+- 旧过程记录保留当时事实；当前状态不能继续把未接通费用、陈旧 E2E 或未更新规范标为已完成。
 
-### 2. 用户文档
+## 必须同步的当前合同
 
-**文件**: `docs/user-guide/` 或 `docs/manual/`（如果存在）
+1. **HTTP 与 DTO**：新 GET/PUT `/api/v1/system/config`；兼容旧 GET `/config/default-model` 的 `{ modelId }`；旧 PUT 也校验模型有效性。描述严格请求校验、404/409/503、已删除默认模型和事务时序。模型创建/更新/列表/读取一致返回已知价格（含 0），null/缺失省略；未填创建价格命中存储默认 0，不等于未知价。
+2. **HTTP 客户端**：`getSystemConfig`、`updateSystemConfig` 的输入输出及错误传递。
+3. **Web 行为**：默认模型详情、保存/清除确认、错误恢复、零价/未知价格；连接只管理外部账号，不再选择模型。
+4. **Story 费用**：Candidate 与 Generation 的可选 `cost`，来自调用结果并保存进既有候选 JSON；仅成功状态投影；缺失不填零，零值保留，不按当前价重算旧调用。界面说明按调用 usage 和配置价格计算，不作为服务商结算账单。
+5. **预估与实际的区别**：保留生成前 token 假设和限制；生成后显示已保存费用，刷新仍可见；不伪造缺失数据。
+6. **项目状态与原始需求**：项目状态记录当前完成边界；原始需求按用户措辞追加到当前活跃分册，不反向改写历史。
+7. **探测合同补救**：探测边界将外部原因限制为公开 DTO 的 500 字；失败时返回 reason 与持久 lastError 同值，active 均为 null。这不是对人工更新 lastError 的全局长度变更。
 
-**更新内容**:
-- 如何配置默认模型（设置页操作步骤）
-- 成本显示说明
-- 常见问题（FAQ）
+## 规范入口与分册
 
-### 3. 架构文档
+由文档 owner 先读索引再选择 canonical 分册，主要入口为：
 
-**文件**: `docs/architecture/`（如有相关文档）
+- [HTTP API 规范](../../../docs/spec/interfaces/0002-product-api-http.md)
+- [HTTP 客户端规范](../../../docs/spec/interfaces/0004-http-client.md)
+- [Web 客户端规范](../../../docs/spec/interfaces/0005-web-client.md)
+- [公共合同规范](../../../docs/spec/contracts/0001-public-contracts.md)
+- [组件规格入口](../../../docs/spec/README.md)
+- [Provider/Model API 草案](../../../docs/api/0009-provider-model-configuration.md)
+- [架构入口](../../../docs/architecture/README.md)
+- [项目状态](../../../PROJECT-STATUS.md)
 
-**更新内容**:
-- SystemConfig 在系统中的位置
-- 默认模型解析流程
-- 成本计算逻辑
+不为满足模板新建不存在的用户手册目录、Changelog 或版本记录；封口册的更新走既定勘误流程。
 
-### 4. API Changelog
+## 验证要求
 
-**文件**: `docs/api/CHANGELOG.md` 或类似文件
-
-**更新内容**:
-- 新增 API 端点记录
-- 版本号更新
-
-## 需要新建的文档
-
-### 5. 用户手册：默认模型配置
-
-**文件**: `docs/guides/default-model-setup.md`（建议）
-
-**内容**:
-- 什么是默认模型
-- 为什么需要配置默认模型
-- 如何选择合适的默认模型
-- 操作步骤（带截图）
-- 成本预估说明
-- 故障排查
-
-## 不需要更新的文档
-
-- ADR（架构决策记录）：Task 41 的 Proposal 已涵盖决策
-- 技术规范：Agent 调用规范已在 Task 41 更新
-- 数据库 Schema 文档：无 schema 变更（Task 41 已完成）
-
-## 文档优先级
-
-| 优先级 | 文档 | 原因 |
-|-------|------|------|
-| P0 | API 规范 | 开发者需要了解新端点 |
-| P1 | Task 42 README（本文件） | 实施记录和验收标准 |
-| P2 | 用户手册 | 用户需要知道如何使用 |
-| P3 | 架构文档 | 可选，系统理解 |
-
-## 文档更新时机
-
-- **实施前**: Task 42 README（设计和计划）
-- **实施中**: API 规范（随着端点实现）
-- **实施后**: 用户手册、架构文档、Changelog
-- **Code Review 后**: 最终修订所有文档
-
-## 文档责任人
-
-- **技术文档**（API 规范、架构）: 后端开发者或文档工程师
-- **用户文档**（手册、指南）: 产品经理或技术写作者
-- **Task README**: 主 agent 或任务负责人
+文档检查至少涵盖本地链接、Markdown 结构、代码围栏、尾随空白和 `git diff --check`，执行仓库现有 `bun run docs:check` 及适用尺寸检查。报告每条命令的实际结果，不能把未运行检查标绿；已有范围外问题保留依据。最终改动文件和命令结果回填唯一 Task 记录。

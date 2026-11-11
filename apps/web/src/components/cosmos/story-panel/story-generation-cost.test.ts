@@ -28,7 +28,7 @@ function renderActual(cost?: AgentInvocationOutput["cost"]) {
 }
 
 function text(html: string) {
-    return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ");
+    return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<");
 }
 
 describe("StoryGenerationEstimate", () => {
@@ -172,6 +172,23 @@ describe("StoryGenerationActualCost", () => {
         expect(content).not.toMatch(/\d[eE][+-]?\d/);
     });
 
+    it("preserves nonzero usage charges below one hundred-millionth", () => {
+        const content = text(renderActual({
+            input: 0.000000001, output: 0, total: 0.000000001, currency: "USD",
+        }));
+
+        expect(content).toMatch(/输入[^\d]*<0\.00000001(?:\D|$)/);
+        expect(content).toContain("<0.00000001");
+    });
+
+    it("explains actual costs use call usage and configured prices, not provider billing", () => {
+        const content = text(renderActual({ input: 0.12, output: 0.34, total: 0.46, currency: "USD" }));
+
+        expect(content).toMatch(/usage|用量/i);
+        expect(content).toMatch(/配置.*价格|价格.*配置/);
+        expect(content).toMatch(/非.*(服务商|提供商).*结算账单/);
+    });
+
     it("uses no more than eight decimal places for actual charges", () => {
         const content = text(renderActual({
             input: 0.123456789, output: 0.234567891, total: 0.35802468, currency: "USD",
@@ -181,6 +198,11 @@ describe("StoryGenerationActualCost", () => {
         expect(content).toContain("0.23456789");
         expect(content).toContain("0.35802468");
         expect(content).not.toMatch(/\d+\.\d{9,}/);
+    });
+
+    it.each([0, 1, 10, 100, 0.0000625])("formats %s without trailing fractional zeros or losing integer digits", (value) => {
+        const content = text(renderActual({ input: value, output: value, total: value, currency: "USD" }));
+        expect(content).toContain(`实际成本：${value} USD（输入：${value}，输出：${value}）`);
     });
 
     it("renders all zero actual values instead of hiding the cost", () => {

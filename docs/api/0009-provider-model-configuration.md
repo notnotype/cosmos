@@ -8,17 +8,30 @@
 >
 > 产品决策：[已接受 Proposal](../proposals/connection-credential-entry-v1.md)；Task 41 变更：[Proposal](../proposals/connection-agent-profile-separation-v1.md)；过程和验证：[Task 39](../../.agents/tasks/39-pi-ai-adapter/walkthrough-provider-model.md)、[Task 41](../../.agents/tasks/41-connection-agent-separation/README.md)。
 
+## Task 42 当前合同与历史目标更正
+
+**本节取代下文所有模型 Connection 选择、被 Connection 引用拒删、按 Connection 解析 invocation 的历史描述**；保留正文用于理解 Task 39 原目标，不能据其实现客户端。模型与默认选择分别由 ConfiguredModel 与 SystemConfig 拥有；Connection 只负责外部账号授权，不持有 modelId。`agent.invoke@2` 和 Story strict 请求接收可选本地 modelId，省略使用系统默认模型；Worker 解析模型/Provider/凭证，不再读模型 Connection。当前精确字段由 [contracts 补充](../spec/contracts/0001-public-contracts.md#task-42-当前合同补充)拥有。
+
+| 配置路由 | 输入 | 200 输出 | 状态与首个消费者 |
+| --- | --- | --- | --- |
+| GET `/system/config` | 无 | `{defaultModelId,defaultModel}` | 已实现；设置页详情、Story 预估 |
+| PUT `/system/config` | strict `{defaultModelId:string\|null}` | `{defaultModelId}` | 已实现；保存/清除默认模型 |
+| GET `/config/default-model` | 无 | `{modelId:string\|null}` | 旧读取保留 |
+| PUT `/config/default-model` | `{modelId:string\|null}` | `{modelId}` | 旧写入保留，共用选择有效性校验 |
+
+完整模型快照包含可选输入/输出每百万 token 价格，读取未知价格省略，0 保留。当前创建模型省略价格时，Prisma 缺省写入 0，后续是已知零价，不是未知；只有 null/缺失投影才省略价格，具体见 [DTO 补充](../spec/contracts/0001-public-contracts.md#task-42-当前合同补充)。已删除默认模型时保留 ID、模型为 null。非空选择在同一事务校验存在性与 Provider active 并 upsert；删除先完成则设置失败，设置先完成仍可随后删除并形成失效默认值。400/404/409/503、安全错误与 no-store 的当前合同见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)。Web/transport 使用 `getSystemConfig` / `updateSystemConfig`，PUT 确认响应不能按完整 GET DTO 解码。费用不由 Connection 或配置页面拥有；Story optional cost 的冻结目标见 [Story API](0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)，实现和运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录。
+
 ## 所有者与首个消费者
 
-数据库保存 Provider、模型、Connection 选择和非秘密操作进度；SecretStore 独占 key 值。Web 模型页通过 Product API/transport 写配置；可信 Worker 读取调用所需配置与凭证。API 可通过应用服务写入凭证，不提供凭证读取接口；发现由 API 在单次请求内执行一次受控只读目录请求，生成由 Worker 执行，API 不加载 SDK executable。API 的保存成功不是认证通过。
+数据库保存 Provider、模型、系统默认选择和非秘密操作进度；SecretStore 独占 key 值。Web 模型页通过 Product API/transport 写配置；可信 Worker 读取调用所需配置与凭证。API 可通过应用服务写入凭证，不提供凭证读取接口；发现由 API 在单次请求内执行一次受控只读目录请求，生成由 Worker 执行，API 不加载 SDK executable。API 的保存成功不是认证通过。
 
 ## DTO 与输入约束
 
 - ProviderSnapshot：id、name、api（openai-completions/openai-responses）、baseUrl、version、state、credentialState（configured/cleanup_pending）、createdAt、updatedAt。不返回 secretRef、key、尾号或上游错误。state 的 schema 允许 active/deleting 两值，但同步删除不产生中间态，当前实现只会写出 active；保留 deleting 是为将来引入异步删除时不改 DTO。
-- ModelSnapshot：id、providerId、modelId（上游标识）、name、contextWindow、maxOutputTokens、version、createdAt、updatedAt。首版纯文本，无能力自动推断；输出上限不得超过上下文窗口。Provider 内 modelId 唯一，Provider 名称不是身份。两个时间戳与 ProviderSnapshot 一致：存储层一直记录它们，读取快照若漏掉会在严格校验处失败。
+- ModelSnapshot：id、providerId、modelId（上游标识）、name、contextWindow、maxOutputTokens、可选 inputPricePerMillion/outputPricePerMillion、version、createdAt、updatedAt。POST/PATCH/list/get 一致返回已知价格（含 0），null/缺失价格省略。首版纯文本，无能力自动推断；输出上限不得超过上下文窗口。Provider 内 modelId 唯一，Provider 名称不是身份。两个时间戳与 ProviderSnapshot 一致：存储层一直记录它们，读取快照若漏掉会在严格校验处失败。
 - 配置名称 1–200 字符；上游模型标识 1–200；baseUrl 最多 2048；token 上限为正安全整数；API key 非空、最多 8192 字符、禁止 CR/LF，不 trim 后改写真实值。模型支持范围由协议测试证明，不接受任意 JSON 配置。
 - CreateProvider：name/api/baseUrl/apiKey；UpdateProvider：expectedVersion 与可选 name/api/baseUrl/apiKey，至少一项修改。key 省略表示保留，空字符串不表示删除。只在这两个命令接收 key；所有对象 strict，拒绝额外字段。
-- CreateModel：modelId/name/contextWindow/maxOutputTokens；UpdateModel：expectedVersion 和可选同类字段。模型不可移到其它 Provider。
+- CreateModel：modelId/name/contextWindow/maxOutputTokens 与可选 inputPricePerMillion/outputPricePerMillion（USD/每百万 token，非负）；UpdateModel：expectedVersion 和可选同类字段。创建省略价格命中存储默认 0，更新省略保留既有价格；模型不可移到其它 Provider。
 - 列表统一 {items,nextCursor}，limit 默认 50、最大 100；游标只含不透明标识，不含凭证；按 id 稳定排序，不宣称跨页事务快照。
 
 ## Product API 路由（/api/v1）
@@ -32,7 +45,7 @@
 | GET /model-providers/:id/connections | limit/cursor | 200 Page<{id,name}> | 编辑前影响提示 | 不实现 |
 | POST /model-providers | CreateProvider，Idempotency-Key | 201 ProviderSnapshot | 创建提供商 | 已实现 |
 | PATCH /model-providers/:id | UpdateProvider，Idempotency-Key | 200 ProviderSnapshot | 保存 | 已实现 |
-| GET /model-providers/:id/models | limit/cursor | 200 Page<ModelSnapshot> | 模型列表/Connection 选择 | 已实现 |
+| GET /model-providers/:id/models | limit/cursor | 200 Page<ModelSnapshot> | 模型目录/默认模型设置 | 已实现 |
 | GET /model-providers/:id/models/:modelId | 无 | 200 ModelSnapshot | 单项读取/编辑回填 | 已实现 |
 | POST /model-providers/:id/models | CreateModel | 201 ModelSnapshot | 手动添加/确认候选 | 已实现 |
 | PATCH /models/:id | UpdateModel | 200 ModelSnapshot | 编辑模型 | 路径不同 |
@@ -44,11 +57,11 @@
 | POST /model-providers/:id/discoveries | expectedVersion | 200 DiscoverySnapshot | 同步发现，一次只读请求 | 已实现 |
 | GET /model-discoveries/:jobId | 无 | 已退役 | 发现不再产生可轮询任务 | 已退役 |
 
-「路径不同」的三行，当前实现都挂在 Provider 下：`PATCH /model-providers/:providerId/models/:modelId`（200 ModelSnapshot）、`DELETE /model-providers/:providerId/models/:modelId`（204，空响应体，不返回 `{ok,id}`）、`DELETE /model-providers/:providerId`（204，空响应体，body 为 `{expectedVersion}` 并需要 Idempotency-Key；被连接引用的模型让它返回 409 `in_use`）。改回上表形状或把上表改成当前形状，需要单独决定；在决定前按当前实现调用。
+「路径不同」的三行，当前实现都挂在 Provider 下：`PATCH /model-providers/:providerId/models/:modelId`（200 ModelSnapshot）、`DELETE /model-providers/:providerId/models/:modelId`（204，空响应体，不返回 `{ok,id}`）、`DELETE /model-providers/:providerId`（204，空响应体，body 为 `{expectedVersion}` 并需要 Idempotency-Key；Provider 下仍有子模型则返回 409 `in_use`，需先明确删除子模型）。改回上表形状或把上表改成当前形状，需要单独决定；在决定前按当前实现调用。
 
 配置写入命令返回 X-Cosmos-Operation-ID，key 提交前 Web 先生成 Idempotency-Key；同 key 可查询 GET /model-configuration-operations/by-key/:key，不需重新发送 key。OperationSnapshot 仅 id/kind/providerId/state/errorCode/resourceVersion，状态 pending/completed/failed/cleanup_pending；key 不得被存为命令 payload、指纹或重放缓存。服务端已登记的同幂等键重传只返回既有操作状态，绝不再次执行或用重传内容改变配置。客户端不自动重传 key；首次响应未知时先查状态，确认为不存在才让用户重新填写。
 
-错误用固定 code/message/retryable 和安全 operationId；400 invalid_input，403 forbidden_origin，404 not_found，409 already_exists/version_conflict/in_use/operation_in_progress，413 payload_too_large，503 credential_write_failed/cleanup_pending/dependency_unavailable。已配置模型写入的 `already_exists` 表示同一服务商下已有同一 `modelId`（唯一约束），重试不会成功，必须人工确认已有条目。`in_use` 表示删除被 Connection 引用的模型：删除在事务内检查引用后返回 409，不再退化成可重试的依赖错误；只要引用还在，重试不会成功。同步发现另有 409 `credential_missing`（Provider 还没有可用凭证），它是当前实现的一部分，不在上面的通用清单里。冲突响应目前只带 code/message/retryable 与可选 operationId；返回受影响连接 id/name 与 hasMore 仍是目标、未实现，客户端需要自己列连接来提示影响面。所有响应 no-store，校验错误不序列化输入值/SDK error/stack。
+错误用固定 code/message/retryable 和安全 operationId；400 invalid_input，403 forbidden_origin，404 not_found，409 already_exists/version_conflict/in_use/operation_in_progress，413 payload_too_large，503 credential_write_failed/cleanup_pending/dependency_unavailable。已配置模型写入的 `already_exists` 表示同一服务商下已有同一 `modelId`（唯一约束），重试不会成功，必须人工确认已有条目。`in_use` 当前在 Provider 删除时表示仍有 ConfiguredModel 子行，必须先删除子模型；单删模型保留数据库外键 P2003 的防御性 `in_use` 翻译，但 Connection 已不引用模型、SystemConfig 默认 ID 也不构成删除保护。同步发现另有 409 `credential_missing`（Provider 还没有可用凭证），它是当前实现的一部分，不在上面的通用清单里。冲突响应只带 code/message/retryable 与可选 operationId；不返回受影响连接 id/name 或 hasMore，也不要求客户端列连接推断模型引用。所有响应 no-store，校验错误不序列化输入值/SDK error/stack。
 
 操作收据保留已确认的发布冲突原因：未发布且补偿完成后，failed/errorCode 为 version_conflict 或 operation_in_progress；查询、幂等重传和显式恢复返回同一持久化原因。补偿未完成时 state=cleanup_pending 优先表示仍需清理，errorCode 可保留原始冲突，完成清理后再进入 failed；消费者应先判断 state。没有已确认冲突原因的未发布失败使用 credential_write_failed。发布异常必须先回读提交阶段，已发布配置不能因异常分类变成失败。
 
@@ -58,7 +71,7 @@
 
 发布成功即后续调用读取新配置；旧 ref 的本地删除独立记录。清理失败返回 cleanup_pending 和当前已提交版本，不能把已生效配置声称为“未保存”，UI 显示“配置已保存，本地旧凭证清理未完成”。重试只删除该操作拥有且已无活跃引用的 ref，不重传 key、不外呼；删除返回不存在视为完成。普通读取不得为显示状态而读取 key 内容；configured 只代表已提交关联，不保证文件仍在或认证有效。
 
-删除 Provider 是同步的单事务操作（`DELETE /model-providers/:id`，body `{expectedVersion}`，成功 204 空响应体）：同一事务内校验版本、确认没有进行中的写操作、检查 Provider 及其模型不被任何 Connection 引用，通过后删除模型和 Provider；事务提交后再删本地凭证文件，删除失败只记日志——行已删即视为完成，残留文件是可清理垃圾，不需要操作收据或 deleting 中间态。被引用时整个删除拒绝（409 `in_use`），不做部分删除。单删模型在同一事务内检查引用，不删除共享 key。所有关联创建/更换/删除检查使用同一数据库写事务，不能先查后另事务提交。
+删除 Provider 是同步的单事务操作（`DELETE /model-providers/:id`，body `{expectedVersion}`，成功 204 空响应体）：同一事务内校验版本、确认没有进行中的写操作，若仍有子模型则整个删除拒绝 409 `in_use`；模型删空后才可删除 Provider。事务提交后再删本地凭证文件，删除失败只记日志——行已删即视为完成，残留文件是可清理垃圾，不需要操作收据或 deleting 中间态。单删模型按 id/providerId/expectedVersion 删除，保留防御性外键错误翻译，不删除 Provider 的共享 key；不检查 Connection 或 SystemConfig 默认 ID，删除默认模型后 ID 保留、详情为 null。依据：[模型删除仓储](../../packages/storage-prisma/src/configured-model-repository.ts)、[Provider 删除仓储](../../packages/storage-prisma/src/model-provider-removal-repository.ts)、[行为测试](../../packages/storage-prisma/src/model-provider-removal-integration.test.ts)。
 
 ### pending 接管与崩溃窗口
 
@@ -79,24 +92,11 @@ Provider 删除是同步单事务，没有可恢复的中间态，因此不占�
 
 ## Connection 与 invocation 版本
 
-明确新增模型型 connectorId `cosmos.agent`，它是 Cosmos 模型连接种类，不是外部服务商标识。其它 connectorId 不改分类或 secretRef 行为，不自动导入旧连接。
+模型选择已从 Connection 移到 ConfiguredModel/SystemConfig。`ConnectionInstance.modelId` 和模型型 `cosmos.agent` 的连接选择规则已退出；连接端点不再承担模型选择、模型引用解除或默认模型变更。旧的 Connection 增量表及其“已落地”结论不作为当前合同。
 
-模型连接新增 modelId（本地模型配置 ID）、version；Provider 由模型归属推导，不重复保存。创建模型连接必须选一个模型且禁止 secretRef；非模型连接禁止 modelId。更换选择携带 expectedVersion，事务校验模型/Provider active。允许已撤销模型连接解除 modelId 以解除引用；active 模型连接禁止无模型，解除选择须同事务转 revoked，重新启用须有有效选择。通用探测不适用于 cosmos.agent，保存不改变 lastCheckedAt/lastError、不发起生成请求。
+首个产品消费者分别是模型目录、默认模型设置与 Story 生成；受管调用通过下述 `agent.invoke@2`。历史真实调用只证明当时获准的协议/模型/地址，不证明本轮真实 Provider、Responses、多 Provider 或常驻调度已经验收。
 
-Connection 端点增量（首个消费者：现有连接面板；错误沿用上述固定错误合同）：
-
-| 端点 | 精确增量 |
-| --- | --- |
-| POST /connections | 既有 CreateConnection 字段增加可选 modelId；cosmos.agent 必须是非空本地 ID、禁止 secretRef 字段（包括 null），初始 active；其它类型 modelId 必须省略，不接受 null |
-| GET /connections 与 /connections/:id | 既有快照增加 version（正整数）与 modelId（未选为 null）；模型连接 secretRef 固定 null，不暴露 Provider ref；旧非模型连接行为保留 |
-| PATCH /connections/:id | 对 cosmos.agent 要求 expectedVersion，允许 name/status/modelId，禁止 configJson/secretRef/lastError；modelId 省略保留，null 解除，非空 ID 更换；其它连接只保留既有字段，禁止 modelId/expectedVersion |
-| POST /connections/:id/removals | 模型连接要求 expectedVersion，在同事务删除其关联；其它类型保持既有输入 |
-
-模型连接更新必须至少一个实际字段；status 仅 active/revoked，历史其它状态仍可读取。`{expectedVersion,modelId:null,status:"revoked"}` 原子解除并撤销；当前已 revoked 时可省略 status。`{expectedVersion,status:"active",modelId:"..."}` 原子选择并启用，省略 modelId 时必须已有有效选择。不能通过保存选择重写 lastCheckedAt/lastError。所有模型连接写入递增 version，缺失版本返回 400，过期返回 409 version_conflict；关联失效（模型不存在，或它所属的 Provider 不是 active）返回 409 invalid_model_selection；Provider 的 deleting 态目前不会被写入，但该分支一并覆盖，将来引入异步删除时无需改判定。旧类型禁止修改 connectorId 变成模型类型，不隐式迁移。
-
-上表的连接端点增量已落地（create/list/get/patch/removals 与 `cosmos.agent` 规则）；选模型的下一个消费者是 `agent.invoke@2`。`agent.invoke@2` 已实现、通过隔离测试（合同、Action、catalog、连接解析、pi-ai 适配器、Worker 注册），并完成一次真实最小调用（HTTP 200，模型、地址与凭证全部按连接解析）。仍未验收的是真实服务商对 Responses 协议的行为、多 Provider 与常驻调度。
-
-新增 `agent.invoke@2`：输入 connectionId/messages/tools/budget/metadata，不再接收 provider/model/API/baseUrl/secretRef/key；输出沿用实际 provider/model 与 usage 结构。Worker 按次读取 active Connection、模型和 Provider 的一致配置快照，再读取该 Provider key，取消后不读 key、不调用 SDK。一次调用固定快照，之后修改影响后续调用；没有强 lease 或撤销已发请求保证。预算不得超模型上限，两种生成 API 独立执行、不回退。实现落在 `packages/application/src/agent-invocation-v2.ts`（Action 定义 + 端口）、`packages/storage-prisma/src/agent-model-resolver.ts`（一次读取连接/模型/Provider）、`packages/agent-pi-ai/src/invocation-v2.ts`（按连接构造模型并调用）与 `apps/worker/src/agent-action-v2.ts`（无条件注册的 Worker Action）。
+`agent.invoke@2` 当前输入为可选本地 `modelId`、messages/tools/budget/metadata，不接收 connectionId/provider/API/baseUrl/secretRef/key；省略 modelId 使用系统默认。输出沿用实际 provider/model、usage 与可选 cost。Worker 解析选中模型及 active Provider 的一致配置快照，再读取该 Provider key，取消后不读 key、不调用 SDK。一次调用固定快照，之后修改影响后续调用；没有强 lease 或撤销已发请求保证。预算不得超模型上限，两种生成 API 独立执行、不回退。实现落在 `packages/application/src/agent-invocation-v2.ts`（Action 定义 + 端口）、`packages/storage-prisma/src/agent-model-resolver.ts`（模型/Provider 快照）、`packages/agent-pi-ai/src/invocation-v2.ts`（构造模型并调用）与 `apps/worker/src/agent-action-v2.ts`（Worker Action 注册）。
 
 `@1` 公共合同与历史证据保留；Worker 侧旧生产注册已退出——`COSMOS_AGENT_*` 不再被读取，`agent.invoke@1` 只作为 Story 生成侧复用的端口与输入输出契约存在，不再有进程注册它。catalog 因此把它标为 `status: "disabled"`：这个字段只是可读声明，不参与 dispatch 判定（`GET /action-definitions` 原样投影它），`enabled` 状态留给真正注册了的 Action。不同时提供回退。生产者/消费者清单：application Action definition/catalog、adapter、Workflow Host 测试、Task39 runner/test；`apps/worker/src/main.ts` 现在只注册 `agent.invoke@2`，`apps/worker/src/agent-action.ts` 与 `config.ts` 的 Agent profile 已删除。迁移 runner 调用必须新单独验收，不能把历史 QmVMec 改写为 @2 证据。`@2` 首个可信消费者是现有 Workflow Host，不新增任意 HTTP 模型执行入口或第二运行时。
 

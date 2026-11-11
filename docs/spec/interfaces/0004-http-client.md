@@ -8,7 +8,7 @@
 
 ## 最后更新
 
-2026-10-23（Task 39：Provider/model 配置方法与模型删除）。
+2026-11-11（Task 42：新增系统配置读写方法及新旧响应边界）。
 
 ## 组件定位
 
@@ -30,6 +30,19 @@
 
 ### 典型情景
 Web 页面读取 Feed/Source/Health、触发 Source 操作或订阅 SSE，或 Node 客户端需要同样的 DTO 校验时，选择本 transport。
+
+## Task 42 系统配置方法
+
+以下是 `HttpCosmosClient` 经 `SystemConfigClient` 继承提供的当前方法；DTO 与服务端语义分别以 [contracts](../contracts/0001-public-contracts.md#task-42-当前合同补充)和 [Product API](0002-product-api-http.md#task-42-当前合同补充)为准。
+
+| 方法 | HTTP 与校验 |
+| --- | --- |
+| `getSystemConfig()` | GET `/api/v1/system/config`；完整响应经 `systemConfigDtoSchema` strict 解析。 |
+| `updateSystemConfig(input)` | 先用 `updateSystemConfigCommandSchema` strict 解析 `{defaultModelId}`，PUT 同路径；响应只 strict 解析 `{defaultModelId:string|null}`。 |
+| `getDefaultModel()` | 旧 GET `/api/v1/config/default-model`；strict `{modelId:string|null}`。 |
+| `setDefaultModel(modelId)` | 旧 PUT 同旧路径，发送 `{modelId}`；解析旧形状确认响应。 |
+
+这些方法不使用 Provider 配置操作的 Idempotency-Key，不发起模型调用，不维护持久状态、不缓存或重试。非 2xx 延续 `CosmosTransportError`；成功响应格式错误仍抛 schema error。重建须覆盖新旧路径/字段名、null 清除、PUT 额外字段在发送前拒绝与响应 shape 不混用；源码及测试见[系统配置客户端](../../../packages/transport-http/src/client-system-config.ts)与[测试](../../../packages/transport-http/src/client-system-config.test.ts)。
 
 ## 概念与定义
 

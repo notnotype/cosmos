@@ -21,6 +21,10 @@ it("saves without formal writes, accepts atomically, rejects repeats and stale i
         const stale = candidate();
         const rejected = candidate();
         await port.save(accepted);
+        expect(await port.get(accepted.id)).not.toHaveProperty("cost");
+        const zeroCost = { ...candidate(), id: "zero-cost", cost: { input: 0, output: 0, total: 0, currency: "USD" } };
+        await port.save(zeroCost);
+        expect(await port.get(zeroCost.id)).toMatchObject({ cost: { input: 0, output: 0, total: 0, currency: "USD" } });
         await port.save(stale);
         await port.save(rejected);
         expect(await prisma.storyRevision.count()).toBe(1);

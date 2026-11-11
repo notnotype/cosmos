@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ConnectionInstance } from "@cosmos/contracts";
+import { connectionProbeResultSchema } from "@cosmos/contracts";
 
 import { ConnectionProbeService } from "./connection-probe.js";
 import { ConnectorExecutionError } from "./connector-ports.js";
@@ -146,6 +147,33 @@ describe("ConnectionProbeService", () => {
             reason: "OpenCLI Browser Bridge is unavailable.",
         });
         expect(recorded[0]?.status).toBe("error");
+    });
+
+    it("将超长适配器异常原因限制在公开合同边界并原样写回", async () => {
+        const { service, recorded } = serviceFor(async () => {
+            throw new ConnectorExecutionError(
+                "dependency_unavailable",
+                `OpenCLI: ${"x".repeat(600)}`,
+                true,
+            );
+        });
+
+        const result = connectionProbeResultSchema.parse(await service.run("connection-1"));
+        expect(result.reason).toBe(`OpenCLI: ${"x".repeat(491)}`);
+        expect(result.reason).toHaveLength(500);
+        expect(recorded[0]?.lastError).toBe(result.reason);
+    });
+
+    it("将超长正常 outcome 原因限制在公开合同边界并原样写回", async () => {
+        const { service, recorded } = serviceFor(async () => ({
+            outcome: "expired",
+            reason: `需要重新登录：${"x".repeat(600)}`,
+        }));
+
+        const result = connectionProbeResultSchema.parse(await service.run("connection-1"));
+        expect(result.reason).toBe(`需要重新登录：${"x".repeat(493)}`);
+        expect(result.reason).toHaveLength(500);
+        expect(recorded[0]?.lastError).toBe(result.reason);
     });
 
     it("其它异常照原样上抛，不粉饰成结论", async () => {

@@ -9,7 +9,7 @@ Task 35 的前端重做；含 Phase 1 采集链路与 Phase 2 组织/看板浏�
 
 ## 最后更新
 
-2026-10-01（Task 35：信息架构、单一明暗轴、外壳级 SSE、集中文案与门禁）。
+2026-11-11（Task 42：默认模型设置、连接职责与费用预估补充）。
 
 ## 组件定位
 
@@ -84,6 +84,20 @@ Asset download 中未被 client 封装的部分不由它承担。
 → 状态与持久化、外观主题、状态转换、副作用、错误与降级、依赖、配置 已归档:[part-04-state-and-lifecycle.md](0005-web-client/part-04-state-and-lifecycle.md)
 → 重建验收、实现与测试锚点 已归档:[part-05-acceptance-and-anchors.md](0005-web-client/part-05-acceptance-and-anchors.md)
 → React 组件实验室 已归档:[part-06-component-lab.md](0005-web-client/part-06-component-lab.md)
+
+## Task 42 当前合同补充
+
+本节替代封口分册中与默认模型、模型 Connection 和 Story 费用相冲突的描述；配置 DTO 与 HTTP 行为链接 [Public Contracts](../contracts/0001-public-contracts.md#task-42-当前合同补充)及 [Product API](0002-product-api-http.md#task-42-当前合同补充)。
+
+设置页通过 `getSystemConfig()` 读取当前默认模型，并列出 active Provider 下可选模型。当前详情显示名称、上游标识、服务商、上下文窗口、输出上限、已知单价及可展开的版本/时间戳；未知单价不补零。选项改变先形成草稿，点击保存才调用 `updateSystemConfig({defaultModelId})`；保存中禁用选择和按钮，成功后更新当前值。选“未设置”要确认后才写 null；取消确认不清除。加载失败可重新加载；保存失败保留草稿，按 400/404/409/503 显示安全错误，可改选或重载后重试。当前 ID 已失效时保留提示，允许明确清除或替换，不自动换模型。
+
+Story 生成面板读取系统默认模型显示预估，但请求不传 modelId，服务端使用执行时解析的默认配置；没有临时模型下拉，改默认需回设置页。预估只按纯文本情景：输入 1000–4000、输出 256–1024 token，并按模型上下文及输出上限收紧；须两项价格都已知且上下文至少 2 token，否则显示无法估算。该区间不是实际分词、费用上限或结算承诺，查询配置失败、未设置默认和未知价格分别降级。
+
+Story 实际费用只显示在持久候选卡片，generation 区域只显示状态；读取 `record.candidate.cost` 的 input/output/total/currency，不由浏览器按当前价重算。缺失时不渲染实际费用；0 正常显示，极小正数小于 0.00000001 时显示 `<0.00000001`，其余金额最多 8 位小数并去尾零。费用是按调用 usage 与当时配置价格计算的调用结果，不是服务商账单。刷新或重新打开 Story 后从候选列表恢复；pending/accepted/rejected 候选的既有金额不因决定而重算。实现与测试锚点：[持久候选展示](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.tsx)、[费用组件测试](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts)、[候选展示测试](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts)。
+
+Connection 面板只管理外部账号授权、连接状态与登录探测，不再用于选模型；模型目录与默认模型设置独立管理。费用与成功状态的服务端约束见 [Product API](0002-product-api-http.md#task-42-当前合同补充)，预估不作为调用结果。
+
+重建验收：加载详情→改选但未保存→保存成功；清除确认取消/确认；加载与保存失败恢复；失效默认 ID 提示；缺价与零单价预估；连接列表无模型选择。实现/测试锚点：[默认设置面板](../../../apps/web/src/components/cosmos/default-model-panel.tsx)、[选项与错误处理](../../../apps/web/src/components/cosmos/default-model-settings.ts)、[模型详情](../../../apps/web/src/components/cosmos/model-details.tsx)、[费用估算](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.tsx)、[设置测试](../../../apps/web/src/components/cosmos/default-model-panel.test.ts)。上述是从代码核对的行为，本轮运行证据归 [Task 42](../../../.agents/tasks/42-default-model-ui-api/README.md)。
 
 ## 非目标/边界
 

@@ -2,6 +2,12 @@
 
 > `docs/spec/` 默认随仓库当前实现保持最新。这里描述已经存在、可从外部观察或为重建所必需的行为，并给出可判定的重建验收；它不是未来设计、需求清单或实施日志，也不以固定提交、文档状态或实现状态作为元数据。
 
+## Task 42 当前规格导航与历史勘误
+
+SystemConfig 与默认模型设置的当前合同由 [公共 DTO 补充](contracts/0001-public-contracts.md#task-42-当前合同补充)、[Product API 补充](interfaces/0002-product-api-http.md#task-42-当前合同补充)、[HTTP Client 方法](interfaces/0004-http-client.md#task-42-系统配置方法)和 [Web 行为](interfaces/0005-web-client.md#task-42-当前合同补充)分别拥有。相关封口分册中模型 Connection、旧默认模型路径或旧 Story 形状与补充冲突的内容已被替代，重建时先读入口补充，不修改历史册。Connection 仅管理外部账号；模型与默认选择分别由模型目录及系统设置承担。
+
+Story 调用费用的已接受目标与 conformance 留在 [API Draft](../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)，本轮已经从源码核对的持久候选费用、generation 成功与身份约束、Web 候选消费见上述 canonical 补充；未宣称自动重试最终成功或真实 Provider 结算准确。当前完成状态及各层运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)与 [项目状态](../../PROJECT-STATUS.md)记录，源码存在不等于验收全部通过。
+
 ## 1. 职责、事实来源与阅读方法
 
 ### 1.1 spec 负责什么

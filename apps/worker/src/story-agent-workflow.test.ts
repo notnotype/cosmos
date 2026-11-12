@@ -1,11 +1,21 @@
 import { afterEach, expect, it, vi } from "vitest";
 import * as application from "@cosmos/application";
-import { PrismaStoryAgentCandidateRepository } from "@cosmos/storage-prisma";
+import { configuredModelSnapshotSchema } from "@cosmos/contracts";
+import { PrismaStoryAgentCandidateRepository, PrismaStoryAgentFailureCodeReader } from "@cosmos/storage-prisma";
 import { createWorkerAgentInvocationV2Action } from "./agent-action-v2.js";
 import { createWorkflowHost } from "./workflow-host.js";
 import { cleanupTemporaryRoots, drainWorkflow, withRepository } from "./workflow-ingest.fixtures.js";
 
 afterEach(cleanupTemporaryRoots);
+
+function activeModelConfig(modelId: string, timeoutSeconds = 300) {
+    const model = configuredModelSnapshotSchema.parse({ id: modelId, providerId: "provider", modelId: "upstream-model", name: "Synthetic",
+        contextWindow: 4096, maxOutputTokens: 1024, version: 1, inputPricePerMillion: 0, outputPricePerMillion: 0,
+        createdAt: "2026-10-08T12:00:00.000Z", updatedAt: "2026-10-08T12:00:00.000Z" });
+    return { getDefaultModelId: async () => modelId,
+        getStoryAgentTimeoutSeconds: async () => timeoutSeconds,
+        getModelSelection: async (selectedId: string) => selectedId === modelId ? { model, providerState: "active" } : null };
+}
 
 it("queues once, resumes through the durable Worker and requires a human decision", async () => {
     expect(application.StoryAgentWorkflowControl).toBeTypeOf("function");
@@ -46,14 +56,22 @@ it("queues once, resumes through the durable Worker and requires a human decisio
             leaseMs: 60_000,
         };
         const host = createWorkflowHost({ ...options, owner: "enqueue-host" });
-        const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates,
+        const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates, systemConfig: activeModelConfig(modelId),
+            failureCodes: new PrismaStoryAgentFailureCodeReader(repository.prisma),
             stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
             content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected full content read"); } }),
         });
         const request = { storyId: "story", modelId, task: "story.summarize" as const, idempotencyKey: "request-1" };
         const queued = await control.enqueue(request);
         expect(queued).toMatchObject({ status: "queued", candidateId: null });
-        expect(await control.enqueue(request)).toEqual(queued);
+        const queuedEnvelope = await host.store.loadWorkflowEnvelope(queued.runId);
+        expect(queuedEnvelope?.inputSnapshot).toMatchObject({ prepared: { input: { budget: { maxDurationMs: 300_000 } } } });
+        const replayControl = new application.StoryAgentWorkflowControl({ store: host.store, candidates, systemConfig: activeModelConfig(modelId, 900),
+            stories: { readStory: async () => { throw new Error("Idempotent replay must use the original snapshot"); } },
+            content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }) });
+        expect(await replayControl.enqueue(request)).toEqual(queued);
+        const replayedEnvelope = await host.store.loadWorkflowEnvelope(queued.runId);
+        expect(replayedEnvelope?.inputSnapshot).toMatchObject({ prepared: { input: { budget: { maxDurationMs: 300_000 } } } });
         await expect(control.enqueue({ ...request, modelId: "other-model" })).rejects.toMatchObject({ code: "conflict" });
         expect(complete).not.toHaveBeenCalled();
         expect(await repository.prisma.storyAgentCandidate.count()).toBe(0);
@@ -65,7 +83,7 @@ it("queues once, resumes through the durable Worker and requires a human decisio
         expect(complete).toHaveBeenCalledOnce();
         expect(await control.enqueue(request)).toEqual(finished);
         const restartedControl = new application.StoryAgentWorkflowControl({ store: recovered.store,
-            candidates: new PrismaStoryAgentCandidateRepository(repository.prisma),
+            candidates: new PrismaStoryAgentCandidateRepository(repository.prisma), systemConfig: activeModelConfig(modelId),
             stories: { readStory: async () => { throw new Error("Historical reads must use the durable snapshot"); } },
             content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }),
         });
@@ -115,7 +133,7 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
         await repository.prisma.story.create({ data: { id: "story", kind: "document" } });
         await repository.prisma.storyRevision.create({ data: { id: "base", storyId: "story", title: "Original" } });
         await repository.prisma.story.update({ where: { id: "story" }, data: { currentRevisionId: "base" } });
-        for (const mode of ["revoked", "provider", "invalid", "cancel", "save-unknown"] as const) {
+        for (const mode of ["revoked", "provider", "invalid", "timeout", "cancel", "save-unknown"] as const) {
             const candidates = new PrismaStoryAgentCandidateRepository(repository.prisma);
             let allowed = true;
             let cancel = async () => {};
@@ -134,7 +152,7 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
                     task: "story.summarize", title: "Suggested", summary: "Summary", keyFacts: [],
                 }) }], api: "openai-completions" as const, provider: "synthetic-provider", model: "synthetic-model",
                 usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
-                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop" as const, timestamp: 0 };
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: mode === "timeout" ? "aborted" as const : "stop" as const, timestamp: 0 };
             });
             const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: `worker-${mode}`,
                 now: () => new Date(time), leaseMs: 60_000,
@@ -147,7 +165,8 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
                     return record;
                 } })],
             });
-            const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates,
+            const control = new application.StoryAgentWorkflowControl({ store: host.store, candidates, systemConfig: activeModelConfig(modelId),
+            failureCodes: new PrismaStoryAgentFailureCodeReader(repository.prisma),
                 stories: { readStory: async () => ({ storyId: "story", storyRevisionId: "base", title: "Original", summary: "", entryRevisionIds: [] }) },
                 content: new application.ContentQuery({ readContentSource: async () => { throw new Error("Unexpected body read"); } }),
             });
@@ -163,11 +182,17 @@ it("fails closed after enqueue on revoked model, provider failure, invalid propo
                 time += 2000;
             }
             const result = await control.read("story", queued.runId);
-            expect(result).toMatchObject({ status: mode === "cancel" ? "cancelled" : "failed", candidateId: null });
+            expect(result).toMatchObject({ status: mode === "cancel" ? "cancelled" : "failed", candidateId: null,
+                errorCode: mode === "timeout" ? "timeout" : mode === "invalid" ? "malformed_payload" : mode === "cancel" ? null : mode === "revoked" ? "authentication_required" : "generation_failed" });
             expect(result).not.toHaveProperty("cost");
             expect(await host.backend.loadRun(queued.runId)).toMatchObject({ status: result.status });
             expect(JSON.stringify(result)).not.toContain("SYNTHETIC-PRIVATE-ERROR");
             expect(complete).toHaveBeenCalledTimes(mode === "revoked" ? 0 : 1);
+            if (mode === "timeout") {
+                const failedJobs = await repository.prisma.job.findMany({ where: { workflowRunId: queued.runId, status: "failed_terminal" } });
+                expect(failedJobs).toHaveLength(1);
+                expect(failedJobs[0]).toMatchObject({ errorCode: "timeout", attempts: 1 });
+            }
             expect(await repository.prisma.storyAgentCandidate.count()).toBe(mode === "save-unknown" ? 1 : 0);
             if (mode === "save-unknown") {
                 const orphan = await candidates.get(`story-candidate-${queued.runId}`);

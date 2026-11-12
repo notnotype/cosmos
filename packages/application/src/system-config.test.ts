@@ -14,14 +14,21 @@ const model: ConfiguredModelSnapshot = {
 
 function serviceWith(initialModelId: string | null = null) {
     let modelId = initialModelId;
+    let timeoutSeconds = 300;
     const getModelSelection = vi.fn(async (id: string): Promise<{ model: ConfiguredModelSnapshot; providerState: string | null } | null> =>
         ({ model: { ...model, id }, providerState: "active" }));
     const setDefaultModelId = vi.fn(async (value: string | null) => { modelId = value; });
     const repository = {
+        getStoryAgentTimeoutSeconds: vi.fn(async () => 300),
+        updateConfig: vi.fn(async (command, validate) => {
+            if (command.defaultModelId !== undefined && command.defaultModelId !== null) validate(await getModelSelection(command.defaultModelId));
+            if (command.storyAgentTimeoutSeconds !== undefined) timeoutSeconds = command.storyAgentTimeoutSeconds;
+            if (command.defaultModelId !== undefined) await setDefaultModelId(command.defaultModelId);
+        }),
         getDefaultModelId: vi.fn(async () => modelId),
         setDefaultModelId,
         getSystemConfigWithModel: vi.fn(async () => ({ defaultModelId: modelId,
-            defaultModel: modelId === null ? null : { ...model, id: modelId } })),
+            defaultModel: modelId === null ? null : { ...model, id: modelId }, storyAgentTimeoutSeconds: timeoutSeconds })),
         getModelSelection,
         setDefaultModelWithValidation: vi.fn(async (id: string, validate: (selection: { model: ConfiguredModelSnapshot; providerState: string | null } | null) => void) => {
             validate(await getModelSelection(id));
@@ -34,10 +41,18 @@ function serviceWith(initialModelId: string | null = null) {
 describe("SystemConfigService", () => {
     it("reads the complete configuration with prices", async () => {
         const { service } = serviceWith("model-1");
-        await expect(service.getConfig()).resolves.toEqual({ defaultModelId: "model-1", defaultModel: model });
-        await expect(service.getSystemConfigWithModel()).resolves.toEqual({ defaultModelId: "model-1", defaultModel: model });
+        await expect(service.getConfig()).resolves.toEqual({ defaultModelId: "model-1", defaultModel: model, storyAgentTimeoutSeconds: 300 });
+        await expect(service.getSystemConfigWithModel()).resolves.toEqual({ defaultModelId: "model-1", defaultModel: model, storyAgentTimeoutSeconds: 300 });
     });
 
+    it("updates only the requested timeout field", async () => {
+        const { service, repository } = serviceWith("model-1");
+        await expect(service.getStoryAgentTimeoutSeconds()).resolves.toBe(300);
+        await service.updateConfig({ storyAgentTimeoutSeconds: 900 });
+        expect(repository.updateConfig).toHaveBeenCalledWith({ storyAgentTimeoutSeconds: 900 }, expect.any(Function));
+        await expect(service.updateConfig({ storyAgentTimeoutSeconds: 29 })).rejects.toMatchObject({ code: "invalid_input" });
+        expect(repository.updateConfig).toHaveBeenCalledOnce();
+    });
     it("sets a valid active model through the new service method", async () => {
         const { service, repository } = serviceWith();
         await service.setDefaultModel("model-1");

@@ -1,6 +1,10 @@
 # Task 42 文档影响分析
 
-## 当前结论（2026-11-11）
+## 当前结论（2026-11-12）
+
+**需更新**：新增 Story Agent 系统级超时、秒数验证与调用快照，七类公开错误及前端固定安全提示，并封闭 Story Job/Attempt 原文旁路。对应 Proposal、ADR-0033、公共合同、API/transport/Web/storage 当前规范、项目状态均需同步；历史分册保留当时事实，当前补充优先。精确实施、失败、修复和各层验收只在 [walkthrough](walkthrough.md) 记录；本页不复制证据。
+
+## 前轮结论（2026-11-11）
 
 **需更新，已完成同步并通过本轮隔离验收**。四类价格、USD/CNY 与整请求两档计费已同步到原话、已接受提案、架构、[ADR-0032](../../../docs/adr/0032-model-cache-tiered-pricing.md)、API、公共合同、HTTP 客户端和 Web 当前规范；封口历史分册保持只读，项目状态已更新。最终分层验证、全局既有文档/尺寸债务及未部署边界统一见 [walkthrough](walkthrough.md)；前轮证据保留于 [README](README.md)。
 

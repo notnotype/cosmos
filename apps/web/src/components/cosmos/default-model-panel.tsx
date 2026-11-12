@@ -51,10 +51,11 @@ function useDefaultModelSettings(client: ModelSettingsClient) {
         setNotice(null);
         try {
             const result = await client.updateSystemConfig({ defaultModelId });
-            setConfig({
-                defaultModelId: result.defaultModelId,
+            setConfig((current) => current ? {
+                ...current,
+                defaultModelId: result.defaultModelId ?? null,
                 defaultModel: options?.find((option) => option.model.id === result.defaultModelId)?.model ?? null,
-            });
+            } : current);
             setSelected(result.defaultModelId ?? "");
             setNotice(copy.saved);
         } catch (failure) {

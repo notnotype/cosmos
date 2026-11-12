@@ -11,7 +11,10 @@ export const repositoryRoot = resolve(import.meta.dirname, "../..");
 // This immutable commit supplies the base 43 migrations; schema-snapshot-manifest.json identifies the explicit working-tree overlay.
 export const snapshotCommit = "7ca568a91c57fba7bd8256727662936143b63a14";
 const schemaPrefix = "packages/storage-prisma/prisma";
-const overlayMigrationName = "20261111080000_task_42_cache_tiered_pricing";
+const overlayMigrationNames = [
+    "20261111080000_task_42_cache_tiered_pricing",
+    "20261112090000_task_42_story_agent_timeout",
+] as const;
 
 export async function prepareStoryIsolation() {
     const parent = join(repositoryRoot, ".agent", "tmp");
@@ -32,7 +35,7 @@ export async function prepareStoryIsolation() {
             await writeFile(destination, execFileSync("git", ["show", `${snapshotCommit}:${file}`], { cwd: repositoryRoot }));
         }
         const overlays = [];
-        for (const path of ["schema.prisma", `migrations/${overlayMigrationName}/migration.sql`]) {
+        for (const path of ["schema.prisma", ...overlayMigrationNames.map((name) => `migrations/${name}/migration.sql`)]) {
             const bytes = await readFile(join(repositoryRoot, schemaPrefix, path));
             const destination = join(root, "snapshot", schemaPrefix, path);
             await mkdir(dirname(destination), { recursive: true });
@@ -40,7 +43,7 @@ export async function prepareStoryIsolation() {
             overlays.push({ path, sha256: createHash("sha256").update(bytes).digest("hex") });
         }
         await writeFile(join(root, "schema-snapshot-manifest.json"), JSON.stringify({
-            baseCommit: snapshotCommit, overlayMigrationName, overlaySource: "current-working-tree", overlays,
+            baseCommit: snapshotCommit, overlayMigrationNames, overlaySource: "current-working-tree", overlays,
         }, null, 2));
         const dataRoot = join(root, "data");
         await mkdir(dataRoot);

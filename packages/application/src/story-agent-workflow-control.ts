@@ -4,6 +4,7 @@ import { storyAgentGenerationRequestSchema, storyAgentGenerationSchema, type Sto
     type StoryAgentGenerationRequest } from "@cosmos/contracts";
 import type { ContentQuery } from "./content-query.js";
 import type { StoryAgentSnapshotReader } from "./story-agent.js";
+import type { SystemConfigRepository } from "./system-config.js";
 import { prepareStoryAgentRequest, preparedStoryAgentSchema } from "./story-agent-preparation.js";
 import { WorkflowHostConflictError, WorkflowHostError, type WorkflowEnvelope, type WorkflowHostStore } from "./workflow-host.js";
 
@@ -17,8 +18,10 @@ export const storyAgentWorkflowInputSchema = z.object({
 /** Only approved public projections enter this snapshot; credentials resolve in the Worker. */
 export class StoryAgentWorkflowControl {
     constructor(private readonly options: {
-        store: WorkflowHostStore;
+        store: Pick<WorkflowHostStore, "loadWorkflowEnvelope" | "createWorkflowEnvelope" | "findWorkflowEnvelopeByIdempotencyKey">;
         stories: StoryAgentSnapshotReader; content: ContentQuery;
+        systemConfig: Pick<SystemConfigRepository, "getDefaultModelId" | "getModelSelection" | "getStoryAgentTimeoutSeconds">;
+        failureCodes?: { getStoryAgentFailureCode(runId: string): Promise<string | null> };
         candidates?: { get(candidateId: string): Promise<StoryAgentCandidate | null> };
     }) {}
 
@@ -31,11 +34,17 @@ export class StoryAgentWorkflowControl {
             this.assertMatches(existing, input.storyId, request);
             return this.project(existing);
         }
+        const modelId = request.modelId ?? await this.options.systemConfig.getDefaultModelId();
+        const selection = modelId === null ? null : await this.options.systemConfig.getModelSelection(modelId);
+        if (!selection || selection.providerState !== "active") {
+            throw new WorkflowHostConflictError("请先在设置页选择一个可用的默认模型。");
+        }
+        const timeoutSeconds = await this.options.systemConfig.getStoryAgentTimeoutSeconds();
         const prepared = await prepareStoryAgentRequest(this.options.stories, this.options.content,
             { storyId: input.storyId, task: request.task, sources: request.sources }, {
                 modelId: request.modelId,
                 authority: { allowedProfiles: request.sources?.length ? ["summary-only", "structured-content"] : ["summary-only"] },
-                budget: { maxDurationMs: 60_000, maxToolCalls: 0, maxOutputTokens: 2048 },
+                budget: { maxDurationMs: timeoutSeconds * 1000, maxToolCalls: 0, maxOutputTokens: 2048 },
             });
         const runId = new UuidIdGenerator().nextId("run");
         const snapshot = storyAgentWorkflowInputSchema.parse({ request, prepared, candidateId: `story-candidate-${runId}`, createdAt: new Date().toISOString() });
@@ -74,8 +83,11 @@ export class StoryAgentWorkflowControl {
     private async project(envelope: WorkflowEnvelope): Promise<StoryAgentGeneration> {
         const { request, prepared, candidateId } = storyAgentWorkflowInputSchema.parse(envelope.inputSnapshot);
         const status = ["completed", "failed", "cancelled", "queued"].includes(envelope.status) ? envelope.status : "running";
+        const errorCode = status === "failed"
+            ? await this.options.failureCodes?.getStoryAgentFailureCode(envelope.runId) ?? "generation_failed"
+            : null;
         const generation = { runId: envelope.runId, storyId: prepared.story.storyId, task: request.task, status,
-            candidateId: status === "completed" ? candidateId : null, errorCode: status === "failed" ? "generation_failed" : null };
+            candidateId: status === "completed" ? candidateId : null, errorCode };
         if (status !== "completed" || candidateId !== `story-candidate-${envelope.runId}` || !this.options.candidates) {
             return storyAgentGenerationSchema.parse(generation);
         }

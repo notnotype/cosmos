@@ -17,7 +17,7 @@ const migrationName = "20261015000000_provider_model_configuration";
  * 本测试的「现状」快照包含到此为止的迁移。边界之后一旦出现新迁移就要重新审计——
  * 因为快照复制的是当前 schema.prisma，新迁移如果改了本测试断言的结构，断言会静默失真。
  */
-const auditedThrough = "20261111080000_task_42_cache_tiered_pricing";
+const auditedThrough = "20261112090000_task_42_story_agent_timeout";
 const temporaryParent = join(repositoryRoot, ".agent/tmp");
 const timestamp = "2026-10-15T00:00:00.000Z";
 

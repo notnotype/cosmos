@@ -4,6 +4,7 @@ import {
     renderModelProviderPanelLab,
     renderModelDetailsLab,
     renderProviderModelsSectionLab,
+    renderStoryAgentTimeoutPanelLab,
 } from "../model-fixtures";
 import {
     renderBoardBlockListLab,
@@ -172,6 +173,20 @@ export const cosmosComponentDefinitions = [
         ],
         tokens: sharedTokens,
         render: renderDefaultModelPanelLab,
+    },
+    {
+        id: "story-agent-timeout-panel",
+        label: "StoryAgentTimeoutPanel",
+        category: "Cosmos",
+        modulePath: "components/cosmos/story-agent-timeout-panel.tsx",
+        defaultSceneId: "default",
+        controls: [control("state", "State", "select", "default", ["default", "read-failure"])],
+        scenes: [
+            {id: "default", label: "300 seconds and editable", props: {state: "default"}},
+            {id: "read-failure", label: "Read failure", props: {state: "read-failure"}},
+        ],
+        tokens: sharedTokens,
+        render: renderStoryAgentTimeoutPanelLab,
     },
     {
         id: "storage-panel",

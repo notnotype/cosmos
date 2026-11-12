@@ -27,7 +27,8 @@ export const storyAgentGenerationSchema = z.object({
     runId: z.string().min(1), storyId: z.string().min(1), task: storyAgentTaskSchema,
     status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
     candidateId: z.string().nullable(),
-    errorCode: z.enum(["generation_failed"]).nullable(),
+    errorCode: z.enum(["timeout", "authentication_required", "rate_limited", "budget_exhausted",
+        "invalid_configuration", "dependency_unavailable", "malformed_payload", "generation_failed"]).nullable(),
     cost: storyAgentCostSchema.optional(),
 }).strict();
 export type StoryAgentGenerationRequest = z.infer<typeof storyAgentGenerationRequestSchema>;

@@ -158,6 +158,7 @@ model ConfiguredModel {
 model SystemConfig {
   id             String   @id @default("singleton")
   defaultModelId String?
+  storyAgentTimeoutSeconds Int      @default(300)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

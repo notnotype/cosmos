@@ -6,7 +6,7 @@
 
 ## 最后更新
 
-2026-11-11（Task 42：SystemConfig DTO 与模型选择当前合同补充）。
+2026-11-12（Task 42：Story Agent 超时设置与公开失败码补充）。
 
 ## 组件定位
 
@@ -46,8 +46,9 @@
 
 本节取代封口分册中冲突的默认模型与 Connection 选模型说明；公共 JSON 形状以本节及[源码](../../../packages/contracts/src/system-config.ts)为准，HTTP 状态与事务行为由 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)拥有。
 
-- 系统配置（`SystemConfigDto`）为 strict `{defaultModelId:string|null, defaultModel:ConfiguredModelSnapshot|null}`。两字段必需；已删除模型的旧 ID 仍可读取，模型投影为 null。快照包含模型 ID/Provider ID、上游标识、名称、上下文窗口、最大输出、版本、时间戳及下节定价配置；未知价格省略，0 保留，不包含凭证。旧模型原两价保留，新增缓存价格未知不补零；新建模型普通四价必填，不再接受省略价格依赖数据库默认值。
-- 更新配置（`UpdateSystemConfigCommand`）为 strict `{defaultModelId:string|null}`；非空 ID 长 1–200、必须等于其 trim 值并通过控制字符约束，null 清除。完整 GET DTO 与 PUT 的 `{defaultModelId}` 确认响应不是同一个形状。
+- 系统配置（`SystemConfigDto`）为 strict `{defaultModelId:string|null, defaultModel:ConfiguredModelSnapshot|null, storyAgentTimeoutSeconds:number}`。三个字段必需；超时为 30–1800 的整数秒，系统默认 300；已删除模型的旧 ID 仍可读取，模型投影为 null。快照包含模型 ID/Provider ID、上游标识、名称、上下文窗口、最大输出、版本、时间戳及下节定价配置；未知价格省略，0 保留，不包含凭证。旧模型原两价保留，新增缓存价格未知不补零；新建模型普通四价必填，不再接受省略价格依赖数据库默认值。
+- 更新配置（`UpdateSystemConfigCommand`）为 strict `{defaultModelId?:string|null, storyAgentTimeoutSeconds?:number}`，至少有一个字段；超时必须是 30–1800 的整数，拒绝 null、字符串、小数及未知字段。非空 ID 长 1–200、必须等于其 trim 值并通过控制字符约束，null 清除。省略字段保持原值，组合更新原子提交；PUT 仅返回本次已保存字段，完整 GET DTO 与 PUT 确认响应不是同一形状。
+- Story Generation 的可空 `errorCode` 只接受 `timeout`、`authentication_required`、`rate_limited`、`budget_exhausted`、`invalid_configuration`、`dependency_unavailable`、`malformed_payload` 及通用 `generation_failed`；用户取消继续用 `cancelled` 状态，非失败状态不带失败原因。未知/缺失持久码由投影降级为 `generation_failed`，不通过错误原文推断分类。与同一 Story Workflow 关联的通用 Job/Attempt 查询也只投影白名单码与固定安全消息；Job result 与 Attempt error 不输出自由文本，取消无错误。其它 Workflow 的公开诊断合同保持不变。
 - Agent invocation v2 与 Story 生成使用可选本地 `modelId`，省略走默认模型；Story strict 请求为 `{task,sources?,modelId?}`，generation 不再含 connectionId。Connection 不拥有模型选择。
 - Story 候选（`StoryAgentCandidate.cost?`）与生成投影（`StoryAgentGeneration.cost?`）复用 `agentInvocationOutputSchema.shape.cost.unwrap()`：strict `{input,output,cacheWrite?,cacheRead?,total,currency}`，金额为有限非负数，币种字符串默认 USD；缓存两项 optional 兼容历史，新运行能够计价时输出完整四项。不新增不同费用类型。0 合法，旧记录或缺失费用省略字段，不填 null 或零，不以当前模型价格回算。Candidate 费用随既有 JSON 持久化；Generation 只在 completed 且候选身份、Story、Story Revision 与 task 均匹配时读取费用，失败/取消省略。精确投影条件见 [Product API](../interfaces/0002-product-api-http.md#task-42-当前合同补充)，冻结目标及 conformance 见 [Story API](../../api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)。
 

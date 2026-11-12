@@ -1,138 +1,108 @@
-# Task 42：缓存价格与整请求阶梯计费
+# Task 42：默认模型配置 UI 与 API 实现
 
-## 当前切片（2026-11-11）
+## 历史分册
 
-状态：**四类价格、USD/CNY 与整请求阶梯计费实现及本轮隔离验收完成**。Task 42 继续覆盖模型配置、调用费用与 Web 消费；前轮已完成证据保留在 [README](README.md)，本轮过程与验证唯一记录于本文。此前执行器故障与失败尝试保留为时间线，最终结果见下方收尾结论。
+- [2026-11-11：缓存价格与整请求阶梯计费](walkthrough/01-cache-tiered-pricing-2026-11-11.md)：方案、实施、验收及本地提交/合并记录。
+- [2026-11-11：默认模型失效生成修复](walkthrough/02-default-model-recovery-2026-11-11.md)：修复决定、实施证据与验证。
+
+## Story Agent 超时与错误展示（2026-11-12）
 
 用户原话：
 
-> 参考截图，修改价格计算相关代码，需求调整如下：
-> 1.用户配置时需要填写：输入价格、输出价格、缓存写入价格、缓存读取价格（ChatGPT部分模型设置了阶梯计费，阈值是272K上下文，计费是按整次请求判定层级，不是只对超过272K的部分收费。只要输入达到272,001 Token，整单就按高价档计算 ）。
-> 2.后端修改表结构，新增缓存写入价格、缓存读取价格、是否有阶梯计费、阶梯计费阈值。（如何保存阶梯计费价格？）
-> 3.后端修改新增模型API参数，前后端保证功能正常。
+> 接下来请你和你的子Agent先封装常见错误，然后在前端页面上正确的展示错误信息，同时增加一个新功能：用户可以在设置界面配置超时时间，默认设置成300秒。
 
-维护者确认：支持 USD/CNY 每模型币种、不换汇；普通档四价必填，可选阶梯保存完整高档四价与阈值；总输入大于阈值才整请求切档，272000/272001 分别为低档/高档；旧调用费用不重算。确认创建 `feat/t42-cache-tiered-pricing` 分支、复用本 Task 和下述三个公开验收边界。
+用户确认按建议合同实施，并明确要求沿用 Task 42。虽然 Task 42 的早期切片已关闭，本切片复用理由是它覆盖 SystemConfig 设置/API、Story Agent 生成与 Web 行为；不另建 Task 编号。
 
-## 目标与边界
+### 当前切片
 
-1. 创建/编辑/读取能完整保存四价、币种、开关、阈值和高档四价，缺项拒绝，0 合法。
-2. 调用实际费用区分普通输入、输出、缓存写入、缓存读取；按输入总量统一选档，无重复缓存计费；持久费用刷新与改价不重算。
-3. 浏览器能配置/修改并回填价格；API、Worker、前端合同一致，隔离迁移与公开边界验证充分。
+阶段：合同已确认，准备 RED → GREEN → 验收。目标：Story Agent 每次生成使用系统配置的超时时间，默认 300 秒；识别并安全展示常见生成失败原因。验收：
 
-非目标：自动汇率、任意多档、预算与结算账单、真实 Provider 外呼、生产数据库迁移或部署。实现阶段未获 commit/push/merge 授权，前轮授权不延伸新需求；随后本地提交与合并的单独授权见文末交付记录。仅使用隔离 SQLite 和 fixture；不访问用户数据。
+1. 设置页可读取、修改并持久化超时秒数；默认 300，范围 30–1800 秒，越界或非整数拒绝；新请求快照使用配置预算，旧幂等重放保留原请求预算。
+2. Story Generation API 保留终态失败白名单码：`timeout`、`authentication_required`、`rate_limited`、`budget_exhausted`、`invalid_configuration`、`dependency_unavailable`、`malformed_payload`；用户取消仍是 cancelled 状态；HTTP、Provider 原文、密钥和内部异常细节不进入 UI。
+3. Story 页面将分类映射为可操作的简体中文提示；未知错误显示通用提示，并提供适当的设置/重试入口。
 
-## 工作区与所有权
+产品决定：仅 Story Agent 生成受该设置控制；单位为秒；默认 300；范围 30–1800。一次尝试按该配置计时，重试可能令任务总耗时超过单次时长。
 
-- repository/worktree：`D:/Otirik/Workstation/cosmos`；branch：`feat/t42-cache-tiered-pricing`；base：`ad4c3c44129531d9673c964b436bdada4ec4ed30`。
-- 开始前 status 为 master，仅原有未跟踪 `CON`；fetch 成功，再创建已授权分支。`CON` 不暂存、不删除。
-- Leader 唯一维护本 walkthrough 与 Task README；公共 DTO/schema/migration 交单一后端 writer；前端、E2E、文档独立不重叠写入。每名 writer 开始前登记精确 write-set 和隔离测试根。
-- 文档影响：**需更新**。改变持久模型价格、公共创建/更新/查询 DTO、调用 usage/cost 与 Web 表单；专职文档代理先写原话、已接受提案和目标架构/API Draft，完成后更新当前 spec/项目状态。
+### 工作区与所有权
 
-## 已接受方案与仍需核对项
+- repository/worktree：`D:/Otirik/Workstation/cosmos` 当前主工作区；branch `master`；base `5e92aea072459e9d1fc9f586dffb92d5f7ea801b`。维护者授权沿用 Task 42 和当前工作区；不创建分支/worktree、不提交、不部署。开始时已有修改：Task42 walkthrough、PROJECT-STATUS、API/Worker 测试与装配、Story Web 面板/费用、API 与 Web spec、Story workflow budget、两个 acceptance runner，及未跟踪的 `CON`、`({id`、`use-story-agent-config` 文件；这些均视为已有内容，修改前逐项理解并叠加。
+- Leader 唯一维护本 walkthrough 和 Task README。
+- 后端 writer：仅写 `packages/contracts/**`、`packages/application/**` 中配置/Story workflow 所属代码与对应测试、`packages/storage-prisma/prisma/schema.prisma`、本切片新迁移、`packages/storage-prisma/src/system-config*`、新增 `packages/storage-prisma/src/story-agent-failure-code.ts` 与对应测试、`apps/api/src/system-config*`、`packages/transport-http/src/client-system-config*`、Story Workflow Worker 组合/行为代码与对应测试；唯一公共 DTO/schema/migration writer。数据库测试使用 `.agent/tmp/task42-story-agent-timeout/<uuid>/` 隔离根，不访问用户数据。
+- React writer：仅写 `apps/web/src/**` 中设置控件、错误文案、组件/hook 与前端测试，以及 `e2e/browser/story-agent-generation.spec.ts`、`e2e/browser/default-model-settings.spec.ts`；只消费已冻结合同，不写后端/文档。浏览器使用隔离数据库和动态端口。
+- 文档 owner：文档角色代理三次启动失败，未修改文件；Leader 接手原始需求、accepted Proposal、受影响架构/spec/API/Web 文档及必要入口，且唯一维护本 walkthrough/README 与最终 `PROJECT-STATUS.md`。前后端代码代理不得自行改文档。
+- 所有 writer 共用本仓库、`master`、上述 base 和当前工作区；无独立 Git worktree。不得扩大文件范围、清理或恢复既有改动。
+- 文档影响：**需更新**。新增持久 SystemConfig 字段、Story budget 行为与用户可见错误分类，需要同步原始需求、Proposal、公共合同、API 和 Web 当前规格。
 
-- 两档各四个显式 Decimal 价格列，另存 USD/CNY、阶梯开关、阈值；避免两档需求引入泛化价格表或隐式 JSON。
-- 启用时阈值与高档四价必须齐全，关闭时阈值/高档为空；默认开启阈值为 272000。价格修改整组原子提交，名称/预算等修改保留原价。
-- 旧模型保留已有两价，缓存单价未知、币种 USD、阶梯关闭；若缓存用量为 0 则可按原两价算费，非零且缺价时省略总费用，不伪造 0。
-- 新 usage/cost 缓存分项可选，以兼容旧候选 JSON；新运行提供完整分项，总费用包含四项；历史已存费用不改写。
-- SDK 已核对：`bun pm ls --all` 通过包管理器确认 pi-ai 0.55.4；已核对该发布版 Completions/Responses 映射（普通 input = raw prompt − cacheRead、cacheWrite = 0），总输入为三类之和，不含 output。未直接读取 node_modules 或锁文件。
+### 实施顺序
 
-## 实施顺序与公开验收
+1. 后端补合同/配置/错误传递 RED，完成 schema 与迁移、API/HTTP transport、入队 budget snapshot 与持久终态 errorCode；不得将 Workflow `lastError` 或 Provider 原文当作公开合同。
+2. React writer 基于冻结合同完成 Settings 控件与 Story 错误映射；按 Web 项目规则先读相关 Next 指南；提示使用固定文案。
+3. Leader 维护原始需求、accepted Proposal、架构及代码完成后的当前 API/Contract/Web spec。
+4. 验证 contracts、application/storage/API/Worker/Web 聚焦测试，类型检查、构建、Story 与 Settings 浏览器流程、文档检查和 `git diff --check`；独立检查长请求 heartbeat、重试、旧行默认值及脱敏。真实 Provider、用户数据迁移、部署不在本轮。
 
-1. 核对 SDK 统计口径，冻结 DTO、持久化和计算合同；专职文档写接受方案。
-2. 后端逐个公开边界 RED→GREEN：配置 API/仓储（含旧库升级）、实际 invocation output；272000/272001、全四项切档、零/未知、双币种与历史读取。
-3. 前端创建与就地编辑、价格摘要及实际缓存费用；E2E 通过离线 HTTP/Worker/browser 验证保存回填和调用费用。
-4. 独立复审、聚焦/全仓/类型/构建及文档门禁；每层分别报告，不以 mock 或局部绿灯替代整个闭环。
+### 阶段证据
 
-- 配置后端 `2f78e5c7` 接替 `5939c843`，单写公共 DTO、模型应用服务/快照、Prisma schema 与新增迁移 `20261111080000_task_42_cache_tiered_pricing`、配置/默认模型/Resolver 投影及对应行为测试；SQLite 根 `.agent/tmp/t42-cache-tiered-pricing/<uuid>/`。旧 writer 只交接两个合同文件后停写，无并发重叠。
-- 实际计费 `0a75ff13` 接替未写入的 `edf46e6a`，仅 `packages/agent-pi-ai/src/invocation-v2{,.test}.ts`，内存 fake-client 公开 invoke seam；不与 schema/types writer 重叠。
-- React `4a42fb2c` 接替未写入的 `7a5030c7`，仅 apps/web 创建/编辑/摘要/费用组件、copy 和前端测试；E2E `e7635857` 接替未写入的 `7ac5ef5c`，仅 Story/default-settings/new model-pricing browser、model-configuration Lab 与 Worker fetch fixture。文档 `96d3555b` 仅授权 docs，先完成原话、accepted 提案、架构/API 目标，并将项目状态标为本轮进行中，业务未完成前不改 spec 为当前事实。
+待实施与验证后追加；本计划不代表代码或验收已完成。
 
-## 阶段证据
+#### 实施与独立审查进展
 
-- 合同/应用聚焦：provider-model 12、agent 8、configured-models 7，合计同轮 27/27 通过。前置 RED 已证旧两价/半组 PATCH 不满足新合同；contracts typecheck 通过。application typecheck 暂定位旧 system-config 测试快照缺新增默认字段，授权仅更新测试数据，待复跑。
-- 实际计费公开 invoke 首 RED：9 tests 中 1 failed / 8 passed；SDK 三类输入分项未公开、总量未重建。逐片补 SDK 计数、CNY 字面费用、未知缓存价、阈值和非法配置；最终 `bunx vitest run packages/agent-pi-ai/src/invocation-v2.test.ts` **24/24 passed**（1.09s），`bun run typecheck:agent-pi-ai`、两文件 diff check exit 0。writer 停写，独立预审 `2da6f341` 只读核对。完整调用链仍待浏览器，不把 fake-client 测试写成真实外呼。
-- 浏览器 `bunx playwright test --config playwright.config.ts --list story-agent-generation.spec.ts default-model-settings.spec.ts model-pricing.spec.ts` 收集 5 tests / 3 files，exit 0；只是收集，未启动服务，后续新增 UI 用例仍需重新收集与实际运行。
-- 前端草稿行为首 RED 9 failed / 16 passed（四价新要求和旧测试数据），修正后同范围 **25/25 passed**；模型字段组件已落，编辑入口/摘要/费用 UI 仍在施工，尚无最终 Web 类型或浏览器结果。
-- 文档先行检查仅报告 Task 40 的 22 条历史断链；完整代码/浏览器/隔离迁移验收尚未完成。新增范围不能沿用前轮 229/1411 等结果。
+- 后端 writer `4db99d34` 完成公共 DTO、迁移、SystemConfig 字段级原子更新、入队预算快照、save Action 分类与持久读码器/API 装配后冻结。API/Worker 全依赖构建 `bun run build:api && bun run build:worker` exit 0；全仓单元回归进行中。
+- React writer `b9478bf9` 完成设置/错误展示，初次前端聚焦 6 files / 65 tests 与 Web tsc 通过。首次设置 browser 保存返回 400，测试使用的 API dist 尚未包含新合同；该次不得作为有效集成通过，已由统一重建后复测取代。
+- 只读前端 reviewer `65b35c11` 指出当前设置秒数不能代表旧任务预算、空值未标无效、错误文案分散。Leader 已移除动态秒数文案并归入 copy；补救 React writer `8980b9d2` 沿用本工作区/branch/base，仅写本切片 UI/copy/tests 和 default-model-settings E2E，核对空值 aria-invalid/描述及重跑聚焦验证。
+- 测试 writer `83822786` 沿用上述工作区/branch/base，仅新增 `e2e/browser/story-agent-errors.spec.ts`；通过隔离浏览器与 HTTP 合成 DTO 验证七类安全错误、未知/原始文本降级和取消中性状态，不声称这些拦截覆盖真实 Worker 错误链。真实 Workflow 失败/保存链已有后端行为测试。
+- 后端只读 reviewer `7086f75a` 检查预算/取消、续租、事务/迁移和持久码边界；无生产/文档写权限。
+- 文档 owner 已同步原始需求、accepted Proposal、架构/ADR-0033、当前 Contract/API/transport/Web 规格和 Story API 补充。首轮 docs:check 为既有 Task40 22 条断链加一条新增需求锚点错误；新增错误已修正，最终门禁待复测。
 
-原角色仅暴露旧写入工具、与运行规则不兼容，改为继承 published CAS 工具的执行上下文后推进；不以 shell 写文件替代授权文件工具。
+#### 回归偏差与补救写集
 
-## 独立审查与边界修正
+- 前端补救 writer `8980b9d2` 最终仅修正设置 E2E 的空值提示与关联描述定位；6 files / 65 tests、Web tsc 与 diff check 均再次通过，随即冻结。后端补救前原聚焦最终为 9 files / 84 tests，六个相关包/应用 typecheck 通过。
+- Web `bun run build:web` exit 0；首次最新栈 browser `COSMOS_E2E_WEB_PORT=4297 bunx playwright test --config=playwright.config.ts e2e/browser/default-model-settings.spec.ts e2e/browser/story-agent-generation.spec.ts e2e/browser/story-agent-errors.spec.ts`：4 passed / 1 failed。设置持久保存、Story 生成/费用/两档单价均通过，错误测试七码断言通过；cancelled 时刷新中的双 loading status 导致测试 locator strict violation。测试 writer 将定位收窄为取消文本，不能删除中性状态/无 alert 断言。
+- 首轮全仓 `bun run test` exit 1：新增 reader 测试在启动时仍取旧 fixture（缺 stateJson），其后 writer 已更正；两个 acceptance runner 的多项测试为 configuration 阶段失败、0 transport sends。定点重跑 `bunx vitest run packages/storage-prisma/src/story-agent-failure-code.test.ts scripts/acceptance/story-agent-runner.test.ts scripts/acceptance/story-body-runner.test.ts` 中 reader 已过，16 项 runner 失败；从代码定位到隔离迁移只列旧定价 overlay，漏 timeout migration。测试 writer 追加登记 `scripts/acceptance/story-agent-isolation.ts` 与 runner 测试写集，改为显式覆盖两条迁移并保持 hash manifest。该故障只在隔离验收 DB，修复不迁移用户数据。
+- 后端 reviewer 确认专用 Generation DTO 无 raw message，但通用 Run Job 产品 API 把 Story Activity errorMessage 透传为公开 error。接受重要 finding；后端 owner 扩写集为 `packages/storage-prisma/src/repository/runs.ts`、相关公开映射/Attempt 模块和行为测试，仅收敛 Story Workflow 范围的公开错误，不改变内部持久诊断。迁移测试同时补 legacy singleton 行保留与默认300。完成后须重做相关构建和最终审查。
+- Reviewer 检查确认 Story 两 Activity 串行执行，按 Run 下最新终态错误取码当前无歧义；30min 调用可通过 Run/Activity combined heartbeat 续租。尚未进行 30min 实时等待验收，不能用静态检查替代。
 
-固定点 `ad4c3c44129531d9673c964b436bdada4ec4ed30`，HEAD 未新增提交；本轮检查工作区 `git diff <base> --` 并单独读新增文件，不能使用空的 `<base>...HEAD` 作为已审依据。两个 fresh 子代理分别运行 Standards / Spec 轴，未修改源文件。
+#### 冻结后复核与治理
 
-- Standards（`7f63e68c`）：1 项 Required 测试缺口，模型编辑冲突分支缺真实旧版本回归。E2E writer 在新 pricing browser 用公开 HTTP 产生旧版本，验证 409 保留草稿、无自动重试、取消重载不丢稿、确认重载后使用新版本保存。独立静态复核已关闭该缺口；首轮真实浏览器中该完整冲突用例已通过。无确认的 heuristic 问题。
-- Spec（`c9c69e87`）：P2 无缓存预估错误要求旧模型缓存价格已知；P3 摘要缺关闭状态、全价未知时缺币种。React 仅重开成本/摘要的实现与测试，普通无缓存预估只要求 input/output，enabled 仍要求完整高档；摘要始终显示币种和开关。新增行为先 RED，再 **42/42 passed**，Web 类型与四文件 lint exit 0；独立静态复核两项均已解决。未确认其它价格计算或历史重算问题。
-- 真实持久边界又发现 Prisma Int 无法读回 API 接受的最大安全整数阈值（P2023）。内部改 `BigInt?` 并在写入转 BigInt、公开投影转 number；SQLite 新列也必须声明 `BIGINT`，仅改 schema 而保留 `INTEGER` 仍 RED。仅修改本轮尚未应用的新迁移，不改旧 43 次迁移。SQL 修正后 5 files / 16 tests（含最大安全整数 CRUD/metadata-only/JSON 与默认模型和 resolver）和五项类型检查通过；追加 PRAGMA `BIGINT`、nullable、无默认值断言也在后续 6 files / 23 tests 中通过。
+- 测试 writer 修复 overlay 与 locator 后，指定 runner+reader 三套 20 tests passed（94.48s）。Leader 独立 `COSMOS_E2E_WEB_PORT=4298 bunx playwright test --config=playwright.config.ts e2e/browser/story-agent-errors.spec.ts`：1 passed（20.7s），覆盖七码/取消/未知降级/无原文；Web生产构建同步通过。
+- 后端补救 `run-jobs.test.ts` 与 `system-config.test.ts`：2 files / 16 tests passed；storage与API typecheck过，随后再独立复审。Reviewer 发现无父 Job 的孤立 Activity events 会绕过Story分类，要求不存在/无法证明所属Workflow时闭锁，不回传原始诊断；后端writer继续在同一登记范围修复并补测试。其它Job single/list与Attempt有父关联路径已确认脱敏。
+- 第二次 `bun run test` exit 1，共报15项失败；末尾确认新顶层timeout设置组件漏登记Component Lab。Leader委派React补救writer `8ba30905`（同repo/master/base），开始仅补测试期望，13 tests仍3 failed显示生产definition也缺失；扩写集为组件Lab registry/对应fixture与registry.test，必须按现有配置Lab方式补场景，不能只放宽测试。后续全仓回归写结构化报告到隔离临时目录，避免输出截断丢失失败清单。
+- 文档角色override `49e5403b` 完成历史完整分册并冻结：主walkthrough9,151bytes，两历史册23,175/6,831bytes；architecture/API压缩重复措辞并保留有效决定。正式docs尺寸门禁剩Task40既有分册一项，CONTEXT为既有增长warning；`docs:check --base HEAD`仅Task40历史22条断链；diff check过。主文不复制历史证据，封口分册不改。
 
-## 首轮全仓结果与收尾
+#### 最终验收轮次（进行中）
 
-- `bun run typecheck`：所有包与 API/Worker/Web **exit 0**。
-- `bun run test`：**230 files，222 passed / 8 failed；1446 tests，1424 passed / 22 failed**，286.50s。首轮采用修正前 SQL 快照触发已定位 P2023；另外命中旧验收脚本未传四价、API 迁移数仍 43、隔离删除夹具类型数据不完整及四处新增文案未集中。已按实际失败分别窄派 Node 与 React，不放松创建必填、测试断言或文案基线；修复后需复跑。
-- API 与 Worker 及所有依赖包 `bun run build:api && bun run build:worker` **exit 0**；最初在阈值类型调整前启动的旧构建由 Leader 主动取消（killed exit 1），不能当编译失败或最终构建证据。
-- 文档尺寸正确命令 `python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` exit 1：唯一违规仍是未修改的 Task 40 封口历史册 30.35 KB / 约 9.9k token，另 CONTEXT 既有基线增长 warning；本轮文档无新违规。此前文档代理遗漏 baseline 的命令只报参数错 exit 2，不作为尺寸结果。代码尺寸门禁与浏览器运行结果见下方，不能将全局既有门禁债务写作本轮全部通过。
+- Lab 补救 writer `8ba30905` 冻结 6 个 Web 文件：超时设置 Lab 加 `default` 与 `read-failure` 离线场景；默认模型 fixture 读写完整 SystemConfig DTO；面板重试在 click 开始 loading；生成恢复用 `useSyncExternalStore` 订阅 sessionStorage，保留 SSR 首帧/幂等记录/错误锁定。相关 11 Vitest、Lab 29 Vitest、Web TypeScript、全 Web lint（0 errors/20 warnings）通过；设置与 Story error 浏览器用例 2 passed（22.3s）。React 独立审查无确认缺陷，记录了 hydration/storage/过期轮询缺少 hook 级专测的覆盖建议。
+- 后端最终修复无 Job 与 orphan Workflow relation 的事件不能回传 Attempt/原错误；只有当前 Attempt 用当前 Job.errorCode，历史 Attempt 固定 `generation_failed`；取消无错误。孤立与重试误分类回归、storage/API typecheck、独立审查通过。
+- 冻结代码后的 `bun run test` 运行 235 files / 1492 tests，11 failed / 1481 passed。10 个失败文件均是全仓固定 migration count/hash/导出期望或 SystemConfig projection 未纳入新 timeout migration/DTO；故事错误/超时功能测试通过。完整隔离输出留在 `.agent/tmp/t42-unit-final.log`。测试工程师更新当前 migration snapshot 与截至 price migration 的历史截点，并同步完整 SystemConfig 字段和新增 reader 公共导出。待其冻结后复跑；下一次 Bash executor 准备报告 `EXECUTOR_UNAVAILABLE` 且无命令执行，后续 build/typecheck/全量复跑暂阻，不切换 shell 绕过。
+- 文档影响：需更新；原话、Proposal、PRD、ADR、架构及当前 API/storage spec 已同步 300 秒默认、30–1800 秒范围、旧 Run 快照、错误 whitelist/redaction 与孤立/历史 Attempt 降级。封口 spec 分册只读未改。真实 Provider、30 分钟等待、用户数据库 migration、提交/推送/部署均未执行。
 
-## 最后收尾与运行阻断
+#### 写集冻结与待复跑清单
 
-- Node 补齐旧验收辅助代码的显式四价、API 44 次迁移审计和隔离删除夹具真实合同类型。`bunx vitest run scripts/acceptance/story-agent-runner.test.ts scripts/acceptance/story-body-runner.test.ts .agents/tasks/39-pi-ai-adapter/product-flow-acceptance.test.ts apps/api/src/model-provider-storage-integration.test.ts packages/storage-prisma/src/model-provider-removal-integration.test.ts packages/storage-prisma/src/configured-model-pricing-migration.test.ts`：**6 files / 23 tests passed**，58.59s；随后 `git diff --check` exit 0。Story isolation 保留不可变旧 43 次迁移基线 `7ca568a91c57fba7bd8256727662936143b63a14`，只白名单覆盖当前 schema 和本轮 44 SQL；隔离根 manifest 记录真实 working-tree 来源与 SHA，不能声称旧提交已经包含新结构。
-- Web 集中文案检查实际抓出四个组件新增内联文案，全部迁入既有 copy owner，不改扫描器/基线。最终 `bun run test -- apps/web/src/copy/messages.test.ts apps/web/src/components/cosmos/provider-model-draft.test.ts apps/web/src/components/cosmos/model-details.test.ts apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts apps/web/src/components/cosmos/default-model-settings.test.ts apps/web/src/component-lab/agent-candidate-fixture-api.test.ts`：**7 files / 90 passed**；`bun x tsc -p apps/web/tsconfig.json --noEmit` 及变更文件 lint exit 0。
-- 代码全局尺寸门禁 `python scripts/size-governance.py -c code tests --check --baseline docs/doc-governance/code-baseline.json --fail-on-new` exit 1，共 56 项。大多为未改存量；本轮引入的 draft 从 387 到 449 行跨警戒已按 Provider 表单职责拆分，原入口 371 行、新 helper 91 行，公开导出保持，draft/copy **30/30 passed**、Web 类型/lint/diff exit 0。旧 section 从 528 降至 487 行仍报既有警戒，不继续扩任务重构；最终全局尺寸复跑未执行，不能直接声称修后门禁全绿。
-- 浏览器首跑 `COSMOS_E2E_WEB_PORT=4174 bunx playwright test --config playwright.config.ts e2e/browser/model-pricing.spec.ts e2e/browser/story-agent-generation.spec.ts e2e/browser/default-model-settings.spec.ts`：**4/6 passed**，含完整 CNY→USD/零价/关档、真实版本冲突恢复、HTTP 原子验证、旧成本不随改价重算。272000/272001 两例的 HTTP cost 均已通过独立字面值断言（0.272005 / 2.72006 CNY），仅 UI 固定标题 1 的定位失败；已改用对应公开 candidate 的 proposal title 精确定位，不改费用预期，真实重跑未执行。Web production build 在此栈内 exit 0，API URL 绑定该隔离栈。
-- Lab 首跑 `bunx playwright test --config playwright.component-lab.config.ts e2e/component-lab/model-configuration.spec.ts`：**9/12 passed**，三例因 provider 名同时出现在外层和模型子行，旧 locator 变成三处匹配。已改按公开展开按钮定位唯一外层 provider 行；已补齐每次 preview 隔离的 typed create/get/update fixture，保留旧未知缓存，支持新用例创建/编辑/回填。该新增 fixture 的真实交互重跑未执行，90 项聚焦测试不替代它。
-- 第二次 `bun run test`：**230 files：202 passed / 28 failed；1446 tests：1408 passed / 38 failed**，758.22s。最后仍有 Task 39 @2 smoke 使用旧 43 次迁移结构而配置失败，其余大量用例在后期出现 60s 超时、临时 SQLite EBUSY/ENOTEMPTY。故障与新命令执行器失效发生在同一期间，尚未证明因果，不能一律归为业务缺陷或一律归为环境问题。完整后半输出见本机会话 spill `27b5777faca2-job_output.txt`，不可作为仓库内稳定链接。
-- @2 smoke 必要兼容修正已写未验证：共享 harness 仅新增显式 opt-in，默认 @1 冻结 43 路径/断言保持；@2 两个准备入口才叠加本轮 44，独立目录保留原 snapshot，manifest 披露 base commit、固定迁移名、两文件真实 SHA。real-v2 校验 manifest 与副本 hash，保留 TTY、URL、单次传输与秘密边界。40 项 smoke、最终全仓和该最后差异检查均未执行。
-- 父会话、Node 与测试子代理各自正常 Bash 启动均遇 `EXECUTOR_UNAVAILABLE`：准备私有 niubash/winuxcmd 的 awk/od 硬链接失败，明确 **No command was executed / effects:none / retry:never**。不换 shell、提权或清理运行时缓存。只读插件清单确认现有 dsh-ops 0.5.2；未更改插件或升级。所有本轮后台 job 已收结，未主动终止未知服务；最终只读端口释放确认也被执行器阻断，不能声称已实测清空端口。
-- 文档已同步当前合同、API、HTTP client、Web、架构、[ADR-0032](../../../docs/adr/0032-model-cache-tiered-pricing.md) 与[项目状态](../../../PROJECT-STATUS.md)；`bun run docs:check --base ad4c3c44129531d9673c964b436bdada4ec4ed30` 先前仍恰 22 条 Task 40 历史断链，新增 ADR/最终小改后未复跑。未提交、推送、合并、部署或迁移用户数据库；没有真实 Provider 外呼。
+- 测试 writer `21d5aca4` 已冻结，仅修改 10 个测试文件。6 个 current 集成/客户端迁移快照纳入新超时 migration（45 项）；Provider migration 测试审计边界扩至新 migration；定价历史测试显式过滤至 price migration，保留 44/43 项；公共入口清单增加 `PrismaStoryAgentFailureCodeReader`；配置投影断言补充无行/已选/丢失/null 下的默认 300 秒。Leader 分段只读核对以上差异；修改后的聚焦/全仓测试未运行，不能据此认定已绿。测试 writer 报告 `git diff --check` 通过；最后状态文档写入后的差异检查未运行。
+- React writer 的最终命令：`bun run --cwd apps/web tsc --noEmit` 通过；`bun run --cwd apps/web lint` 为 0 errors / 20 warnings；`bunx playwright test --config playwright.config.ts story-agent-errors.spec.ts default-model-settings.spec.ts` 为 2 passed（22.3s，包含 Web 生产构建）。全仓命令 `bun run test > .agent/tmp/t42-unit-final.log 2>&1` 的上述 11 failures 为修正前结果；不可引用前轮全绿作为本轮全绿。
+- 阻塞：OPS Bash 在准备 Windows 执行树 hardlink 时返回 `EXECUTOR_UNAVAILABLE`、effectState=none，`git status --short` 与 `git diff --stat` 均未执行；工具要求先解决运行时条件，未切换 shell、未请求提权或修改 DSH。文档收尾代理 `6e202f2c` 启动失败，核对无部分写入后由 Leader 更新现状摘要与本记录。
+- 最近文档门禁：`bun run docs:check --base HEAD > .agent/tmp/t42-docs-final.log 2>&1` exit 1，仅 Task40 既有 22 条断链；`python scripts/size-governance.py -c docs --check --baseline docs/doc-governance/docs-baseline.json --fail-on-new` exit 1，仅 Task40 历史分册 30.35 KB / 约 9.9k token，另有 CONTEXT 既有增长 warning。末次状态文档追加后两项均未复跑，最终代码尺寸检查未运行。
+- 待执行（运行时恢复后）：`bun run test`；`bun run typecheck`；`bun run build`；`COSMOS_E2E_WEB_PORT=4298 bunx playwright test --config=playwright.config.ts e2e/browser/default-model-settings.spec.ts e2e/browser/story-agent-errors.spec.ts e2e/browser/story-agent-generation.spec.ts`；重跑文档门禁、正式 docs/code 尺寸检查和 `git diff --check`。全部沿用隔离数据；真实来源、真实 Provider、用户库升级、远端 CI 仍未运行。Task/目标保持未完成验收，不宣称发布就绪。
 
-## 自动续轮 1：恢复后的实际验证
+#### 最终验收结果（2026-11-12）
 
-执行器一度恢复，已取得以下新证据，不能再以此前“全部命令受阻”描述当前结果：
+- 修正后的 `bun run test > .agent/tmp/t42-unit-round1.log 2>&1`：235 files / 1492 tests 全通过。`bun run typecheck > .agent/tmp/t42-typecheck-round1.log 2>&1` 与 `bun run build > .agent/tmp/t42-build-round1.log 2>&1` 均 exit 0；完整 build 覆盖 packages、API、Worker、Web。
+- `COSMOS_E2E_WEB_PORT=4298 bunx playwright test --config=playwright.config.ts e2e/browser/default-model-settings.spec.ts e2e/browser/story-agent-errors.spec.ts e2e/browser/story-agent-generation.spec.ts`：5 passed / 37.5s，含设置、错误提示、生成持久化及两个计价阈值场景。Web lint 0 errors / 20 warnings；全仓 `git diff --check` exit 0。
+- `bun run docs:check --base HEAD` exit 1；核对仍仅为 Task40 历史 22 条断链。本轮新增文档链接未出现在 failures。文档尺寸门禁现只报 Task40 walkthrough 既有 30.35 KB 警戒项及 CONTEXT 基线增长 warning；此前 PROJECT-STATUS 曾因新段落触线，已压缩回健康区并复验消失。代码尺寸门禁的 2 项是未改动的 `workflow-host-runtime.test.ts` 与 `activity-store.ts`，均在本轮工作区 diff 之外。以上历史债务均未改动。
+- 需求/Proposal/PRD、ADR、架构和当前 API/storage 合同已更新；真实 Provider、用户数据库迁移、远端 CI、发布部署未运行。旧的“待复跑”过程记录作为发生时证据保留；本结果取代其待执行清单。验收门禁与实际运行日志证据均已记录；Task 完成。
 
-- `bunx vitest run .agents/tasks/39-pi-ai-adapter/connection-smoke.test.ts`：**40/40 passed**，33.12s，确认 @1 冻结 43 与 @2 显式 44 overlay 共存；无真实外呼。
-- 剩余验收第 3 条精确 browser 命令：**6/6 passed**，56.7s；Web 生产重建成功，272000/272001 的 HTTP 与页面费用、真实冲突恢复、改价后旧账不变均通过。
-- `bun run typecheck && git diff --check`：**exit 0**，包括最后所有 schema/helper/fixture 修改。
-- 剩余验收第 4 条 Lab 命令：**11/12 passed**，29.7s；新增四价创建/编辑/回填已通过，唯一剩余旧断言仍要求 `65536 / 8192`。测试工程师只读确认新共享摘要显示独立字段，Leader 用 CAS 将其改为同一模型行的两个字面断言“上下文窗口：65,536 tokens”“输出上限：8,192 tokens”，不删值验证；等待完整 Lab 再跑。
-- 最后 overlay 窄只读复审（`b88712de`）没有确认的新阻断问题。对准备后基础 SQL 副本完整校验提出低优先级留档建议；real-v2 不会重新执行这些副本，实际调用使用已准备数据库，不为此扩展通用防篡改协议。审查无法读取旧 diff 的限制保留，不能声称逐行旧版本独立比较。
-- `bun run docs:check --base ad4c3c44129531d9673c964b436bdada4ec4ed30`：仍恰 **22 条未修改 Task 40 历史断链**，本轮新增 ADR/Proposal/Task 的路径、锚点、metadata、空白未报告新失败。
-- 两条 size 门禁后台启动再次在私有 runtime 的 getconf/dircolors 硬链接准备时失败，**未执行命令**，不以旧门禁结果伪装最终复跑。全仓测试已单独启动（`bun run test`），先前超时用例在本轮前段通过；未结束前不写全仓通过。
+#### 执行器恢复后的统一终验
 
-## 已执行的最终验收命令索引
+- 自动续轮 1 先读取当前目标与工作区记录；`pwd` 已成功，先前 Bash 准备故障不再复现。`git status --short` 确认 writer 均冻结，保留全部既有 dirty/untracked 文件。启动 `bun run test > .agent/tmp/t42-unit-round1.log 2>&1` 与 `bun run typecheck > .agent/tmp/t42-typecheck-round1.log 2>&1`，补验最后一轮仅测试的迁移边界和 DTO/导出期望改动。此轮不修改产品合同与行为；文档状态待实际结果更新。
 
-以下命令已在本轮恢复后执行，最终结果见下一节。浏览器与 Lab 共享 `.next`，按顺序分别运行；完整单元回归也单独运行，未放宽现有超时和独立费用断言。
+#### 维护者真人验收与闭合
 
-1. `bunx vitest run .agents/tasks/39-pi-ai-adapter/connection-smoke.test.ts`，确认 @1 旧冻结和 @2 新 overlay 共存；再运行 `bun run test`，独立诊断仍失败的超时/锁文件，不直接增加超时。
-2. `bun run typecheck` 与 `git diff --check` 核验最后测试/夹具修改；此前完整类型和 API/Worker 构建已通过，若生产源再改按依赖重建。
-3. `COSMOS_E2E_WEB_PORT=4174 bunx playwright test --config playwright.config.ts e2e/browser/model-pricing.spec.ts e2e/browser/story-agent-generation.spec.ts e2e/browser/default-model-settings.spec.ts --output=.agent/tmp/t42-cache-tiered-pricing/browser-final-results`，让既有 stack 按精确 API URL 重建 Web；不要复用未知 4173 服务。
-4. 上一步结束后 `bunx playwright test --config playwright.component-lab.config.ts e2e/component-lab/model-configuration.spec.ts --output=.agent/tmp/t42-cache-tiered-pricing/lab-final-results`；核对自建 4174/4380/3300 正常释放，不处理未知 PID。
-5. `bun run docs:check --base ad4c3c44129531d9673c964b436bdada4ec4ed30`、上述 docs/code 两条 size 命令及最终 diff；单列存量断链/尺寸问题，没有修改基线或封口历史来消除旧告警。
+- 2026-11-12，维护者确认刚刚亲自使用 Agent 生成建议一次并成功，判断原有问题已修复。这是一次真实使用的通过证据，不等同重复/长时间稳定性验证；之前记录的真实 Provider 未运行，指自动化最终验收阶段，并不覆盖此后维护者手动验收。依据该结果关闭 Task 42。本次仅记录，不调用 Provider、不读取用户内容。
 
-## 实现验收收尾结论（2026-11-11，提交前）
+#### Claude 文档代理诊断与恢复
 
-本轮目标完成：四价创建/编辑/读取与完整价格组 PATCH、USD/CNY、可选完整高档及阈值、总输入严格超阈值后整次四项同档、缓存实际费用与历史快照、页面回填/冲突恢复及稳定规范均已落地。旧 cache 未知保留未知，不对用户数据库做迁移或历史费用回填。
+- 三次 `subagent_role(role="docs-writer", provider="jijiapi-claude-kiro", model="claude-sonnet-5")` 均以通用 `subagent run failed` 结束，`list_agents` 显示对应子代理 inactive，无收尾消息或文档写入。工具未提供每次失败的子代理日志；在 DSH 用户目录只检索到插件安装日志和 skills 管理日志，未找到与这些启动对应的日志文件。因此无法确认角色启动通道内的具体异常。模型目录可见 Claude Sonnet 5 路由；相同模型通过普通 `subagent(provider, model)` 成功启动并完成只读诊断与指定文档更新，故障范围指向 docs-writer 角色启动路径，而非 Claude provider/model 整体不可用。
+- 恢复方式：在普通 Claude 子代理中显式声明 docs-only 写集与 Task/代码文件边界，完成 README 和 PROJECT-STATUS 文案。Leader复核后移除被放入 Task README 的代理调试过程，将真人验收事实保留为摘要，将路由诊断留在本 walkthrough；项目状态的“真实 Provider 未运行”也改为只说明未做用户库迁移和部署。未修改 DSH 安装或其代码。
 
-| 验证层 | 最终实际结果 |
-| --- | --- |
-| `bun run test` | **230 files / 1446 tests passed**，284.28s，exit 0；此前失败的超时/锁用例本次全部通过，未修改超时 |
-| @1/@2 smoke 聚焦 | **40/40 passed**，33.12s；同样已包括在全仓结果中，不能相加为新总数 |
-| `bun run typecheck && git diff --check` | 所有包及 API/Worker/Web 类型与差异空白 exit 0 |
-| API/Worker/共享包 build | `bun run build:api && bun run build:worker` exit 0；后续只改验收夹具和测试，无生产后端源变化 |
-| 离线真实浏览器 | **6/6 passed**，56.7s；当前 Web 在隔离 stack 内生产构建 exit 0 |
-| Component Lab | **12/12 passed**，17.8s；CNY/高档创建编辑回填与键盘、平板、删除等均通过 |
-| 变更 Web lint/聚焦 | 前述 7 files / 90 tests、Web 类型和变更文件 lint exit 0；最终 E2E 单字面断言调整由完整 Lab 回归验证 |
-| 全局代码尺寸 | 最终正确命令 exit 1，**55 项存量违规**；本轮 draft 新跨线已消除（371 + 91 行）。仍命中的 section 原 528→487，smoke test 原 468→471，基线时已越 400；其余告警不在本次改动范围 |
-| 全局文档尺寸 | 最终正确命令 exit 1，仍仅 **Task 40 历史册 1 项**，另 CONTEXT 既有 warning；本轮文档无新增告警 |
-| 文档链接/结构 | 最终检查仍 **22 条 Task 40 旧断链**；本轮变更无新增失败，最终状态改写后再次复核 |
+#### 本地提交与合并
 
-测试服务完成后只读 `netstat` 核对 **4174、4380、3300 无 LISTENING**；未杀未知服务、未触碰旧 `CON` 文件。所有本轮命令 job 已收结，文档和源码代理已停止写入。
-
-Standards 的真实冲突流程测试缺口、Spec 的旧缓存价未知预估和摘要币种/开关缺失均已修复并通过对应真实/聚焦验收。最后验收 overlay 窄复审未确认新阻断问题；独立 diff 可见范围的限制及低优先级留档建议已如实记录，不将建议扩大为无需求的安全框架。
-
-当前 [项目状态](../../../PROJECT-STATUS.md)、API、公共合同/HTTP/Web spec、架构、已接受 Proposal 与 ADR-0032 已同步最终行为和验证边界。**实现验收结束时尚未 commit、push、merge、创建 PR、部署或运行用户数据库迁移；未执行真实 Provider 外呼、真实来源验收或远端 CI**。全局历史文档/尺寸债务未混入本次功能完成范围。
-
-## 本地提交与合并授权（2026-11-11）
-
-维护者随后明确要求：“提交和合并本轮改动”。本次交付限定为提交 `feat/t42-cache-tiered-pricing` 上已验收的价格功能、测试、迁移定义及文档，并快进合入本地 `master`；不包含 push、创建 PR、部署或应用用户数据库迁移。
-
-授权后重新核对：当前功能分支与本地 master 均为 `ad4c3c44129531d9673c964b436bdada4ec4ed30`。`git fetch origin` 成功，`git rev-list --left-right --count master...origin/master` 为 `7 0`，无须引入新的远端代码；当前工作区没有额外已跟踪改动或预存暂存内容，本轮文件清单与验收时一致。仅补充本节及项目状态的授权措辞，生产代码和测试保持已验收内容；不因提交重复运行已通过的全仓测试。
-
-交付使用明确文件清单暂存，不使用 `git add -A`；旧无关 `CON` 保持未跟踪、不读取、不纳入提交。提交后以 `git switch master` 和 `git merge --ff-only feat/t42-cache-tiered-pricing` 完成本地合并，核对两分支提交及文件树一致。提交身份、合并结果和工作区剩余内容以 Git 历史及本次交付回复为准；本节记录授权和执行边界，不预写尚未取得的提交哈希。
+- 维护者批准后创建 `feat/t42-story-agent-timeout-errors`，仅暂存 Task 42 的实现、测试、合同与任务文档（88 files）；根目录未跟踪项 `CON` 与 `({id` 保持未暂存。功能提交 `2037131`：`feat(task-42): configure Story Agent timeout and safe errors`。切回 `master` 后 `git merge --ff-only origin/master` 返回 Already up to date，以 `--no-ff` 本地合并；当前 `master` merge commit 同时记录此闭合说明。未 push。

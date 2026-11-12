@@ -41,6 +41,26 @@ test("default model settings save, recover from a refused write, show deletion a
         const save = region.getByRole("button", {name: "保存", exact: true});
         await page.reload();
         await expect(selector).toBeEnabled();
+        const storyAgent = page.getByRole("region", {name: "Story Agent", exact: true});
+        const timeoutInput = storyAgent.getByRole("spinbutton", {name: "超时时间（秒）", exact: true});
+        const timeoutSave = storyAgent.getByRole("button", {name: "保存", exact: true});
+        await expect(timeoutInput).toHaveValue("300");
+        await timeoutInput.fill("29");
+        await expect(timeoutInput).toHaveAttribute("aria-invalid", "true");
+        await expect(timeoutSave).toBeDisabled();
+        await timeoutInput.fill("");
+        await expect(timeoutInput).toHaveAttribute("aria-invalid", "true");
+        await expect(timeoutInput).toHaveAttribute("aria-describedby", "story-agent-timeout-range story-agent-timeout-error");
+        await expect(storyAgent.getByText("请输入 30 到 1800 秒之间的整数。", {exact: true})).toBeVisible();
+        await expect(timeoutSave).toBeDisabled();
+        await timeoutInput.fill("420");
+        await expect(timeoutSave).toBeEnabled();
+        await timeoutSave.click();
+        await expect(storyAgent.getByRole("status")).toContainText("已保存");
+        const afterTimeoutSave = await (await page.request.get("/api/v1/system/config")).json();
+        expect(afterTimeoutSave.storyAgentTimeoutSeconds).toBe(420);
+        expect(afterTimeoutSave.defaultModelId).toBe(previous.defaultModelId);
+
         await selector.selectOption(model.id);
         let rejectWrite = true;
         await page.route("**/api/v1/system/config", async (route) => {
@@ -105,7 +125,10 @@ test("default model settings save, recover from a refused write, show deletion a
     } finally {
         await page.unroute("**/api/v1/system/config");
         const restore = await page.request.put("/api/v1/system/config", {
-            data: {defaultModelId: previous.defaultModelId},
+            data: {
+                defaultModelId: previous.defaultModelId,
+                storyAgentTimeoutSeconds: previous.storyAgentTimeoutSeconds,
+            },
         });
         expect(restore.status()).toBe(200);
         if (providerId !== null && providerVersion !== null) {

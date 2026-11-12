@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { join, resolve } from "node:path";
 
 import { PrismaClient } from "@prisma/client";
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
@@ -12,25 +12,28 @@ const migrationUrl = new URL(
     import.meta.url,
 );
 
+const repositoryRoot = resolve(process.cwd());
+const temporaryParent = join(repositoryRoot, ".agent", "tmp", "task42-story-agent-timeout");
+
 let prisma: PrismaClient;
 let repository: PrismaSystemConfigRepository;
 let temporaryRoot: string | undefined;
 
 beforeEach(async () => {
-    // Windows native Prisma 会把 :memory: 当文件路径；每例独占临时库，结束后清理。
-    temporaryRoot = await mkdtemp(join(tmpdir(), "cosmos-system-config-"));
+    temporaryRoot = join(temporaryParent, randomUUID());
+    await mkdir(temporaryRoot, { recursive: true });
     prisma = new PrismaClient({
         datasources: { db: { url: `file:${join(temporaryRoot, "test.sqlite").replaceAll("\\", "/")}` } },
     });
 
     // 直接使用真实迁移中的建表语句，避免复制 DDL 后与迁移漂移。
-    const migrationSql = await readFile(migrationUrl, "utf8");
-    const createTableSql = migrationSql.match(/^CREATE TABLE "SystemConfig" \([\s\S]*?^\);/m)?.[0];
-    if (createTableSql === undefined) {
-        throw new Error("SystemConfig CREATE TABLE statement is missing from the Task 41 migration.");
-    }
+    const priorMigration = await readFile(migrationUrl, "utf8");
+    const originalTable = priorMigration.match(/^CREATE TABLE "SystemConfig" \([\s\S]*?^\);/m)?.[0];
+    if (originalTable === undefined) throw new Error("SystemConfig CREATE TABLE statement is missing from the Task 41 migration.");
     await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
-    await prisma.$executeRawUnsafe(createTableSql);
+    await prisma.$executeRawUnsafe(originalTable);
+    const timeoutMigration = await readFile(new URL("../prisma/migrations/20261112090000_task_42_story_agent_timeout/migration.sql", import.meta.url), "utf8");
+    await prisma.$executeRawUnsafe(timeoutMigration);
     repository = new PrismaSystemConfigRepository(prisma);
 });
 
@@ -40,7 +43,7 @@ afterEach(async () => {
     } finally {
         if (temporaryRoot !== undefined) {
             const root = resolve(temporaryRoot);
-            if (dirname(root) !== resolve(tmpdir()) || !basename(root).startsWith("cosmos-system-config-")) {
+            if (!root.startsWith(`${temporaryParent}${process.platform === "win32" ? "\\" : "/"}`)) {
                 throw new Error("SystemConfig fixture cleanup rejected a non-owned temporary directory.");
             }
             await rm(root, { recursive: true, force: true });
@@ -50,11 +53,54 @@ afterEach(async () => {
 });
 
 describe("PrismaSystemConfigRepository", () => {
+    test("migration preserves the existing singleton and adds the default timeout", async () => {
+        const root = join(temporaryParent, randomUUID());
+        await mkdir(root, { recursive: true });
+        const migrationPrisma = new PrismaClient({
+            datasources: { db: { url: `file:${join(root, "migration.sqlite").replaceAll("\\", "/")}` } },
+        });
+        try {
+            const priorMigration = await readFile(migrationUrl, "utf8");
+            const originalTable = priorMigration.match(/^CREATE TABLE "SystemConfig" \([\s\S]*?^\);/m)?.[0];
+            if (originalTable === undefined) throw new Error("SystemConfig CREATE TABLE statement is missing from the Task 41 migration.");
+            await migrationPrisma.$executeRawUnsafe(originalTable);
+            await migrationPrisma.$executeRawUnsafe(
+                'INSERT INTO "SystemConfig" ("id", "defaultModelId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?)',
+                "singleton", "retained-model", "2026-01-02T03:04:05.000Z", "2026-02-03T04:05:06.000Z",
+            );
+            const timeoutMigration = await readFile(new URL("../prisma/migrations/20261112090000_task_42_story_agent_timeout/migration.sql", import.meta.url), "utf8");
+            await migrationPrisma.$executeRawUnsafe(timeoutMigration);
+            const rows = await migrationPrisma.$queryRawUnsafe<Array<{
+                id: string; defaultModelId: string | null; storyAgentTimeoutSeconds: number; createdAt: string; updatedAt: string;
+            }>>('SELECT "id", "defaultModelId", "storyAgentTimeoutSeconds", "createdAt", "updatedAt" FROM "SystemConfig"');
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({ id: "singleton", defaultModelId: "retained-model", storyAgentTimeoutSeconds: 300 });
+            expect(new Date(rows[0]!.createdAt).toISOString()).toBe("2026-01-02T03:04:05.000Z");
+            expect(new Date(rows[0]!.updatedAt).toISOString()).toBe("2026-02-03T04:05:06.000Z");
+        } finally {
+            await migrationPrisma.$disconnect();
+            const resolvedRoot = resolve(root);
+            if (!resolvedRoot.startsWith(`${temporaryParent}${process.platform === "win32" ? "\\" : "/"}`)) {
+                throw new Error("Migration fixture cleanup rejected a non-owned temporary directory.");
+            }
+            await rm(resolvedRoot, { recursive: true, force: true });
+        }
+    });
+
     test("reads an absent configuration without creating the singleton", async () => {
-        expect(await repository.getSystemConfigWithModel()).toEqual({ defaultModelId: null, defaultModel: null });
+        expect(await repository.getSystemConfigWithModel()).toEqual({ defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300 });
+        expect(await repository.getStoryAgentTimeoutSeconds()).toBe(300);
         expect(await prisma.systemConfig.count()).toBe(0);
     });
 
+    test("updates timeout independently from the default model", async () => {
+        await repository.setDefaultModelId("model-a");
+        await repository.updateConfig({ storyAgentTimeoutSeconds: 900 }, () => {});
+        expect(await prisma.systemConfig.findUniqueOrThrow({ where: { id: "singleton" } }))
+            .toMatchObject({ defaultModelId: "model-a", storyAgentTimeoutSeconds: 900 });
+        await repository.setDefaultModelId("model-b");
+        expect(await repository.getStoryAgentTimeoutSeconds()).toBe(900);
+    });
     test("concurrent first writes keep exactly one singleton and a complete winning value", async () => {
         const values = ["model-a", "model-b", null, "model-c"];
         await Promise.all(values.map((value) => repository.setDefaultModelId(value)));

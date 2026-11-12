@@ -1,4 +1,6 @@
 import type { AgentInvocationOutput, ConfiguredModelSnapshot } from "@cosmos/contracts";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { messages } from "@/copy/messages";
 
 const copy = messages.reading.candidates.cost;
@@ -35,12 +37,20 @@ export function estimateStoryGenerationCost(model: ConfiguredModelSnapshot) {
     };
 }
 
-export function StoryGenerationEstimate({ model, loading = false, failed = false, explicit = false }: {
+export function StoryGenerationEstimate({ model, loading = false, failed = false, explicit = false, defaultModelId, onRefresh }: {
     model: ConfiguredModelSnapshot | null; loading?: boolean; failed?: boolean; explicit?: boolean;
+    defaultModelId?: string | null; onRefresh?: () => void;
 }) {
-    if (loading) return <p role="status" className="text-xs text-muted-foreground">{copy.loading}</p>;
-    if (failed) return <p className="text-xs text-muted-foreground">{copy.failed}</p>;
-    if (!model) return <p className="text-xs text-muted-foreground">{copy.noDefault}</p>;
+    const actions = <div className="flex flex-wrap items-center gap-3 text-xs">
+        <Link className="underline underline-offset-2" href="/settings">{copy.settings}</Link>
+        {onRefresh && <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" disabled={loading} onClick={onRefresh}>{copy.refresh}</Button>}
+    </div>;
+    if (loading) return <div className="space-y-2"><p role="status" className="text-xs text-muted-foreground">{copy.loading}</p>{actions}</div>;
+    if (failed) return <div className="space-y-2"><p role="alert" className="text-xs text-muted-foreground">{copy.failed}</p>{actions}</div>;
+    if (defaultModelId != null && model?.id !== defaultModelId) return <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">{copy.unavailableDefault}</p>{actions}
+    </div>;
+    if (!model) return <div className="space-y-2"><p className="text-xs text-muted-foreground">{copy.noDefault}</p>{actions}</div>;
     const estimate = estimateStoryGenerationCost(model);
     return <div className="space-y-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
         <p>{explicit ? copy.explicitModel : copy.defaultModel}：{model.name} · {model.modelId}</p>

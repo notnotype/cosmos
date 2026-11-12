@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ContentQuery, StoryAgentWorkflowControl, createStoryAgentSaveAction, createStoryAgentWorkflowDefinition } from "@cosmos/application";
-import { PrismaContentQueryRepository, PrismaStoryAgentCandidateRepository } from "@cosmos/storage-prisma";
+import { PrismaContentQueryRepository, PrismaStoryAgentCandidateRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
 import { storyAgentGenerationSchema, storyAgentCandidateRecordSchema, storyDetailSchema } from "@cosmos/contracts";
 import { createWorkerAgentInvocationV2Action } from "../../apps/worker/src/agent-action-v2.js";
 import { createWorkflowHost } from "../../apps/worker/src/workflow-host.js";
@@ -51,7 +51,7 @@ export async function runBodyStoryAcceptance(options: { credential: string; tran
         const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: "task40-body-acceptance",
             leaseMs: 120_000, definitions: [createStoryAgentWorkflowDefinition()], actions: [
                 createWorkerAgentInvocationV2Action({ ...configured, secrets: repository.secrets }), createStoryAgentSaveAction(candidates)] });
-        const control = new StoryAgentWorkflowControl({ store: host.store,
+        const control = new StoryAgentWorkflowControl({ store: host.store, systemConfig: new PrismaSystemConfigRepository(repository.prisma),
             stories: { readStory: async () => bodyStory }, content: new ContentQuery(new PrismaContentQueryRepository(repository.prisma)) });
         api = await startBodyApi(root);
         const endpoint = `${api.origin}/api/v1/stories/${bodyStory.storyId}`;

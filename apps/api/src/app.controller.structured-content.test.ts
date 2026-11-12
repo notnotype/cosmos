@@ -1,7 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { ContentRebuild, StoryAgentWorkflowControl, WorkflowHostError, ContentCommands, ContentQuery, StoryAgentCandidates, StoryAgentCandidateError } from "@cosmos/application";
+import { ContentRebuild, StoryAgentWorkflowControl, WorkflowHostError, ContentCommands, ContentQuery, StoryAgentCandidates, StoryAgentCandidateError,
+    type CreateWorkflowEnvelopeInput, type WorkflowEnvelope } from "@cosmos/application";
+import type { ConfiguredModelSnapshot } from "@cosmos/contracts";
 import { AppController } from "./app.controller.js";
+
+const configuredModel: ConfiguredModelSnapshot = {
+    id: "model-1", providerId: "provider-1", modelId: "upstream-model", name: "Model", contextWindow: 4096,
+    maxOutputTokens: 1024, version: 1, inputPricePerMillion: 1, outputPricePerMillion: 1,
+    currency: "USD", tieredPricingEnabled: false, tieredPricingThreshold: null,
+    highInputPricePerMillion: null, highOutputPricePerMillion: null,
+    highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
+    createdAt: "2026-10-08T12:00:00.000Z", updatedAt: "2026-10-08T12:00:00.000Z",
+};
+
+function workflowEnvelope(input: CreateWorkflowEnvelopeInput): WorkflowEnvelope {
+    return { ...input, idempotencyKey: input.idempotencyKey ?? null, status: "queued", resumeRequired: false,
+        createdAt: "2026-10-08T12:00:00.000Z", updatedAt: "2026-10-08T12:00:00.000Z", startedAt: null, finishedAt: null };
+}
 
 function setup() {
     const readContentSource = vi.fn(async () => ({
@@ -29,10 +45,88 @@ describe("structured content endpoint", () => {
         readRebuildSource.mockResolvedValueOnce({ currentRepresentationId: "rep-1", locked: true, source: null });
         await expect(controller.rebuildRevisionContent("revision-1", {})).rejects.toMatchObject({ status: 409 });
     });
+    it.each([
+        { label: "no default", defaultModelId: null, selection: null },
+        { label: "stale default", defaultModelId: "missing-model", selection: null },
+        { label: "inactive provider", defaultModelId: "inactive-model", selection: { model: configuredModel, providerState: "paused" } },
+    ])("rejects enqueue with $label before creating a workflow", async ({ defaultModelId, selection }) => {
+        const findWorkflowEnvelopeByIdempotencyKey = vi.fn(async () => null);
+        const createWorkflowEnvelope = vi.fn(async (input: CreateWorkflowEnvelopeInput) => workflowEnvelope(input));
+        const control = new StoryAgentWorkflowControl({
+            store: { findWorkflowEnvelopeByIdempotencyKey, createWorkflowEnvelope, loadWorkflowEnvelope: async () => null },
+            stories: { readStory: vi.fn(async () => ({ storyId: "story-1", storyRevisionId: "revision-1", title: "Story", summary: "", entryRevisionIds: [] })) },
+            content: new ContentQuery({ readContentSource: async () => null }),
+            systemConfig: {
+                getDefaultModelId: vi.fn(async () => defaultModelId),
+                getStoryAgentTimeoutSeconds: vi.fn(async () => 300),
+                getModelSelection: vi.fn(async () => selection),
+            },
+        });
+        const controller = new AppController({} as never, {} as never, undefined, undefined, undefined,
+            undefined, undefined, undefined, undefined, undefined, control);
+
+        await expect(controller.proposeStoryAgentCandidate("story-1", { task: "story.summarize" }, "key"))
+            .rejects.toMatchObject({ status: 409, response: { code: "conflict", message: "请先在设置页选择一个可用的默认模型。" } });
+        expect(createWorkflowEnvelope).not.toHaveBeenCalled();
+    });
+
+    it("allows an explicit active model and replays a queued request without revalidating it", async () => {
+        let savedEnvelope: WorkflowEnvelope | null = null;
+        const findWorkflowEnvelopeByIdempotencyKey = vi.fn(async () => savedEnvelope);
+        const createWorkflowEnvelope = vi.fn(async (input: CreateWorkflowEnvelopeInput) => {
+            savedEnvelope = workflowEnvelope(input);
+            return savedEnvelope;
+        });
+        const getDefaultModelId = vi.fn(async () => "missing-default");
+        const getModelSelection = vi.fn(async (modelId: string) => modelId === "explicit-model"
+            ? { model: configuredModel, providerState: "active" } : null);
+        const stories = { readStory: vi.fn(async () => ({ storyId: "story-1", storyRevisionId: "revision-1",
+            title: "Story", summary: "", entryRevisionIds: [] })) };
+        const control = new StoryAgentWorkflowControl({
+            store: { findWorkflowEnvelopeByIdempotencyKey, createWorkflowEnvelope, loadWorkflowEnvelope: async () => null },
+            stories,
+            content: new ContentQuery({ readContentSource: async () => null }),
+            systemConfig: { getDefaultModelId, getModelSelection, getStoryAgentTimeoutSeconds: async () => 300 },
+        });
+        const controller = new AppController({} as never, {} as never, undefined, undefined, undefined,
+            undefined, undefined, undefined, undefined, undefined, control);
+        const request = { task: "story.summarize", modelId: "explicit-model" };
+        const queued = await controller.proposeStoryAgentCandidate("story-1", request, "key");
+        getModelSelection.mockResolvedValueOnce(null);
+
+        await expect(controller.proposeStoryAgentCandidate("story-1", request, "key")).resolves.toEqual(queued);
+        expect(getDefaultModelId).not.toHaveBeenCalled();
+        expect(getModelSelection).toHaveBeenCalledTimes(1);
+        expect(stories.readStory).toHaveBeenCalledTimes(1);
+        expect(createWorkflowEnvelope).toHaveBeenCalledTimes(1);
+    });
+
+    it("queues with a valid system default model", async () => {
+        const createWorkflowEnvelope = vi.fn(async (input: CreateWorkflowEnvelopeInput) => workflowEnvelope(input));
+        const control = new StoryAgentWorkflowControl({
+            store: { findWorkflowEnvelopeByIdempotencyKey: async () => null, createWorkflowEnvelope, loadWorkflowEnvelope: async () => null },
+            stories: { readStory: async () => ({ storyId: "story-1", storyRevisionId: "revision-1",
+                title: "Story", summary: "", entryRevisionIds: [] }) },
+            content: new ContentQuery({ readContentSource: async () => null }),
+            systemConfig: { getDefaultModelId: async () => "default-model",
+                getModelSelection: async (modelId: string) => modelId === "default-model" ? { model: configuredModel, providerState: "active" } : null,
+                getStoryAgentTimeoutSeconds: async () => 300 },
+        });
+
+        await expect(control.enqueue({ storyId: "story-1", task: "story.summarize", idempotencyKey: "key" }))
+            .resolves.toMatchObject({ status: "queued", storyId: "story-1" });
+        expect(createWorkflowEnvelope).toHaveBeenCalledOnce();
+    });
+
     it("queues generation with an optional model and stable client idempotency key", async () => {
-        const control = new StoryAgentWorkflowControl({ store: {} as never,
+        const control = new StoryAgentWorkflowControl({ store: {
+            findWorkflowEnvelopeByIdempotencyKey: async () => null,
+            createWorkflowEnvelope: async () => { throw new Error("Unexpected workflow creation"); },
+            loadWorkflowEnvelope: async () => null,
+        },
             stories: { readStory: async () => null },
-            content: new ContentQuery({ readContentSource: async () => null }) });
+            content: new ContentQuery({ readContentSource: async () => null }),
+            systemConfig: { getDefaultModelId: async () => null, getModelSelection: async () => null, getStoryAgentTimeoutSeconds: async () => 300 } });
         const queued = { runId: "run-1", storyId: "story-1", task: "story.summarize" as const,
             status: "queued" as const, candidateId: null, errorCode: null };
         const enqueue = vi.spyOn(control, "enqueue").mockResolvedValue(queued);

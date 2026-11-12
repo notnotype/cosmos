@@ -2,14 +2,15 @@ import { expect, test } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { configuredModelSnapshotSchema, modelProviderSnapshotSchema, systemConfigDtoSchema,
     storyAgentCandidateRecordSchema, contentRebuildResultSchema, structuredContentViewSchema,
-    storyAgentGenerationRequestSchema, storyAgentGenerationSchema, storyDetailSchema } from "@cosmos/contracts";
+    storyAgentGenerationRequestSchema, storyAgentGenerationSchema, storyDetailSchema, runSnapshotSchema } from "@cosmos/contracts";
 import { ingestFeed, openStory, waitForStoryId } from "../support/story-flow";
 
 test("Story generation persists actual cost through Worker, decisions and model repricing", async ({ page }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => { pageErrors.push(error.message); errors.push(error.message); });
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
     page.on("requestfailed", (request) => errors.push(`${request.method()} ${request.url()}`));
     const previousConfig = systemConfigDtoSchema.parse(await (await page.request.get("/api/v1/system/config")).json());
@@ -17,6 +18,8 @@ test("Story generation persists actual cost through Worker, decisions and model 
     let providerVersion: number | null = null;
     let modelId: string | null = null;
     let modelVersion: number | null = null;
+    let staleModelId: string | null = null;
+    let staleModelVersion: number | null = null;
 
     try {
     const source = await ingestFeed(page, "Story Agent isolated chain");
@@ -32,30 +35,148 @@ test("Story generation persists actual cost through Worker, decisions and model 
     providerId = provider.id;
     providerVersion = provider.version;
     const modelPath = `/api/v1/model-providers/${provider.id}/models`;
-    const modelResponse = await page.request.post(modelPath, {
-        headers: headers(), data: { modelId: "synthetic-story-model", name: "Synthetic Story Model",
-            contextWindow: 4096, maxOutputTokens: 512, inputPricePerMillion: 1.25, outputPricePerMillion: 2.5,
-            cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0, currency: "USD" },
-    });
-    expect(modelResponse.status()).toBe(201);
-    const model = configuredModelSnapshotSchema.parse(await modelResponse.json());
-    modelId = model.id;
-    modelVersion = model.version;
-    const configured = await page.request.put("/api/v1/system/config", { data: { defaultModelId: model.id } });
-    expect(configured.status()).toBe(200);
+    const createModel = async (id: string) => {
+        const response = await page.request.post(modelPath, {
+            headers: headers(), data: { modelId: id, name: "Synthetic Story Model",
+                contextWindow: 4096, maxOutputTokens: 512, inputPricePerMillion: 1.25, outputPricePerMillion: 2.5,
+                cacheWritePricePerMillion: 0, cacheReadPricePerMillion: 0, currency: "USD" },
+        });
+        expect(response.status()).toBe(201);
+        return configuredModelSnapshotSchema.parse(await response.json());
+    };
+    const storyPath = `/api/v1/stories/${encodeURIComponent(storyId)}/agent-candidates`;
+    const records = async () => storyAgentCandidateRecordSchema.array().parse(await (await page.request.get(storyPath)).json());
+    const runs = async () => runSnapshotSchema.array().parse(await (await page.request.get("/api/v1/runs?limit=100")).json());
+    const runIds = async () => (await runs()).map((run) => run.id).sort();
+    const rejectGenerationWithoutRun = async () => {
+        const beforeRunIds = await runIds();
+        const response = await page.request.post(storyPath, {
+            headers: headers(), data: { task: "story.summarize" },
+        });
+        expect(response.status()).toBe(409);
+        expect(await response.json()).toMatchObject({
+            code: "conflict", message: "请先在设置页选择一个可用的默认模型。",
+        });
+        expect(await runIds()).toEqual(beforeRunIds);
+        expect(await records()).toEqual([]);
+    };
+
+    expect((await page.request.put("/api/v1/system/config", { data: { defaultModelId: null } })).status()).toBe(200);
+    const firstModel = await createModel("synthetic-story-model-stale");
+    staleModelId = firstModel.id;
+    staleModelVersion = firstModel.version;
     const detail = async () => storyDetailSchema.parse(await (await page.request.get(`/api/v1/stories/${storyId}`)).json());
     const before = await detail();
     await openStory(page, storyId);
     const panel = page.getByRole("region", { name: "Agent 建议", exact: true });
     const generate = panel.getByRole("button", { name: "生成建议", exact: true });
+    await expect(generate).toBeDisabled();
+    await expect(panel.getByText("尚未设置默认模型，请先前往设置页选择一个可用模型。", { exact: true })).toBeVisible();
+    const settingsLink = panel.getByRole("link", { name: "前往默认模型设置", exact: true });
+    await expect(settingsLink).toHaveAttribute("href", "/settings");
+    await panel.getByRole("button", { name: "重新读取默认模型", exact: true }).click();
+    await expect(panel.getByText("尚未设置默认模型，请先前往设置页选择一个可用模型。", { exact: true })).toBeVisible();
+    await rejectGenerationWithoutRun();
+
+    expect((await page.request.put("/api/v1/system/config", { data: { defaultModelId: firstModel.id } })).status()).toBe(200);
+    const staleModelRemoval = await page.request.delete(`${modelPath}/${firstModel.id}`, {
+        headers: headers(), data: { expectedVersion: firstModel.version },
+    });
+    expect(staleModelRemoval.status()).toBe(204);
+    staleModelId = null;
+    staleModelVersion = null;
+    expect(await page.request.get("/api/v1/system/config").then(async (response) => systemConfigDtoSchema.parse(await response.json())))
+        .toMatchObject({ defaultModelId: firstModel.id, defaultModel: null });
+    await page.reload();
+    await expect(generate).toBeDisabled();
+    await expect(panel.getByText("当前默认模型已失效，请重新选择默认模型。", { exact: true })).toBeVisible();
+    await expect(settingsLink).toHaveAttribute("href", "/settings");
+    await panel.getByRole("button", { name: "重新读取默认模型", exact: true }).click();
+    await expect(panel.getByText("当前默认模型已失效，请重新选择默认模型。", { exact: true })).toBeVisible();
+    await rejectGenerationWithoutRun();
+
+    const model = await createModel("synthetic-story-model");
+    modelId = model.id;
+    modelVersion = model.version;
+    await page.goto("/settings");
+    const settings = page.getByRole("region", { name: "默认模型", exact: true });
+    const selector = settings.getByRole("combobox", { name: "默认模型", exact: true });
+    await expect(selector).toBeEnabled();
+    await selector.selectOption(model.id);
+    await settings.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(settings.getByRole("status")).toContainText("已保存");
+    expect((await page.request.get("/api/v1/system/config").then(async (response) => systemConfigDtoSchema.parse(await response.json())))
+        .defaultModelId).toBe(model.id);
+
+    await openStory(page, storyId);
+    const endpoint = storyPath;
+    const blockedGenerationRequests: string[] = [];
+    const trackBlockedGeneration = (request: import("@playwright/test").Request) => {
+        const url = new URL(request.url());
+        if (url.pathname === "/api/v1/system/config" && request.method() === "GET") blockedGenerationRequests.push("config");
+        if (url.pathname.startsWith("/api/v1/revisions/") && request.method() === "GET") blockedGenerationRequests.push("revision");
+        if (url.pathname === endpoint && request.method() === "POST") blockedGenerationRequests.push("generation");
+    };
+    await expect(panel.getByRole("button", { name: "生成建议", exact: true })).toBeEnabled();
     await expect(panel.getByLabel("模型连接", { exact: true })).toHaveCount(0);
-    await expect(generate).toBeEnabled();
-    const endpoint = `/api/v1/stories/${encodeURIComponent(storyId)}/agent-candidates`;
-    const records = async () => storyAgentCandidateRecordSchema.array().parse(await (await page.request.get(endpoint)).json());
+    await panel.getByLabel("允许读取此 Story 的来源正文", { exact: true }).check();
+    expect((await page.request.put("/api/v1/system/config", { data: { defaultModelId: null } })).status()).toBe(200);
+    page.on("request", trackBlockedGeneration);
+    const missingConfigRead = page.waitForResponse((response) => response.url().includes("/api/v1/system/config")
+        && response.request().method() === "GET", { timeout: 15_000 });
+    await panel.getByRole("button", { name: "生成建议", exact: true }).click();
+    expect((await missingConfigRead).status()).toBe(200);
+    await expect(panel.getByRole("button", { name: "生成建议", exact: true })).toBeDisabled();
+    expect(blockedGenerationRequests).toEqual(["config"]);
+
+    expect((await page.request.put("/api/v1/system/config", { data: { defaultModelId: model.id } })).status()).toBe(200);
+    const focusedConfigRead = page.waitForResponse((response) => response.url().includes("/api/v1/system/config")
+        && response.request().method() === "GET", { timeout: 15_000 });
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    expect((await focusedConfigRead).status()).toBe(200);
+    await expect(panel.getByRole("button", { name: "生成建议", exact: true })).toBeEnabled();
+    expect(blockedGenerationRequests).toEqual(["config", "config"]);
+    page.off("request", trackBlockedGeneration);
+    await panel.getByLabel("允许读取此 Story 的来源正文", { exact: true }).uncheck();
+
+    let failConfigRead = true;
+    await page.route("**/api/v1/system/config", async (route) => {
+        if (route.request().method() === "GET" && failConfigRead) {
+            failConfigRead = false;
+            await route.fulfill({ status: 503, contentType: "application/json",
+                body: JSON.stringify({ code: "dependency_unavailable", message: "Synthetic config read failure" }) });
+            return;
+        }
+        await route.continue();
+    });
+    const failedConfigRead = page.waitForResponse((response) => response.url().includes("/api/v1/system/config")
+        && response.request().method() === "GET", { timeout: 15_000 });
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    expect((await failedConfigRead).status()).toBe(503);
+    await expect(panel.getByRole("alert")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "生成建议", exact: true })).toBeDisabled();
+    expect(pageErrors).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/^Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)$/u);
+    errors.splice(0, 1);
+    await page.unroute("**/api/v1/system/config");
+    await panel.getByRole("button", { name: "重新读取默认模型", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "生成建议", exact: true })).toBeEnabled();
+    await expect(panel.getByRole("alert")).toHaveCount(0);
+
+    const freshReadOrder: string[] = [];
+    const trackFreshRead = (request: import("@playwright/test").Request) => {
+        const url = new URL(request.url());
+        if (url.pathname === "/api/v1/system/config" && request.method() === "GET") freshReadOrder.push("config");
+        if (url.pathname === endpoint && request.method() === "POST") freshReadOrder.push("generation");
+    };
+    page.on("request", trackFreshRead);
     const queuedResponse = page.waitForResponse((response) => response.url().endsWith(endpoint)
         && response.request().method() === "POST", { timeout: 15_000 });
-    await generate.click();
+    await panel.getByRole("button", { name: "生成建议", exact: true }).click();
     const queued = await queuedResponse;
+    page.off("request", trackFreshRead);
+    expect(freshReadOrder).toEqual(["config", "generation"]);
     expect(queued.status()).toBe(202);
     const generation = storyAgentGenerationSchema.parse(await queued.json());
     expect(generation).not.toHaveProperty("cost");
@@ -153,13 +274,15 @@ test("Story generation persists actual cost through Worker, decisions and model 
         });
         expect(restore.status()).toBe(200);
         if (providerId !== null && providerVersion !== null) {
-            if (modelId !== null && modelVersion !== null) {
-                const modelRemoval = await page.request.delete(`/api/v1/model-providers/${providerId}/models/${modelId}`, {
+            const cleanupModel = async (id: string, version: number) => {
+                const response = await page.request.delete(`/api/v1/model-providers/${providerId}/models/${id}`, {
                     headers: {origin: new URL(page.url()).origin, "idempotency-key": randomUUID()},
-                    data: {expectedVersion: modelVersion},
+                    data: {expectedVersion: version},
                 });
-                expect(modelRemoval.status()).toBe(204);
-            }
+                expect(response.status()).toBe(204);
+            };
+            if (modelId !== null && modelVersion !== null) await cleanupModel(modelId, modelVersion);
+            if (staleModelId !== null && staleModelVersion !== null) await cleanupModel(staleModelId, staleModelVersion);
             const providerRemoval = await page.request.delete(`/api/v1/model-providers/${providerId}`, {
                 headers: {origin: new URL(page.url()).origin, "idempotency-key": randomUUID()},
                 data: {expectedVersion: providerVersion},

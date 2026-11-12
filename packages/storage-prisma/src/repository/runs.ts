@@ -315,8 +315,11 @@ export class PrismaCosmosRepositoryRuns extends PrismaCosmosRepositorySources {
     async getJob(jobId: string): Promise<JobSnapshot | null> {
         const job = await this.prisma.job.findUnique({
             where: { id: jobId },
+            include: { workflowRun: { select: { definitionKey: true } } },
         });
-        return job ? this.toJobSnapshot(job) : null;
+        return job ? this.toJobSnapshot(job,
+            job.workflowRun?.definitionKey === "cosmos.story-agent",
+            job.kind === "workflow-activity" && job.workflowRun === null) : null;
     }
 
     /**
@@ -327,8 +330,11 @@ export class PrismaCosmosRepositoryRuns extends PrismaCosmosRepositorySources {
         const jobs = await this.prisma.job.findMany({
             where: { OR: [{ runId }, { workflowRunId: runId }] },
             orderBy: { createdAt: "asc" },
+            include: { workflowRun: { select: { definitionKey: true } } },
         });
-        return jobs.map((job) => this.toJobSnapshot(job));
+        return jobs.map((job) => this.toJobSnapshot(job,
+            job.workflowRun?.definitionKey === "cosmos.story-agent",
+            job.kind === "workflow-activity" && job.workflowRun === null));
     }
 
     async latestEventSequence(): Promise<number> {

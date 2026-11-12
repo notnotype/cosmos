@@ -13,8 +13,11 @@ it("configures an isolated model that the current worker resolver can load witho
     const { root, repository, secretRefs } = await prepareStoryIsolation();
     roots.push(root);
     try {
-        const overlayMigrationName = "20261111080000_task_42_cache_tiered_pricing";
-        const overlayPaths = ["schema.prisma", `migrations/${overlayMigrationName}/migration.sql`];
+        const overlayMigrationNames = [
+            "20261111080000_task_42_cache_tiered_pricing",
+            "20261112090000_task_42_story_agent_timeout",
+        ];
+        const overlayPaths = ["schema.prisma", ...overlayMigrationNames.map((name) => `migrations/${name}/migration.sql`)];
         const overlays = await Promise.all(overlayPaths.map(async (path) => {
             const source = await readFile(join(repositoryRoot, "packages/storage-prisma/prisma", path));
             const copied = await readFile(join(root, "snapshot/packages/storage-prisma/prisma", path));
@@ -22,12 +25,15 @@ it("configures an isolated model that the current worker resolver can load witho
             return { path, sha256: createHash("sha256").update(source).digest("hex") };
         }));
         expect(JSON.parse(await readFile(join(root, "schema-snapshot-manifest.json"), "utf8"))).toEqual({
-            baseCommit: snapshotCommit, overlayMigrationName, overlaySource: "current-working-tree", overlays,
+            baseCommit: snapshotCommit, overlayMigrationNames, overlaySource: "current-working-tree", overlays,
         });
         const migrations = (await readdir(join(root, "snapshot/packages/storage-prisma/prisma/migrations"), { withFileTypes: true }))
             .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-        expect(migrations).toHaveLength(44);
-        expect(migrations.at(-1)).toBe(overlayMigrationName);
+        expect(migrations).toHaveLength(45);
+        expect(migrations.slice(-2)).toEqual(overlayMigrationNames);
+        expect(await new PrismaSystemConfigRepository(repository.prisma).getSystemConfigWithModel()).toEqual({
+            defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300,
+        });
         const columns = await repository.prisma.$queryRaw<Array<{ name: string }>>`PRAGMA table_info("ConfiguredModel")`;
         expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
             "inputPricePerMillion", "outputPricePerMillion", "cacheWritePricePerMillion", "cacheReadPricePerMillion",

@@ -19,17 +19,17 @@
 | GET `/config/default-model` | 无 | `{modelId:string\|null}` | 旧读取保留 |
 | PUT `/config/default-model` | `{modelId:string\|null}` | `{modelId}` | 旧写入保留，共用选择有效性校验 |
 
-完整模型快照包含普通四价、币种及阶梯配置，读取未知价格省略，0 保留。新建普通四价必填；旧模型保留两价，缓存未知不补零，具体见 [DTO 补充](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)。已删除默认模型时保留 ID、模型为 null。非空选择在同一事务校验存在性与 Provider active 并 upsert；删除先完成则设置失败，设置先完成仍可随后删除并形成失效默认值。400/404/409/503、安全错误与 no-store 的当前合同见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)。Web/transport 使用 `getSystemConfig` / `updateSystemConfig`，PUT 确认响应不能按完整 GET DTO 解码。费用不由 Connection 或配置页面拥有；Story optional cost 的冻结目标见 [Story API](0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)，实现和运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录。
+模型快照、价格兼容与费用字段见[公共合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)。删除默认模型保留 ID、详情为 null；新 Story 请求入队前验证显式/默认模型存在且 Provider active，否则 409 且不建任务；幂等重放返回既有结果。设置页在配置无效时阻止生成。`storyAgentTimeoutSeconds` 默认 300 秒、范围 30–1800，新 Invocation 冻结单次尝试预算；Generation 和 Story Workflow Job/Attempt 查询仅公开固定错误码与安全消息，不返回原始错误或 Job result。字段、状态码及错误映射以 [Product API HTTP spec](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)、[Web spec](../spec/interfaces/0005-web-client.md#task-42-当前合同补充)及 [ADR-0033](../adr/0033-story-agent-timeout-and-error-codes.md) 为准。`getSystemConfig` / `updateSystemConfig` 分别解析完整 GET 与已保存字段；删除/设置竞争仍可能形成失效默认值，详见下文凭证与恢复边界。Story 费用的目标及运行证据见 [Story API](0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)和 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)。
 
 ## 模型缓存与两档定价目标草案（2026-11-11）
 
-**已实现并通过本轮隔离验收**：Otirik 确认的[完整 Proposal](../proposals/model-cache-tiered-pricing-v1.md)复用 Task 42。以下行为已进入当前实现，精确合同见 [公共合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)；全仓回归、浏览器与组件实验室的分层证据见 Task 本轮过程，不代表真实 Provider 或部署验收。
+**已实现并通过隔离验收**：接受的[Proposal](../proposals/model-cache-tiered-pricing-v1.md)复用 Task 42。当前 DTO 和运行行为以[公共合同](../spec/contracts/0001-public-contracts.md#模型定价与调用费用当前合同)为准；分层测试证据见 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)，不代表真实 Provider 或部署验收。
 
-- 新建保留 `inputPricePerMillion`/`outputPricePerMillion`，新增 `cacheWritePricePerMillion`/`cacheReadPricePerMillion`；普通四价必填有限非负数，0 合法。`currency` 为 USD/CNY，不换汇。新增 `tieredPricingEnabled`（默认 false）、`tieredPricingThreshold`（正整数或 null）、`highInputPricePerMillion`/`highOutputPricePerMillion`/`highCacheWritePricePerMillion`/`highCacheReadPricePerMillion`（有限非负或 null）。启用须阈值和高档四价齐全；关闭时阈值和高档四价全为 null。全部显式列，UI 开启时预填阈值 272000，价格无截图默认值。
-- POST/PATCH/list/get 和默认模型投影保持一致；PATCH 价格配置须完整组原子替换，沿用 expectedVersion，不接收混合新旧档的局部价格修改；metadata-only 修改保留旧价。旧模型保留两价，缓存 NULL 未知、USD、阶梯关闭，主动保存价格时补齐普通四价。Web 新增编辑入口，保存回填并显示币种、四价和阈值摘要。
-- 实际 prompt 总输入 >阈值时整次调用四类费用全部按高档；272000 普通、272001 高档，无分段累进。新增 optional `usage.cacheWriteTokens/cacheReadTokens` 和 `cost.cacheWrite/cacheRead` 兼容历史，新运行输出完整分项，费用 total 为四项之和。input/output 任一价格未知始终省略整个 cost；缓存非零用量价格未知也省略 cost，缓存零用量对应未知价格费用为 0。历史实际 cost 不重算。总输入 = 普通 input + cacheWrite + cacheRead，output 不参与阈值；Leader 通过包管理器确认本地 pi-ai 为 0.55.4，并由核对代理确认该发布版本两种 OpenAI provider 的普通 input 扣除 cacheRead、cacheWrite 为 0，来源见 Proposal；SDK 映射依据与本轮运行验收分别记录于 Task。
+- 模型保留普通输入/输出价，新增缓存写入/读取价、币种（USD/CNY）和可选完整高档四价及阈值；新建普通四价必填，价格允许 0。启用阶梯时高档与正整数阈值须完整，关闭时均为空。
+- POST/PATCH/list/get 与默认模型投影保持一致。PATCH 价格按完整组原子替换并使用 expectedVersion；metadata-only 保留旧价。旧模型缓存价未知，不补零；缺价时 cost 按公共合同省略。
+- prompt 总输入（普通输入 + 缓存写入 + 缓存读取）严格大于阈值时，整次调用四类费用均选高档；272000/272001 分别为低/高档。历史实际费用不重算，缓存 usage/cost 分项可选以兼容旧数据。
 
-独立 additive SQL 已落地并有隔离验证，未迁移用户数据库或部署。配置、调用和 Web 已通过本轮构建、全仓回归及离线浏览器/组件实验室验收，证据见 [Task 本轮过程](../../.agents/tasks/42-default-model-ui-api/walkthrough.md)；预算、换汇、多阶与真实 Provider 外呼不在本轮范围。
+本轮新增字段的 additive SQL 通过隔离验证，未迁移用户库或部署。配置、调用及 Web 的验收记录见 Task；预算、换汇、多阶计价和真实 Provider 外呼不在范围。
 
 ## 所有者与首个消费者
 

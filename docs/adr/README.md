@@ -49,3 +49,4 @@ ADR 只记录已经稳定、需要长期保留的决定。仍在探索或会随�
 - [0030 Agent Invocation 基础接入 v1](0030-agent-invocation-v1.md)：固定 Agent 作为普通 `agent.invoke@1` Workflow Action、第一版 `trusted_worker` 执行位置、Invocation Port 与具体 Runtime 解耦、Fake Adapter 先行、Cosmos 持有唯一 Workflow/Job durable truth；`pi-ai`、`neuro-agent-harness` 和 `nb-memory` 通过后续 Adapter 接入。
 - [0031 API 默认端口 14310](0031-api-default-port-14310.md)：固定开发编排、E2E、Compose 与文档中的 API 首选端口由 `4310` 改为 `14310`（`4310` 在本机常被 QQ 占用，导致文档端口与真实监听见不一致、并行栈探测竞态、Compose 发布冲突）；端口冲突顺延逻辑、Web `3000` 与 Worker Admin `9091` 不变。
 - [0032 模型缓存四价与两档整次计费](0032-model-cache-tiered-pricing.md)：固定每模型币种、不换汇、两档显式价格列、互斥总输入整次选档、未知与零价区别、完整组更新及历史实际费用不重算。
+- [0033 Story Agent 超时与错误码边界](0033-story-agent-timeout-and-error-codes.md)：固定系统级 300 秒默认/30–1800 秒范围、每次调用快照预算、七类公开失败码、取消独立状态和基于 durable Job 的 Story 受限错误码投影。

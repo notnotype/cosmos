@@ -49,7 +49,7 @@ async function snapshot(root: string): Promise<string> {
     await writeFile(join(destination, "schema.prisma"), schema);
     await copyFile(join(source, "migrations/migration_lock.toml"), join(migrations, "migration_lock.toml"));
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    if (names.length !== 44 || names.at(-1) !== "20261111080000_task_42_cache_tiered_pricing") throw new Error("Re-audit the frozen migration boundary.");
+    if (names.length !== 45 || names.at(-1) !== "20261112090000_task_42_story_agent_timeout") throw new Error("Re-audit the frozen migration boundary.");
     const manifest: { path: string; sha256: string }[] = [];
     for (const name of names) {
         const relative = `migrations/${name}/migration.sql`;

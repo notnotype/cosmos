@@ -3,6 +3,8 @@ import type { ConfiguredModelSnapshot, SystemConfigDto } from "@cosmos/contracts
 
 export interface SystemConfigRepository {
     getSystemConfigWithModel(): Promise<SystemConfigDto>;
+    getStoryAgentTimeoutSeconds(): Promise<number>;
+    updateConfig(command: { defaultModelId?: string | null; storyAgentTimeoutSeconds?: number }, validateModel: (selection: { model: ConfiguredModelSnapshot; providerState: string | null } | null) => void): Promise<void>;
     setDefaultModelWithValidation(modelId: string, validate: (selection: { model: ConfiguredModelSnapshot; providerState: string | null } | null) => void): Promise<void>;
     getModelSelection(modelId: string): Promise<{ model: ConfiguredModelSnapshot; providerState: string | null } | null>;
 
@@ -55,11 +57,38 @@ export class PrismaSystemConfigRepository implements SystemConfigRepository {
 
     async getSystemConfigWithModel(): Promise<SystemConfigDto> {
         const config = await this.prisma.systemConfig.findUnique({
-            where: { id: this.SINGLETON_ID }, select: { defaultModelId: true },
+            where: { id: this.SINGLETON_ID }, select: { defaultModelId: true, storyAgentTimeoutSeconds: true },
         });
         const defaultModelId = config?.defaultModelId ?? null;
         const selection = defaultModelId === null ? null : await this.getModelSelection(defaultModelId);
-        return { defaultModelId, defaultModel: selection?.model ?? null };
+        return { defaultModelId, defaultModel: selection?.model ?? null,
+            storyAgentTimeoutSeconds: config?.storyAgentTimeoutSeconds ?? 300 };
+    }
+
+    async updateConfig(
+        command: { defaultModelId?: string | null; storyAgentTimeoutSeconds?: number },
+        validateModel: (selection: { model: ConfiguredModelSnapshot; providerState: string | null } | null) => void,
+    ): Promise<void> {
+        await this.prisma.$transaction(async (tx) => {
+            if (command.defaultModelId !== undefined && command.defaultModelId !== null) {
+                validateModel(await this.readModelSelection(tx, command.defaultModelId));
+            }
+            await tx.systemConfig.upsert({
+                where: { id: this.SINGLETON_ID },
+                create: { id: this.SINGLETON_ID,
+                    ...(command.defaultModelId === undefined ? {} : { defaultModelId: command.defaultModelId }),
+                    ...(command.storyAgentTimeoutSeconds === undefined ? {} : { storyAgentTimeoutSeconds: command.storyAgentTimeoutSeconds }) },
+                update: { ...(command.defaultModelId === undefined ? {} : { defaultModelId: command.defaultModelId }),
+                    ...(command.storyAgentTimeoutSeconds === undefined ? {} : { storyAgentTimeoutSeconds: command.storyAgentTimeoutSeconds }) },
+            });
+        });
+    }
+
+    async getStoryAgentTimeoutSeconds(): Promise<number> {
+        const config = await this.prisma.systemConfig.findUnique({
+            where: { id: this.SINGLETON_ID }, select: { storyAgentTimeoutSeconds: true },
+        });
+        return config?.storyAgentTimeoutSeconds ?? 300;
     }
 
     async setDefaultModelWithValidation(modelId: string, validate: (selection: { model: ConfiguredModelSnapshot; providerState: string | null } | null) => void): Promise<void> {

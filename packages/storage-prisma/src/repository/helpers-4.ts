@@ -7,6 +7,7 @@ import { appendDomainEvent, assertWorkflowActionFence, parseJson } from "./repos
 import { PrismaCosmosRepositoryHelpers3 } from "./helpers-3.js";
 import { persistInitialContentRepresentation } from "./content-representation.js";
 import { mergeRunDiagnostics, projectSourceSnapshot, requireSourceManifest, type SourceRunDiagnostics } from "./source-projection.js";
+import { projectOrphanWorkflowActivityFailure, projectStoryAgentJobFailure } from "./story-agent-public-projection.js";
 
 /** `PrismaClient` 与事务客户端都能满足的读模型：只读 Run／WorkflowRun。 */
 type RunDiagnosticsReader = Pick<Prisma.TransactionClient, "run" | "workflowRun">;
@@ -577,13 +578,16 @@ export class PrismaCosmosRepositoryHelpers4 extends PrismaCosmosRepositoryHelper
         };
     }
 
-    protected toJobSnapshot(job: Prisma.JobGetPayload<{}>): JobSnapshot {
+    protected toJobSnapshot(job: Prisma.JobGetPayload<{}>, isStoryAgent = false, isOrphanActivity = false): JobSnapshot {
         const payload = job.payloadJson
             ? JSON.parse(job.payloadJson) as { sourceId?: unknown }
             : null;
         const sourceId = typeof payload?.sourceId === "string"
             ? payload.sourceId
             : null;
+        const safeFailure = isStoryAgent
+            ? projectStoryAgentJobFailure({ status: job.status, errorCode: job.errorCode, error: job.errorMessage })
+            : isOrphanActivity ? projectOrphanWorkflowActivityFailure({ status: job.status }) : null;
 
         return {
             id: job.id,
@@ -593,11 +597,11 @@ export class PrismaCosmosRepositoryHelpers4 extends PrismaCosmosRepositoryHelper
             status: job.status as JobSnapshot["status"],
             attempts: job.attempts,
             maxAttempts: job.maxAttempts,
-            errorCode: job.errorCode,
-            error: job.errorMessage,
+            errorCode: safeFailure ? safeFailure.errorCode : job.errorCode,
+            error: safeFailure ? safeFailure.error : job.errorMessage,
             createdAt: job.createdAt.toISOString(),
             updatedAt: job.updatedAt.toISOString(),
-            result: job.resultJson
+            result: isStoryAgent || isOrphanActivity ? null : job.resultJson
                 ? JSON.parse(job.resultJson) as unknown
                 : null,
         };

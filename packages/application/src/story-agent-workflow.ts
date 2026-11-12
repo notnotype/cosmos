@@ -2,7 +2,7 @@ import { z } from "zod";
 import { agentInvocationOutputSchema, storyAgentCandidateRecordSchema, type ActionDefinition,
     type StoryAgentCandidate } from "@cosmos/contracts";
 import type { JsonValue, WorkflowDefinition } from "@notnotype/nb-workflow";
-import type { HostActionExecutionContext, HostActionExecutionFence, RegisteredAction } from "./action.js";
+import { ActionExecutionError, type HostActionExecutionContext, type HostActionExecutionFence, type RegisteredAction } from "./action.js";
 import type { StoryAgentCandidateRecord } from "./story-agent-candidates.js";
 import { completeStoryAgentProposal } from "./story-agent.js";
 import { storyAgentWorkflowInputSchema, storyAgentWorkflowManifestHash } from "./story-agent-workflow-control.js";
@@ -23,10 +23,21 @@ export function createStoryAgentSaveAction(store: StoryAgentGeneratedCandidateSt
     };
     return { definition, handler: async (raw: unknown, context: HostActionExecutionContext) => {
         if (context.signal.aborted) throw context.signal.reason ?? new Error("Story generation cancelled");
-        const { snapshot, output } = saveInputSchema.parse(raw);
-        const candidate = completeStoryAgentProposal(snapshot.prepared, output, {
-            id: snapshot.candidateId, createdAt: snapshot.createdAt,
-        });
+        const parsed = saveInputSchema.safeParse(raw);
+        if (!parsed.success) throw new ActionExecutionError("malformed_payload", "Story Agent returned an invalid proposal.", false);
+        const { snapshot, output } = parsed.data;
+        if (context.signal.aborted) throw context.signal.reason ?? new Error("Story generation cancelled");
+        if (output.finishReason === "cancelled") {
+            throw new ActionExecutionError("timeout", "Story Agent invocation budget expired.", false);
+        }
+        let candidate: StoryAgentCandidate;
+        try {
+            candidate = completeStoryAgentProposal(snapshot.prepared, output, {
+                id: snapshot.candidateId, createdAt: snapshot.createdAt,
+            });
+        } catch {
+            throw new ActionExecutionError("malformed_payload", "Story Agent returned an invalid proposal.", false);
+        }
         return store.saveGenerated(candidate, context.fence);
     } };
 }

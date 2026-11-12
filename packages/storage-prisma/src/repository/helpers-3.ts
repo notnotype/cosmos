@@ -2,6 +2,7 @@ import { sourceKindSchema, sourceConfigSchema, sourceMediaPolicySchema, type Fee
 import { BoardBlockNotFoundError, BoardNotFoundError, BoardSectionNotFoundError, type MediaCleanupCandidate, type RepositoryHealth, type WorkflowAttemptSnapshot } from "@cosmos/application";
 import { type Prisma } from "@prisma/client";
 import { appendDomainEvent, parseCursor, parseJson, projectWorkflowAttempts, toBoardBlock } from "./repository-internals.js";
+import { storyAgentPublicFailure } from "./story-agent-public-projection.js";
 import { PrismaCosmosRepositoryHelpers2 } from "./helpers-2.js";
 
 export class PrismaCosmosRepositoryHelpers3 extends PrismaCosmosRepositoryHelpers2 {
@@ -15,15 +16,27 @@ export class PrismaCosmosRepositoryHelpers3 extends PrismaCosmosRepositoryHelper
     async listWorkflowAttempts(jobId: string): Promise<readonly WorkflowAttemptSnapshot[]> {
         const normalizedJobId = jobId.trim();
         if (!normalizedJobId) return [];
-        const events = await this.prisma.domainEvent.findMany({
-            where: {
-                aggregateType: "WorkflowActivityJob",
-                aggregateId: normalizedJobId,
-            },
-            orderBy: { sequence: "asc" },
-            take: 1_000,
+        const [job, events] = await Promise.all([
+            this.prisma.job.findUnique({
+                where: { id: normalizedJobId },
+                select: { status: true, attempts: true, errorCode: true, workflowRun: { select: { definitionKey: true } } },
+            }),
+            this.prisma.domainEvent.findMany({
+                where: { aggregateType: "WorkflowActivityJob", aggregateId: normalizedJobId },
+                orderBy: { sequence: "asc" },
+                take: 1_000,
+            }),
+        ]);
+        if (!job) return [];
+        if (!job.workflowRun) return [];
+        const attempts = projectWorkflowAttempts(normalizedJobId, events);
+        if (job.workflowRun.definitionKey !== "cosmos.story-agent") return attempts;
+        return attempts.map((attempt) => {
+            if (attempt.status === "cancelled") return { ...attempt, error: null };
+            if (!attempt.error) return attempt;
+            const failure = storyAgentPublicFailure(attempt.number === job.attempts ? job.errorCode : null);
+            return { ...attempt, error: { ...attempt.error, code: failure.errorCode, message: failure.message } };
         });
-        return projectWorkflowAttempts(normalizedJobId, events);
     }
 
     async listRetentionCleanupCandidates(input: {

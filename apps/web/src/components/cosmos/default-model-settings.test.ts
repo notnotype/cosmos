@@ -20,8 +20,12 @@ const model: ConfiguredModelSnapshot = {
 
 function client(overrides: Partial<ModelSettingsClient> = {}): ModelSettingsClient {
     return {
-        getSystemConfig: async () => ({ defaultModelId: model.id, defaultModel: model }),
-        updateSystemConfig: async (input) => input,
+        getSystemConfig: async () => ({ defaultModelId: model.id, defaultModel: model, storyAgentTimeoutSeconds: 300 }),
+        updateSystemConfig: async (input) => ({
+            defaultModelId: input.defaultModelId ?? model.id,
+            defaultModel: input.defaultModelId === null ? null : model,
+            storyAgentTimeoutSeconds: input.storyAgentTimeoutSeconds ?? 300,
+        }),
         listModelProviders: async () => ({ items: [provider], nextCursor: null }),
         listConfiguredModels: async () => ({ items: [model], nextCursor: null }),
         ...overrides,
@@ -31,7 +35,7 @@ function client(overrides: Partial<ModelSettingsClient> = {}): ModelSettingsClie
 describe("default model settings data", () => {
     it("loads current details including zero pricing and version metadata", async () => {
         const result = await loadDefaultModelSettings(client());
-        expect(result.config).toEqual({ defaultModelId: model.id, defaultModel: model });
+        expect(result.config).toEqual({ defaultModelId: model.id, defaultModel: model, storyAgentTimeoutSeconds: 300 });
         expect(result.options).toEqual([{ model, provider }]);
     });
 
@@ -48,9 +52,9 @@ describe("default model settings data", () => {
 
     it("preserves missing model IDs so deleted defaults can be explained and cleared", async () => {
         const result = await loadDefaultModelSettings(client({
-            getSystemConfig: async () => ({ defaultModelId: "deleted", defaultModel: null }),
+            getSystemConfig: async () => ({ defaultModelId: "deleted", defaultModel: null, storyAgentTimeoutSeconds: 300 }),
         }));
-        expect(result.config).toEqual({ defaultModelId: "deleted", defaultModel: null });
+        expect(result.config).toEqual({ defaultModelId: "deleted", defaultModel: null, storyAgentTimeoutSeconds: 300 });
     });
 
     it("does not turn a failed provider model load into an empty success", async () => {

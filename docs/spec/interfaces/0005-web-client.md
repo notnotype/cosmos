@@ -9,7 +9,7 @@ Task 35 的前端重做；含 Phase 1 采集链路与 Phase 2 组织/看板浏�
 
 ## 最后更新
 
-2026-11-11（Task 42：默认模型设置、连接职责与费用预估补充）。
+2026-11-12（Task 42：Story Agent 超时表单与安全失败提示）。
 
 ## 组件定位
 
@@ -93,11 +93,19 @@ Asset download 中未被 client 封装的部分不由它承担。
 
 Story 生成面板读取系统默认模型显示预估，但请求不传 modelId，服务端使用执行时解析的默认配置；没有临时模型下拉，改默认需回设置页。预估只按纯文本情景：输入 1000–4000、输出 256–1024 token，并按模型上下文及输出上限收紧；须普通输入/输出两价为有限非负数且上下文至少 2 token；普通缓存价格未知或非法不影响此无缓存预估。启用阶梯时还须合法阈值和完整高档四价，否则显示无法估算。预估明确不使用缓存，各端点按自身输入量选档；阈值低于某端点输入时该端点用高档，不能一概按普通档估算。币种来自模型，不换汇。该区间不是实际分词、费用上限或结算承诺，查询配置失败、未设置默认和未知价格分别降级。
 
+Story 面板分别显示默认模型加载中、读取失败、未设置和已失效；未设置以 defaultModelId 为 null 判断，已失效指有默认 ID 但模型不存在或不匹配。未取得有效模型前禁用生成，提供“前往默认模型设置”链接和“重新读取默认模型”按钮；读取期间禁用重复读取。窗口重新获得焦点时更新配置，旧响应和卸载后的响应不覆盖当前状态。点击生成时先重新读取配置，通过后才读取勾选的来源并发送生成请求；重新读取、恢复焦点和更换配置本身不重放生成。保存模型与选择系统默认模型仍是独立操作，不自动替换失效 ID 或挑选唯一模型。实现锚点：[配置读取](../../../apps/web/src/components/cosmos/story-panel/use-story-agent-config.ts)、[生成面板](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.tsx)，恢复与正常生成的隔离浏览器证据见 [Task 42](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)。
+
 Story 实际费用只显示在持久候选卡片，generation 区域只显示状态；读取 `record.candidate.cost` 的 input/output/total/currency，并在 cacheWrite/cacheRead 存在时显示缓存分项；历史缺项不显示该分项、不补 0，不由浏览器按当前价重算。缺失时不渲染实际费用；0 正常显示，极小正数小于 0.00000001 时显示 `<0.00000001`，其余金额最多 8 位小数并去尾零。费用是按调用 usage 与当时配置价格计算的调用结果，不是服务商账单。刷新或重新打开 Story 后从候选列表恢复；pending/accepted/rejected 候选的既有金额不因决定而重算。实现与测试锚点：[持久候选展示](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.tsx)、[费用组件测试](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.test.ts)、[候选展示测试](../../../apps/web/src/components/cosmos/story-panel/agent-candidates.test.ts)。
 
 Connection 面板只管理外部账号授权、连接状态与登录探测，不再用于选模型；模型目录与默认模型设置独立管理。费用与成功状态的服务端约束见 [Product API](0002-product-api-http.md#task-42-当前合同补充)，预估不作为调用结果。
 
 重建验收：加载详情→改选但未保存→保存成功；清除确认取消/确认；加载与保存失败恢复；失效默认 ID 提示；缺价与零单价预估；连接列表无模型选择。实现/测试锚点：[默认设置面板](../../../apps/web/src/components/cosmos/default-model-panel.tsx)、[选项与错误处理](../../../apps/web/src/components/cosmos/default-model-settings.ts)、[模型详情](../../../apps/web/src/components/cosmos/model-details.tsx)、[费用估算](../../../apps/web/src/components/cosmos/story-panel/story-generation-cost.tsx)、[设置测试](../../../apps/web/src/components/cosmos/default-model-panel.test.ts)。上述是从代码核对的行为，本轮运行证据归 [Task 42 本轮过程](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)。
+
+## Story Agent 超时与错误展示
+
+设置页 `#story-agent-settings` 提供超时秒数输入：初值从系统配置读取，默认 300，接受 30–1800 的整数；空值、越界或小数禁用保存并显示范围错误，辅助技术可通过 `aria-invalid` 和关联说明读取原因。加载失败可重读，保存失败保留输入；保存只提交超时字段，不覆盖默认模型。成功以服务端确认值更新。此设置作用于后续 Story 生成的单次模型调用，重试后的总历时可能更长。
+
+Story 失败使用稳定错误码映射固定中文指导：超时、凭证、限流、预算、配置、依赖及不可用结果七类；未知或缺失码显示通用失败文案，不展示原始服务商/传输错误。超时提示不引用当前配置秒数，以免修改设置后误称旧任务的实际预算。失败提供设置入口及可用时的任务状态重读；重读不自动创建新任务，重新生成由用户显式触发。`cancelled` 以独立状态提示呈现，不渲染失败 alert。实现与测试：[超时设置](../../../apps/web/src/components/cosmos/story-agent-timeout-panel.tsx)、[错误映射](../../../apps/web/src/components/cosmos/story-panel/story-agent-error.ts)、[失败提示测试](../../../apps/web/src/components/cosmos/story-panel/story-agent-failure.test.ts)、[设置浏览器回归](../../../e2e/browser/default-model-settings.spec.ts)。实际运行结果见 [Task 42](../../../.agents/tasks/42-default-model-ui-api/walkthrough.md)。
 
 ## 模型定价编辑当前合同
 

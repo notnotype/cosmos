@@ -1,0 +1,1 @@
+ALTER TABLE "SystemConfig" ADD COLUMN "storyAgentTimeoutSeconds" INTEGER NOT NULL DEFAULT 300;

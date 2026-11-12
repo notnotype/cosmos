@@ -3,6 +3,11 @@ import { configuredModelSnapshotSchema, createConfiguredModelCommandSchema, upda
 import {CosmosTransportError, type HttpCosmosClient} from "@cosmos/transport-http";
 
 import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
+import {StoryAgentTimeoutPanel} from "@/components/cosmos/story-agent-timeout-panel";
+import {
+    STORY_AGENT_TIMEOUT_DEFAULT,
+    type StoryAgentTimeoutClient,
+} from "@/components/cosmos/story-agent-timeout-settings";
 import {ModelProviderPanel} from "@/components/cosmos/model-provider-panel";
 import {ModelDetails} from "@/components/cosmos/model-details";
 import {ProviderModelsSection} from "@/components/cosmos/provider-models-section";
@@ -157,14 +162,47 @@ export function renderModelProviderPanelLab(props: LabProps) {
 const defaultModelLabClient: Pick<HttpCosmosClient,
     "getSystemConfig" | "updateSystemConfig" | "listModelProviders" | "listConfiguredModels"
 > = {
-    getSystemConfig: async () => ({defaultModelId: modelLabModels[0]!.id, defaultModel: modelLabModels[0]!}),
-    updateSystemConfig: async ({defaultModelId}) => ({defaultModelId}),
+    getSystemConfig: async () => ({defaultModelId: modelLabModels[0]!.id, defaultModel: modelLabModels[0]!, storyAgentTimeoutSeconds: 300}),
+    updateSystemConfig: async ({defaultModelId, storyAgentTimeoutSeconds}) => {
+        const nextDefaultModelId = defaultModelId === undefined ? modelLabModels[0]!.id : defaultModelId;
+        return {
+            defaultModelId: nextDefaultModelId,
+            defaultModel: nextDefaultModelId === null ? null : modelLabModels.find((model) => model.id === nextDefaultModelId) ?? null,
+            storyAgentTimeoutSeconds: storyAgentTimeoutSeconds ?? STORY_AGENT_TIMEOUT_DEFAULT,
+        };
+    },
     listModelProviders: async () => ({ items: [modelLabProvider], nextCursor: null }),
     listConfiguredModels: async () => ({ items: modelLabModels.map((model) => configuredModelSnapshotSchema.parse(model)), nextCursor: null }),
 };
 
 export function renderDefaultModelPanelLab() {
     return <DefaultModelPanel client={defaultModelLabClient} />;
+}
+
+type StoryAgentTimeoutLabState = "default" | "read-failure";
+
+export function createStoryAgentTimeoutLabClient(state: StoryAgentTimeoutLabState = "default"): StoryAgentTimeoutClient {
+    let seconds = STORY_AGENT_TIMEOUT_DEFAULT;
+    return {
+        getSystemConfig: async () => {
+            if (state === "read-failure") throw new Error("Story Agent timeout config read failed.");
+            return {storyAgentTimeoutSeconds: seconds};
+        },
+        updateSystemConfig: async ({storyAgentTimeoutSeconds}) => {
+            seconds = storyAgentTimeoutSeconds;
+            return {storyAgentTimeoutSeconds: seconds};
+        },
+    };
+}
+
+function StoryAgentTimeoutPanelLab({state}: {state: StoryAgentTimeoutLabState}) {
+    const [client] = useState(() => createStoryAgentTimeoutLabClient(state));
+    return <StoryAgentTimeoutPanel client={client} />;
+}
+
+export function renderStoryAgentTimeoutPanelLab(props: LabProps) {
+    const state = optionProp(props, "state", "default", ["default", "read-failure"] as const);
+    return <StoryAgentTimeoutPanelLab key={state} state={state} />;
 }
 
 export function renderModelDetailsLab(props: LabProps) {

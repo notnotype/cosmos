@@ -14,7 +14,9 @@ function serviceWith(initialValue: string | null = null) {
     return new SystemConfigService({
         async getDefaultModelId() { return value; },
         async setDefaultModelId(modelId) { value = modelId; },
-        async getSystemConfigWithModel() { return { defaultModelId: value, defaultModel: null }; },
+        async getStoryAgentTimeoutSeconds() { return 300; },
+        async updateConfig(command) { if (command.defaultModelId !== undefined) await this.setDefaultModelId(command.defaultModelId); },
+        async getSystemConfigWithModel() { return { defaultModelId: value, defaultModel: null, storyAgentTimeoutSeconds: 300 }; },
         async getModelSelection(id: string) { return { model: {
             id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
             contextWindow: 128000, maxOutputTokens: 4096, version: 1,
@@ -115,7 +117,9 @@ describe("SystemConfigController", () => {
         const service = new SystemConfigService({
             async getDefaultModelId() { return null; },
             async setDefaultModelId(modelId) { writes.push(modelId); },
-            async getSystemConfigWithModel() { return { defaultModelId: null, defaultModel: null }; },
+            async getStoryAgentTimeoutSeconds() { return 300; },
+            async updateConfig(command) { if (command.defaultModelId !== undefined) await this.setDefaultModelId(command.defaultModelId); },
+            async getSystemConfigWithModel() { return { defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300 }; },
             async getModelSelection(id: string) { return { model: {
                 id, providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
                 contextWindow: 128000, maxOutputTokens: 4096, version: 1,
@@ -145,6 +149,7 @@ describe("SystemConfigController", () => {
             async getDefaultModelId() { throw new Error(secret); },
             async setDefaultModelId() { throw Object.assign(new Error(secret), { code: "storage_down" }); },
             async getConfig(): Promise<never> { throw new Error(secret); },
+            async updateConfig(): Promise<never> { throw new Error(secret); },
             async setDefaultModel(): Promise<never> { throw new Error(secret); },
         };
         const controller = new SystemConfigController(service);

@@ -49,6 +49,12 @@ API、`IngestionService` 和 legacy `IngestionWorker` 只调用 application port
 
 分册封口后只读；对已封口分册的更正登记在独立台账 [`ERRATA.md`](0001-prisma-repository/ERRATA.md)，不改写分册正文。新增勘误追加到该台账末尾。
 
+## Task 42 当前存储补充
+
+- `SystemConfig.storyAgentTimeoutSeconds` 为整数秒，默认 300；配置部分更新在事务中仅修改提供的字段，保存超时不覆盖默认模型。独立 additive migration 为既有 singleton 保留默认模型及时间戳并补默认秒数。应用边界限定 30–1800，新任务把秒数换算为 Invocation 毫秒快照；既有 Run/幂等重放不重读当前值。
+- Story Generation 从本 Workflow 的持久终态 Activity `Job.errorCode` 读取白名单码，未知值回退 `generation_failed`，不猜测原始消息。公开 Job/Attempt 投影按关联 Workflow definition 限定 Story 范围，输出固定安全消息、取消空错误，Story Job result 不公开。Attempt 仅当前尝试使用 Job 当前错误码；无独立持久码的历史尝试使用 `generation_failed`，不从原始 event message 推断。无法识别所属 Workflow 的孤立 Activity 不公开错误/结果；无 Job 的 Attempt 为空。内部持久诊断不改写，其它可识别 Workflow 的读合同保留。
+- 实现与回归：[配置仓储](../../../packages/storage-prisma/src/system-config.ts)、[持久错误读码](../../../packages/storage-prisma/src/story-agent-failure-code.ts)、[安全读投影](../../../packages/storage-prisma/src/repository/story-agent-public-projection.ts)、[Job/Attempt 测试](../../../packages/storage-prisma/src/run-jobs.test.ts)；稳定决定见 [ADR-0033](../../adr/0033-story-agent-timeout-and-error-codes.md)。
+
 ## 非目标/边界
 
 不提供 Kernel WorkflowRun state CAS、Workflow Run/Activity/Completion lease 状态机、durable signals/timers/child workflows、外部 event outbox、跨进程锁或多主机数据库语义；不把 FTS 当作独立编辑 API。Blob 写入和数据库事务没有跨系统回滚；legacy `setCheckpoint` 没有 CAS。真实 RSS/Bilibili/OpenCLI、Docker、Browser/E2E、跨进程长时 recovery 和多数据库后端未由本组件测试证明。

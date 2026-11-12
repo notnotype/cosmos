@@ -111,7 +111,7 @@ function firstSnapshot(providerId: string) {
 describe("system config HTTP contracts", () => {
     it("reads an empty SQLite configuration as two nulls and preserves legacy GET", async () => {
         await withDatabaseApi(async (request) => {
-            await expectSuccess(await request(currentRoute), { defaultModelId: null, defaultModel: null });
+            await expectSuccess(await request(currentRoute), { defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300 });
             await expectSuccess(await request(legacyRoute), { modelId: null });
         });
     });
@@ -120,13 +120,14 @@ describe("system config HTTP contracts", () => {
         await withDatabaseApi(async (request, prisma) => {
             const { provider, first, second } = await seedModels(prisma);
             await expectSuccess(await request(currentRoute, { defaultModelId: first.id }), { defaultModelId: first.id });
+            await expectSuccess(await request(currentRoute, { storyAgentTimeoutSeconds: 900 }), { storyAgentTimeoutSeconds: 900 });
             await expectSuccess(await request(currentRoute), {
-                defaultModelId: first.id, defaultModel: firstSnapshot(provider.id),
+                defaultModelId: first.id, defaultModel: firstSnapshot(provider.id), storyAgentTimeoutSeconds: 900,
             });
             await expectSuccess(await request(legacyRoute), { modelId: first.id });
             await expectSuccess(await request(legacyRoute, { modelId: second.id }), { modelId: second.id });
             await expectSuccess(await request(currentRoute), {
-                defaultModelId: second.id,
+                defaultModelId: second.id, storyAgentTimeoutSeconds: 900,
                 defaultModel: {
                     id: second.id, providerId: provider.id, modelId: "upstream/second", name: "Unknown pricing",
                     contextWindow: 65536, maxOutputTokens: 4096, version: 3,
@@ -135,7 +136,7 @@ describe("system config HTTP contracts", () => {
                 },
             });
             await expectSuccess(await request(`${currentRoute}/?source=test`, { defaultModelId: null }), { defaultModelId: null });
-            await expectSuccess(await request(currentRoute), { defaultModelId: null, defaultModel: null });
+            await expectSuccess(await request(currentRoute), { defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 900 });
             await expectSuccess(await request(legacyRoute), { modelId: null });
             await expectSuccess(await request(legacyRoute, { modelId: first.id }), { modelId: first.id });
             await expectSuccess(await request(legacyRoute, { modelId: null }), { modelId: null });
@@ -149,7 +150,7 @@ describe("system config HTTP contracts", () => {
             const { first } = await seedModels(prisma);
             await expectSuccess(await request(currentRoute, { defaultModelId: first.id }), { defaultModelId: first.id });
             await prisma.configuredModel.delete({ where: { id: first.id } });
-            await expectSuccess(await request(currentRoute), { defaultModelId: first.id, defaultModel: null });
+            await expectSuccess(await request(currentRoute), { defaultModelId: first.id, defaultModel: null, storyAgentTimeoutSeconds: 300 });
             await expectSuccess(await request(legacyRoute), { modelId: first.id });
             for (const id of [first.id, "never-existed"]) {
                 await expectError(await request(currentRoute, { defaultModelId: id }), 404, "not_found");
@@ -169,7 +170,7 @@ describe("system config HTTP contracts", () => {
             await expectError(await request(currentRoute, { defaultModelId: second.id }), 409, "invalid_model_selection");
             await expectError(await request(legacyRoute, { modelId: second.id }), 409, "invalid_model_selection");
             await expectSuccess(await request(currentRoute), {
-                defaultModelId: first.id, defaultModel: firstSnapshot(provider.id),
+                defaultModelId: first.id, defaultModel: firstSnapshot(provider.id), storyAgentTimeoutSeconds: 300,
             });
             await expectSuccess(await request(currentRoute, { defaultModelId: null }), { defaultModelId: null });
         });
@@ -197,7 +198,12 @@ describe("system config HTTP contracts", () => {
         let writes = 0;
         const repository: SystemConfigRepository = {
             async getDefaultModelId() { return null; },
-            async getSystemConfigWithModel() { return { defaultModelId: null, defaultModel: null }; },
+            async getStoryAgentTimeoutSeconds() { return 300; },
+            async updateConfig(command, validate) {
+                if (command.defaultModelId !== undefined && command.defaultModelId !== null) validate(await this.getModelSelection(command.defaultModelId));
+                if (command.defaultModelId !== undefined) await this.setDefaultModelId(command.defaultModelId);
+            },
+            async getSystemConfigWithModel() { return { defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300 }; },
             async getModelSelection(_modelId: string) { return { model: firstSnapshot("missing-provider"), providerState: null }; },
             async setDefaultModelId(_modelId: string | null) { writes += 1; },
             async setDefaultModelWithValidation(modelId, validate) {
@@ -216,9 +222,14 @@ describe("system config HTTP contracts", () => {
         const fail = () => { throw Object.assign(new Error(secret), { code: "PRIVATE_STORAGE_FAILURE" }); };
         const repository: SystemConfigRepository = {
             async getDefaultModelId() { return failure === "read" ? fail() : null; },
+            async getStoryAgentTimeoutSeconds() { return 300; },
+            async updateConfig(command, validate) {
+                if (command.defaultModelId !== undefined && command.defaultModelId !== null) validate(await this.getModelSelection(command.defaultModelId));
+                if (command.defaultModelId !== undefined) await this.setDefaultModelId(command.defaultModelId);
+            },
             async getSystemConfigWithModel() {
                 if (failure === "read") return fail();
-                return { defaultModelId: null, defaultModel: null };
+                return { defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300 };
             },
             async getModelSelection(_modelId: string) {
                 if (failure === "selection") return fail();

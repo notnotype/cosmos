@@ -1,9 +1,9 @@
 ---
 parent: docs/requirements/0001-original-requirements.md
-range: 2026-11 Task 42 收尾请求
+range: 2026-11 Task 42 收尾与 Story Agent 超时/错误展示请求
 sealed_at: —
-tags: [original-requirements, task42, story-cost, e2e]
-tokens_est: 220
+tags: [original-requirements, task42, story-cost, e2e, agent-timeout, error-display]
+tokens_est: 280
 ---
 
 # 原始需求活跃分册：2026-11
@@ -22,3 +22,7 @@ tokens_est: 220
 > 3.后端修改新增模型API参数，前后端保证功能正常。
 
 截图示例附注（仅保留示例，不是系统默认值）：普通输入¥0.37/M、输出¥1.85/M、写缓存¥0.463/M、读缓存¥0.018/M；>272K依次¥0.74/¥2.775/¥0.925/¥0.037。
+
+## 2026-11-12：Story Agent 超时与错误展示
+
+> 接下来请你和你的子Agent先封装常见错误，然后在前端页面上正确的展示错误信息，同时增加一个新功能：用户可以在设置界面配置超时时间，默认设置成300秒。

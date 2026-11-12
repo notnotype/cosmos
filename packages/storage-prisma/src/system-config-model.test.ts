@@ -80,9 +80,12 @@ describe("SystemConfig model projection", () => {
                 highCacheWritePricePerMillion: 0, highCacheReadPricePerMillion: 0.5,
             } });
             const repository = new PrismaSystemConfigRepository(prisma);
+            expect(await repository.getSystemConfigWithModel()).toEqual({
+                defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300,
+            });
             await repository.setDefaultModelId("model-a");
             const config = await repository.getSystemConfigWithModel();
-            expect(config).toEqual({ defaultModelId: "model-a", defaultModel: expect.objectContaining({
+            expect(config).toEqual({ defaultModelId: "model-a", storyAgentTimeoutSeconds: 300, defaultModel: expect.objectContaining({
                 id: "model-a", providerId: "provider-a", modelId: "gpt-4", name: "GPT-4",
                 contextWindow: 128000, maxOutputTokens: 4096,
                 inputPricePerMillion: 30.25, outputPricePerMillion: 60,
@@ -115,10 +118,14 @@ describe("SystemConfig model projection", () => {
             await prisma.modelProvider.update({ where: { id: "provider-a" }, data: { state: "deleting" } });
             expect(await repository.getModelSelection("model-a")).toMatchObject({ providerState: "deleting" });
             await prisma.configuredModel.delete({ where: { id: "model-a" } });
-            expect(await repository.getSystemConfigWithModel()).toEqual({ defaultModelId: "model-a", defaultModel: null });
+            expect(await repository.getSystemConfigWithModel()).toEqual({
+                defaultModelId: "model-a", defaultModel: null, storyAgentTimeoutSeconds: 300,
+            });
             expect(await repository.getModelSelection("model-a")).toBeNull();
             await repository.setDefaultModelId(null);
-            expect(await repository.getSystemConfigWithModel()).toEqual({ defaultModelId: null, defaultModel: null });
+            expect(await repository.getSystemConfigWithModel()).toEqual({
+                defaultModelId: null, defaultModel: null, storyAgentTimeoutSeconds: 300,
+            });
         });
     });
 });

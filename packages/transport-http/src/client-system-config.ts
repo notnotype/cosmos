@@ -19,11 +19,11 @@ export class SystemConfigClient extends ConfiguredModelsClient {
         return this.request("/api/v1/system/config", { schema: systemConfigDtoSchema });
     }
 
-    async updateSystemConfig(input: UpdateSystemConfigCommand): Promise<{ defaultModelId: string | null }> {
+    async updateSystemConfig(input: UpdateSystemConfigCommand): Promise<UpdateSystemConfigCommand> {
         return this.request("/api/v1/system/config", {
             method: "PUT",
             body: updateSystemConfigCommandSchema.parse(input),
-            schema: z.object({ defaultModelId: z.string().nullable() }).strict(),
+            schema: updateSystemConfigCommandSchema,
         });
     }
 

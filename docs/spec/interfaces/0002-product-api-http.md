@@ -8,7 +8,7 @@
 
 ## 最后更新
 
-2026-11-11（Task 42：SystemConfig 与 Story 当前合同补充；封口分册按本页补充更正）。
+2026-11-12（Task 42：Story Agent 超时设置与持久失败码投影；封口分册按本页补充更正）。
 
 ## 组件定位
 
@@ -59,14 +59,20 @@ CapabilitiesResponse 和 AttemptSnapshot/AttemptPage。本文件是这些 HTTP �
 
 | 方法与路径 | 当前输入与成功响应 |
 | --- | --- |
-| `GET /api/v1/system/config` | 200 完整 `{defaultModelId, defaultModel}`；未设置为双 null；模型已删除时保留原默认 ID、`defaultModel:null`。模型快照不含凭证，未知价格字段省略。 |
-| `PUT /api/v1/system/config` | strict `{defaultModelId:string\|null}`；非空 ID 长 1–200，不接受前后空白及合同禁止的控制字符；null 清除。200 仅 `{defaultModelId}`，不返回完整模型。 |
+| `GET /api/v1/system/config` | 200 完整 `{defaultModelId, defaultModel, storyAgentTimeoutSeconds}`；超时默认 300、整数范围 30–1800 秒；模型未设置为双 null；模型已删除时保留原默认 ID、`defaultModel:null`。模型快照不含凭证，未知价格字段省略。 |
+| `PUT /api/v1/system/config` | strict `{defaultModelId?:string\|null, storyAgentTimeoutSeconds?:number}`，至少一个字段。非空 ID 长 1–200，不接受前后空白及控制字符；null 清除模型。超时为 30–1800 整数秒。省略字段保持不变，组合更新原子提交；200 仅返回本次保存字段，不返回完整模型。 |
 | `GET /api/v1/config/default-model` | 旧端点保留，200 `{modelId:string\|null}`。 |
 | `PUT /api/v1/config/default-model` | 旧输入 `{modelId:string\|null}`、200 `{modelId}`；与新端点共用模型存在性与 Provider active 校验，旧入口不升级为新 strict DTO。 |
 | `POST /api/v1/stories/:storyId/agent-candidates` | strict `{task,sources?,modelId?}` 与必需 Idempotency-Key；不再接收 connectionId，省略 modelId 使用系统默认。202 `StoryAgentGeneration`。 |
 | `GET /api/v1/stories/:storyId/agent-generations/:runId` | `runId/storyId/task/status/candidateId/errorCode`，无 connectionId；状态与候选费用补充见 [费用合同](../../../docs/api/0008-story-content-representation.md#task-42-费用合同已冻结目标实施与验收进行中)。 |
 
 配置四条路由均 no-store。新输入非法为 400 `invalid_input`，选中模型不存在为 404 `not_found`，Provider 缺失或非 active 为 409 `invalid_model_selection`，未知依赖异常为 503 `dependency_unavailable`；错误只带安全 code/message，不回显底层异常。非空模型选择、Provider 检查与 singleton upsert 在同一写事务内，删除先完成则后续设置拒绝；设置先完成后仍允许删除，读取保留悬空 ID 并返回 null 模型，不承诺永不失效。清除用 upsert 写 null，不触发生成或外呼。
+
+Story 新生成在创建任务前读取系统超时秒数并转换为 `prepared.input.budget.maxDurationMs`，冻结到新 Workflow 输入快照；配置变化不改旧任务/幂等重放。该时限仅作用于每次模型调用尝试，自动重试与退避会增加任务总耗时。新生成检查显式模型或系统默认模型存在且 Provider 为 active；未设置、模型已失效或 Provider 不可用时返回 409 `conflict`、`retryable:false`，消息引导设置可用默认模型，不创建 Run。既有幂等请求先返回原结果，不因之后默认配置失效而重复创建或拒绝读取。校验不读取凭证、不调用 Provider，也不锁定省略 modelId 的请求；Worker 仍在执行时解析默认模型，因此不承诺校验与执行间配置不会改变。其它输入和来源的 `invalid_state` 保持 400。实现及回归见 [生成控制](../../../packages/application/src/story-agent-workflow-control.ts)、[API 行为测试](../../../apps/api/src/app.controller.structured-content.test.ts)与 [Story 浏览器流程](../../../e2e/browser/story-agent-generation.spec.ts)。
+
+Story 失败查询从相同 Story Workflow Run 下终态失败的 Activity Job 读取白名单 `errorCode`；只选码，不读/透传 `lastError`、Provider body 或内部异常。七类公开码与 `generation_failed` 见[公共合同](../contracts/0001-public-contracts.md#task-42-当前合同补充)。缺失/未知码降级，取消独立为 `cancelled`。已持久的 invocation 输出若 `finishReason=cancelled` 且保存 Activity 未收到取消信号，保存失败归为不可重试的 `timeout`；非法 proposal 归为不可重试的 `malformed_payload`。重试同一已持久输出不能重新发起模型调用。窄读口见[持久读码器](../../../packages/storage-prisma/src/story-agent-failure-code.ts)，该接线不修改外部 Workflow completion 协议。
+
+同一 Story Workflow 的通用 Job/Attempt 查询同样不公开自由文本：Job `result` 为空，Attempt 只使用其所属 Job 当前错误码，历史尝试无法从持久码区分时降级为 `generation_failed`，不从事件中的原始 message 推断。孤立 Activity 无法证明其 Workflow definition 时按安全读处理，Job 错误与结果固定泛化，Attempt 列表为空、单项为 404；无 Job 事件不作为 Attempt 暴露。其它 Workflow 的有父读模型保持原诊断投影。
 
 当前 Story 费用投影：Candidate 与 Generation 的 `cost?` 复用 invocation 费用，完成提案时原值进入既有 `candidateJson`；候选读取和重启后读取不重新计价。Generation 只在 completed，候选 ID 等于 `story-candidate-${runId}`，且候选 Story ID、Story Revision ID、proposal.task 都匹配冻结输入时读取该费用。queued/running/failed/cancelled、无候选、身份不匹配或旧候选缺费用均省略字段；0 保留。候选列表的已持久化费用独立于 generation 状态，失败后孤儿候选不能归为成功 Run 费用。同一有效 fence、同一候选可幂等回放，费用变更的回放拒绝；这不承诺提交后异常的自动重试最终成功。Story 费用持久化不新增账单表、不回填旧数据；模型定价配置的新增列迁移另见下节。生产锚点：[候选完成](../../../packages/application/src/story-agent.ts)、[生成查询](../../../packages/application/src/story-agent-workflow-control.ts)、[候选持久化](../../../packages/storage-prisma/src/repository/story-agent-candidates.ts)；重建须覆盖身份不匹配、缺失/零、失败/取消、重启读回及幂等回放。
 
@@ -85,6 +91,10 @@ CapabilitiesResponse 和 AttemptSnapshot/AttemptPage。本文件是这些 HTTP �
 模型写请求沿用 Provider 配置的本机信任门、JSON 大小限制、Idempotency-Key 和 no-store，不因保存价格而调用 Provider。数据库新增 [独立 additive SQL](../../../packages/storage-prisma/prisma/migrations/20261111080000_task_42_cache_tiered_pricing/migration.sql) 的九列，旧两价与历史候选 cost JSON 原值保留；旧模型缓存价 NULL、币种 USD、阶梯关闭，阈值/高档 null。应用服务、Repository、默认模型和 Worker resolver 均传递配置。隔离迁移与 CRUD 的证据不代表用户数据库已迁移或已部署。
 
 重建至少验证 POST/PATCH/list/get 和 SystemConfig 投影一致、零价与未知、metadata-only 保留、部分价格组拒绝及版本冲突；实现锚点：[模型 Controller](../../../apps/api/src/configured-model.controller.ts)、[模型仓储](../../../packages/storage-prisma/src/configured-model-repository.ts)、[默认配置仓储](../../../packages/storage-prisma/src/system-config.ts)、[Worker 模型解析](../../../packages/storage-prisma/src/agent-model-resolver.ts)。调用缓存/阈值边界、完整浏览器和全仓验收需分别记录，不能用局部合同检查代替。
+
+### Story Job 与 Attempt 安全读补充
+
+本节优先于封口分册中的通用错误原文规则。`GET /runs/:runId/jobs`、`GET /jobs/:jobId`、`GET /jobs/:jobId/attempts` 与 `GET /attempts/:attemptId` 对 `cosmos.story-agent` 只输出失败码白名单与固定安全消息，未知/缺失码为 `generation_failed`，取消无错误；Story Job `result` 始终为空，内部持久诊断不经这些路径公开。无法证明所属 Workflow 的孤立 Activity 不返回原始错误/结果，无父 Job 的 Attempt 列表为空、单项为 404。其它已识别的 Workflow 和 legacy Job 保持原诊断合同。
 
 ## 非目标/边界
 

@@ -39,6 +39,10 @@ Source 按 `sourceDefinitionRef + operationId + config` 创建为停用状态，
 
 ## 当前下一步
 
+**Task 42（2026-11-12）**：Story Agent 超时默认 300 秒（范围 30–1800），新任务冻结配置；常见错误按白名单安全展示，取消独立处理，Job/Attempt 脱敏。全仓 1492 项测试、类型检查、构建及 5 个隔离浏览器用例通过；维护者确认真实 Agent 建议生成一次成功。文档门禁仍有 Task40 既有债务，代码尺寸问题为 2 个未改文件；用户库迁移和部署未进行。详情见 [Task 42](.agents/tasks/42-default-model-ui-api/README.md)。
+
+**默认模型失效生成修复（2026-11-11）**：Story 面板已区分未设置、失效和读取失败，增加设置入口与重新读取，并在生成前重读配置；后端拒绝新请求中不可用的显式/默认模型，不创建注定失败的任务。保留删除后默认 ID 和执行时解析的既有约定，不自动选择或修改用户模型配置。聚焦测试、全仓 1455 条测试、全仓类型检查与 API/Worker/Web 构建已通过；默认设置、阈值计费与最终故障恢复主流程分别通过隔离浏览器验收，独立审查无阻断。文档门禁仍有 22 条 Task 40 历史断链；真实 Provider 调用由维护者随后手动试用，精确证据仅记于 [Task 42](.agents/tasks/42-default-model-ui-api/walkthrough.md)。
+
 **Task [42](.agents/tasks/42-default-model-ui-api/walkthrough.md) 本轮实现与隔离验收完成（2026-11-11）**：基于 `ad4c3c4`，分支 `feat/t42-cache-tiered-pricing` 已实现缓存四价、每模型币种及两档整次计费，[当前 API](docs/spec/interfaces/0002-product-api-http.md)、[客户端](docs/spec/interfaces/0004-http-client.md)、[Web](docs/spec/interfaces/0005-web-client.md)和 [ADR-0032](docs/adr/0032-model-cache-tiered-pricing.md)已同步。最终全仓 230 files / 1446 tests 全部通过（284.28s）；40 项 smoke、浏览器 6/6（56.7s）、Lab 12/12（17.8s）通过，覆盖四价创建/编辑/回填、真实 409 草稿恢复、272000/272001 整次选档和历史费用不随改价重算。全仓类型检查、Web lint、API/Worker 与依赖包构建、隔离栈 Web 构建及代码差异检查通过。独立审查发现的两项需求问题与冲突测试缺口均已修复并复核。文档检查仍有 22 条 Task40 旧断链，本轮未新增；全局尺寸既有债务及最终门禁结果单列于 Task，不宣称所有仓库门禁通过。维护者已另行授权本轮本地提交及合并到 master；未 push/deploy、未迁移用户数据库、未修改 DSH plugin；本轮真实 Provider 外呼与远端 CI 未验。早期失败、执行器诊断和精确命令保留在本轮 Task 过程记录。
 
 **Task [40](.agents/tasks/40-story-content-representation/README.md) 仍在验收中**：旧库升级、Node recovery、原 JS 预算及显式降级/候选决定已有隔离证据。维护者确认一次真实 Provider 合成正文摘要→Web 人工接受/持久化通过，内容和证据正确；非 Agent 独立复验，此前格式失败保留。Host 在入口进程，不替代独立 Worker 验收。真实来源复验、关系/质量任务及通用分类/旧 spec 仍待收口，新外呼须逐次授权，Task40 不关闭；详见 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。

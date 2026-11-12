@@ -11,7 +11,7 @@ import {
     PrismaContentRebuildRepository,
     PrismaContentSelectionRepository,
     PrismaStoryAgentCandidateRepository,
-    PrismaWorkflowHostStore,
+    PrismaStoryAgentFailureCodeReader,    PrismaWorkflowHostStore,
     PrismaProviderCredentialRepository,
     PrismaModelProviderQueryRepository,
     PrismaModelProviderRemovalRepository,
@@ -51,10 +51,12 @@ export const cosmosIngestControl = new IngestWorkflowControlService({
 export const cosmosContentRebuild = new ContentRebuild(new PrismaContentRebuildRepository(cosmosRepository.prisma, cosmosRepository.blobs));
 export const cosmosContentQuery = new ContentQuery(new PrismaContentQueryRepository(cosmosRepository.prisma));
 export const cosmosContentCommands = new ContentCommands(new PrismaContentSelectionRepository(cosmosRepository.prisma));
-export const cosmosSystemConfig = new SystemConfigService(new PrismaSystemConfigRepository(cosmosRepository.prisma));
+const cosmosSystemConfigRepository = new PrismaSystemConfigRepository(cosmosRepository.prisma);
+export const cosmosSystemConfig = new SystemConfigService(cosmosSystemConfigRepository);
 export const cosmosStoryAgentCandidates = new StoryAgentCandidates(new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma));
 export const cosmosStoryAgentControl = new StoryAgentWorkflowControl({
-    store: cosmosWorkflowStore, content: cosmosContentQuery,
+    store: cosmosWorkflowStore, content: cosmosContentQuery, systemConfig: cosmosSystemConfigRepository,
+    failureCodes: new PrismaStoryAgentFailureCodeReader(cosmosRepository.prisma),
     candidates: new PrismaStoryAgentCandidateRepository(cosmosRepository.prisma),
     stories: { readStory: async (storyId) => {
         const detail = await cosmosRepository.story(storyId);

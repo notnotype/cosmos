@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { type ConfiguredModelSnapshot, type StoryAgentCandidateRecordContract, type StoryAgentTask, type StoryDetail } from "@cosmos/contracts";
+import { type StoryAgentCandidateRecordContract, type StoryAgentTask, type StoryDetail } from "@cosmos/contracts";
 
 import { client, readError } from "@/app/home/page-runtime";
 import { Button } from "@/components/ui/button";
 import { messages } from "@/copy/messages";
 import { selectReadingSources } from "../story-source-reader";
+import { useStoryAgentConfig } from "./use-story-agent-config";
+import { StoryAgentFailure, StoryAgentGenerationNotice } from "./story-agent-failure";
 import { useStoryAgentGeneration, type GenerationClient } from "./use-story-agent-generation";
 import { StoryGenerationActualCost, StoryGenerationEstimate } from "./story-generation-cost";
 
@@ -52,18 +54,7 @@ function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: Pa
     const [attempt, setAttempt] = useState(0);
     const [task, setTask] = useState<StoryAgentTask>("story.summarize");
     const [includeSources, setIncludeSources] = useState(false);
-    const [model, setModel] = useState<ConfiguredModelSnapshot | null>(null);
-    const [modelLoading, setModelLoading] = useState(true);
-    const [modelFailed, setModelFailed] = useState(false);
-    useEffect(() => {
-        let active = true;
-        void api.getSystemConfig().then((config) => {
-            if (active) { setModel(config.defaultModel); setModelFailed(false); }
-        }).catch(() => {
-            if (active) { setModel(null); setModelFailed(true); }
-        }).finally(() => { if (active) setModelLoading(false); });
-        return () => { active = false; };
-    }, [api]);
+    const modelConfig = useStoryAgentConfig(api);
     const storyId = story.story.id;
     const refresh = useCallback(() => setAttempt((value) => value + 1), []);
     const generation = useStoryAgentGeneration(storyId, api, refresh);
@@ -81,6 +72,8 @@ function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: Pa
         setBusy(true);
         setError(null);
         try {
+            const latestConfig = await modelConfig.refresh();
+            if (!latestConfig?.defaultModelId || latestConfig.defaultModel?.id !== latestConfig.defaultModelId) return;
             const sources = [];
             if (includeSources) {
                 const views = await Promise.all(selectReadingSources(story).map((entry) => api.revisionContent(entry.revisions[0]!.id)));
@@ -120,11 +113,21 @@ function CandidatesForStory({ story, unsavedEdit, onAccepted, api = client }: Pa
                 {Object.entries(taskLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select></label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeSources} disabled={generating} onChange={(event) => setIncludeSources(event.target.checked)} />{copy.sources}</label>
-            <Button size="sm" disabled={generating || !generation.ready || (task !== "story.summarize" && !includeSources)} onClick={() => void propose()}>{copy.generate}</Button>
+            <Button size="sm" disabled={generating || modelConfig.status !== "ready" || !generation.ready || (task !== "story.summarize" && !includeSources)} onClick={() => void propose()}>{copy.generate}</Button>
         </div>
-        <StoryGenerationEstimate model={model} loading={modelLoading} failed={modelFailed} />
-        {generation.generation && <p role="status" className="text-sm [overflow-wrap:anywhere]">{copy.generationStatuses[generation.generation.status]}</p>}
-        {generation.error && <div role="alert" className="text-sm"><p>{generation.error}</p>{generation.recoverable && <Button variant="outline" size="sm" disabled={generation.sending} onClick={generation.retry}>{copy.recover}</Button>}</div>}
+        <StoryGenerationEstimate model={modelConfig.config?.defaultModel ?? null} defaultModelId={modelConfig.config?.defaultModelId ?? null} loading={modelConfig.loading} failed={modelConfig.failed} onRefresh={() => { void modelConfig.refresh(); }} />
+        {generation.generation && <StoryAgentGenerationNotice
+            generation={generation.generation}
+            canRecover={generation.recoverable}
+            recovering={generation.sending}
+            onRecover={generation.retry}
+        />}
+        {generation.error && <StoryAgentFailure
+            errorCode={null}
+            canRecover={generation.recoverable}
+            recovering={generation.sending}
+            onRecover={generation.retry}
+        />}
         {!includeSources && <p className="text-xs text-muted-foreground">{copy.scope}</p>}
         {unsavedEdit && <p role="status" className="text-sm text-muted-foreground">{copy.unsaved}</p>}
         {busy && <p role="status" className="text-sm">{copy.busy}</p>}

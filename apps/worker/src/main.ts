@@ -23,7 +23,7 @@ import {
 import { IngestWorkflowControlService } from "@cosmos/application/workflow-control";
 import { createLogger } from "@cosmos/logging";
 import { createBuiltInConnectorRegistry } from "@cosmos/plugin-collectors";
-import { PrismaAgentModelResolver, PrismaConnectorStateStore, PrismaCosmosRepository, PrismaStoryAgentCandidateRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
+import { PrismaAgentModelResolver, PrismaConnectorStateStore, PrismaCosmosRepository, PrismaStoryAgentCandidateRepository, PrismaStoryAgentFailureCodeReader, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
 import { createWorkerAdminServer, type ComponentHealth, type WorkerAdminServer } from "@cosmos/worker-admin";
 import type { ConnectorStateHandle, ConnectorStateStorePort, LoggerPort } from "@cosmos/application";
 import type { CatalogPort } from "@cosmos/application/catalog";

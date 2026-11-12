@@ -3,6 +3,7 @@
 import { client } from "@/app/home/page-runtime";
 
 import { DefaultModelPanel } from "@/components/cosmos/default-model-panel";
+import { StoryAgentTimeoutPanel } from "@/components/cosmos/story-agent-timeout-panel";
 import { StoragePanel } from "@/components/cosmos/storage-panel";
 import { messages } from "@/copy/messages";
 
@@ -29,6 +30,11 @@ export default function SettingsPage() {
             <section aria-label={messages.pages.settings.defaultModel.section} className="flex flex-col gap-3">
                 <h2 className="text-[15px] font-medium">{messages.pages.settings.defaultModel.section}</h2>
                 <DefaultModelPanel client={client} />
+            </section>
+
+            <section id="story-agent-settings" aria-label={messages.pages.settings.storyAgentTimeout.section} className="flex flex-col gap-3">
+                <h2 className="text-[15px] font-medium">{messages.pages.settings.storyAgentTimeout.section}</h2>
+                <StoryAgentTimeoutPanel client={client} />
             </section>
         </div>
     );

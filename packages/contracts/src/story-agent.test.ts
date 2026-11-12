@@ -9,6 +9,17 @@ describe("Story Agent generation contracts", () => {
             .toEqual({ task: "story.summarize", modelId: "configured-model-1" });
     });
 
+    it("accepts only the approved safe failure codes", () => {
+        const base = { runId: "run-1", storyId: "story-1", task: "story.summarize" as const,
+            status: "failed" as const, candidateId: null };
+        for (const errorCode of ["timeout", "authentication_required", "rate_limited", "budget_exhausted",
+            "invalid_configuration", "dependency_unavailable", "malformed_payload", "generation_failed"] as const) {
+            expect(storyAgentGenerationSchema.parse({ ...base, errorCode }).errorCode).toBe(errorCode);
+        }
+        for (const errorCode of ["provider message", "secret", "unknown_code"]) {
+            expect(storyAgentGenerationSchema.safeParse({ ...base, errorCode }).success).toBe(false);
+        }
+    });
     it("accepts optional invocation cost while preserving zero and legacy responses", () => {
         const response = { runId: "run-1", storyId: "story-1", task: "story.summarize" as const,
             status: "completed" as const, candidateId: "candidate-1", errorCode: null };

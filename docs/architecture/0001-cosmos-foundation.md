@@ -40,7 +40,7 @@
 
 ## 已接受、部分实现：Provider/model 产品配置
 
-用户已接受 [Provider/model 配置](../proposals/connection-credential-entry-v1.md)。目标所有权为数据库 Provider/model 配置、Provider 独占 SecretStore 引用、模型型 Connection 单选已有模型；可信 Worker 按次解析并执行发现/生成，保存不外呼。详细接口与恢复边界见 [Draft 合同](../api/0009-provider-model-configuration.md)。已落地的部分：Provider/模型创建与编辑、Provider 删除（含引用检查与本地凭证清理）、凭证写入与清理补偿、同步模型发现、模型型 Connection 选择、`agent.invoke@2` 执行链路。编辑 Provider 前的受影响连接查询不新增服务端端点，由界面用连接列表与模型列表自行聚合。这已替代原单 Worker 部署 profile 与 Connection.secretRef 模型凭证路径：Worker 不再读取 `COSMOS_AGENT_*`、也不再注册 `agent.invoke@1`，模型与凭证一律按调用时的 Connection 解析。普通非模型连接和 SecretStore 明文文件合同保留。
+用户已接受 [Provider/model 配置](../proposals/connection-credential-entry-v1.md)。当前实现包括 Provider/模型管理、凭证写入与清理补偿、同步模型发现及 `agent.invoke@2`；Worker 按调用时的默认或显式模型解析 Provider 与凭证，Connection 只承担外部账号授权。详细合同与未实现路径见 [API 草案](../api/0009-provider-model-configuration.md)。
 
 ## 19. 当前决定
 
@@ -138,6 +138,7 @@
 85. `CollectionPlan` v1 落地为真实对象：用户可见的独立采集计划持有连接引用、触发器、媒体预算、计划级 checkpoint 与状态命名空间，v1 与采集目标一对一；目标继续承载内容身份（Entry/Observation 归属不变）。重叠策略 v1 只实现与现状等价的一种，本节第 73 条预留的 `queue`/`replace`/`allow`/`merge` 随后续切片；迁移按 expand／backfill／read switch／contract 四步，contract 单独部署与授权（Proposal [`collection-plan-v1`](../proposals/collection-plan-v1.md)、ADR [`0023`](../adr/0023-collection-plan-v1.md)）。
 86. AUT-004 的剩余触发形态 v1 落地为 `webhook` 一种：Phase 2 只交付 Webhook——入口以 `TriggerBinding` 为定位对象（`planId` 优先、否则按来源）、持有不可猜的不透明标识、凭证走 SecretStore 并沿用明文-at-rest 的既有边界、请求必须有幂等与限流与体积上限与脱敏、触发的原因/输入/时间/定义版本四项证据落 Run 既有位置；`event`／`condition`／`dependency` 记 Phase 3，`poll` 不单列类型（轮询由 `schedule` + 持久 checkpoint 表达）。§4.1 预留的七种 Trigger 类型不因此改写（Proposal [`trigger-forms-v1`](../proposals/trigger-forms-v1.md)、ADR [`0024`](../adr/0024-trigger-forms-v1.md)）。
 87. 一个采集计划可以持有多个 `TriggerBinding`：唯一约束为「每来源／计划、每种类型一行」（`(sourceId, kind)`／`(planId, kind)`），schedule 行与 webhook 行可共存，各自持有 `enabled` 与 `revision`；调度只读 schedule 行，计划的调度写入口只动 schedule 行；计划读投影不暴露触发器 id（ADR [`0025`](../adr/0025-multi-trigger-per-plan.md)，取代 ADR-0018 决定 1 的单绑定口径）。
+88. Story Agent 超时由系统级 `SystemConfig.storyAgentTimeoutSeconds` 配置（默认 300 秒，范围 30–1800），新 Invocation 将单次尝试预算冻结到 Workflow 输入；重试总历时可更长。Generation 与同一 Story Workflow 的公开 Job/Attempt 查询只返回固定错误码和安全消息，不暴露 Provider/Workflow 原文或 Job 原始 result（Proposal [`story-agent-timeout-and-error-display-v1`](../proposals/story-agent-timeout-and-error-display-v1.md)、ADR [`0033`](../adr/0033-story-agent-timeout-and-error-codes.md)）。
 
 ## 21. 架构不变量
 后续实现和重构必须持续验证：

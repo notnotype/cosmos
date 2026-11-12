@@ -108,7 +108,7 @@ export const pages = {
     },
     settings: {
         title: "设置",
-        description: "默认模型、存储与数据管理",
+        description: "默认模型、Story Agent 超时、存储与数据管理",
         storage: "存储",
         defaultModel: {
             section: "默认模型",
@@ -155,6 +155,18 @@ export const pages = {
             clearDescription: "清除后，未指定模型的 Story 生成将无法运行。你可以随时重新设置。",
             clearConfirm: "确认清除",
             cancel: "取消",
+        },
+        storyAgentTimeout: {
+            section: "Story Agent",
+            hint: "生成任务最长等待时间。超时后可调整时长并重试。",
+            label: "超时时间（秒）",
+            saved: "已保存",
+            saving: "保存中…",
+            save: "保存",
+            loadFailed: "读取 Story Agent 设置失败，请重试。",
+            saveFailed: "保存 Story Agent 设置失败，请稍后重试。",
+            range: "可设置 30 到 1800 秒",
+            invalid: "请输入 30 到 1800 秒之间的整数。",
         },
     },
     models: {

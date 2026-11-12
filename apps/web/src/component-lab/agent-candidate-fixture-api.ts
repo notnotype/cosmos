@@ -43,6 +43,7 @@ export function createAgentCandidateFixtureApi(story: StoryDetail,
                     highCacheWritePricePerMillion: null, highCacheReadPricePerMillion: null,
                     createdAt: "2026-11-10T06:00:00.000Z", updatedAt: "2026-11-10T06:00:00.000Z",
                 },
+                storyAgentTimeoutSeconds: 300,
             };
         },
         async storyAgentCandidates() { return readStore().records; },

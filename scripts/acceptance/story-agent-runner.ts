@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ContentQuery, StoryAgentWorkflowControl, createStoryAgentSaveAction, createStoryAgentWorkflowDefinition } from "@cosmos/application";
-import { PrismaStoryAgentCandidateRepository } from "@cosmos/storage-prisma";
+import { PrismaStoryAgentCandidateRepository, PrismaSystemConfigRepository } from "@cosmos/storage-prisma";
 import { createWorkerAgentInvocationV2Action } from "../../apps/worker/src/agent-action-v2.js";
 import { createWorkflowHost } from "../../apps/worker/src/workflow-host.js";
 import { assertUsableCredential } from "../../.agents/tasks/39-pi-ai-adapter/connection-smoke-harness.js";
@@ -43,7 +43,7 @@ export async function runStoryAcceptance(options: { credential: string; transpor
         const host = createWorkflowHost({ prisma: repository.prisma, blobs: repository.blobs, owner: "task40-acceptance",
             leaseMs: 120_000, definitions: [createStoryAgentWorkflowDefinition()],
             actions: [createWorkerAgentInvocationV2Action({ ...configured, secrets: repository.secrets }), createStoryAgentSaveAction(candidates)] });
-        const control = new StoryAgentWorkflowControl({ store: host.store,
+        const control = new StoryAgentWorkflowControl({ store: host.store, systemConfig: new PrismaSystemConfigRepository(repository.prisma),
             stories: { readStory: async () => storySnapshot }, content: new ContentQuery({ readContentSource: async () => { throw new Error("Unexpected source read"); } }) });
         const intent = { storyId: storySnapshot.storyId, modelId: configured.modelId, task: "story.summarize" as const, idempotencyKey: "task40-one-request" };
         const queued = await control.enqueue(intent);

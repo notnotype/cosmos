@@ -19,6 +19,7 @@ const FROZEN_VALUE_EXPORTS = [
     "PrismaProviderCredentialRepository",
     "PrismaProviderDiscoveryReader",
     "PrismaStoryAgentCandidateRepository",
+    "PrismaStoryAgentFailureCodeReader",
     "PrismaSystemConfigRepository",
     "PrismaWorkflowBackend",
     "PrismaWorkflowEventSink",

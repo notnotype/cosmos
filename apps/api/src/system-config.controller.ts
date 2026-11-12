@@ -3,7 +3,7 @@ import { Body, Controller, Get, Header, HttpException, Inject, Put } from "@nest
 import type { SystemConfigService } from "@cosmos/application";
 import { updateSystemConfigCommandSchema } from "@cosmos/contracts";
 
-type Service = Pick<SystemConfigService, "getDefaultModelId" | "setDefaultModelId" | "getConfig" | "setDefaultModel">;
+type Service = Pick<SystemConfigService, "getDefaultModelId" | "setDefaultModelId" | "getConfig" | "updateConfig">;
 
 function configFailure(error: unknown): never {
     let status = 503;
@@ -74,8 +74,8 @@ export class SystemConfigController {
             throw new HttpException({ code: "invalid_input", message: "Invalid system configuration." }, 400);
         }
         try {
-            await this.config.setDefaultModel(parsed.data.defaultModelId);
-            return { defaultModelId: parsed.data.defaultModelId };
+            await this.config.updateConfig(parsed.data);
+            return parsed.data;
         } catch (error) {
             return configFailure(error);
         }

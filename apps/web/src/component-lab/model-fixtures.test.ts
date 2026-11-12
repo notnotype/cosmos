@@ -3,7 +3,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 import {DefaultModelPanel} from "@/components/cosmos/default-model-panel";
 
-import {renderDefaultModelPanelLab} from "./model-fixtures";
+import {renderDefaultModelPanelLab, createStoryAgentTimeoutLabClient} from "./model-fixtures";
 
 type FixtureClient = Pick<HttpCosmosClient, "getSystemConfig" | "updateSystemConfig" | "listModelProviders" | "listConfiguredModels">;
 function getClient(): FixtureClient {
@@ -25,6 +25,23 @@ afterEach(() => {
     } finally {
         vi.unstubAllGlobals();
     }
+});
+
+describe("story agent timeout panel lab fixture", () => {
+    it("starts at 300 seconds and keeps edits within the fixture client", async () => {
+        const client = createStoryAgentTimeoutLabClient();
+
+        await expect(client.getSystemConfig()).resolves.toEqual({storyAgentTimeoutSeconds: 300});
+        await expect(client.updateSystemConfig({storyAgentTimeoutSeconds: 480}))
+            .resolves.toEqual({storyAgentTimeoutSeconds: 480});
+        await expect(client.getSystemConfig()).resolves.toEqual({storyAgentTimeoutSeconds: 480});
+    });
+
+    it("can render the read failure state without a real system config request", async () => {
+        const client = createStoryAgentTimeoutLabClient("read-failure");
+
+        await expect(client.getSystemConfig()).rejects.toThrow("Story Agent timeout config read failed.");
+    });
 });
 
 describe("default model panel lab fixture", () => {
@@ -53,7 +70,18 @@ describe("default model panel lab fixture", () => {
         expect(config.defaultModel).toEqual(models.items[0]);
     });
 
-    it.each(["model-chat", "model-reasoner", null])("returns the selected default %s without a real write", async (defaultModelId) => {
-        await expect(getClient().updateSystemConfig({defaultModelId})).resolves.toEqual({defaultModelId});
+    it.each(["model-chat", "model-reasoner", null])("returns the selected default %s and timeout without a real write", async (defaultModelId) => {
+        const client = getClient();
+        const providers = await client.listModelProviders();
+        const models = await client.listConfiguredModels(providers.items[0]!.id);
+        const defaultModel = defaultModelId === null
+            ? null
+            : models.items.find((model) => model.id === defaultModelId) ?? null;
+
+        await expect(client.updateSystemConfig({defaultModelId})).resolves.toEqual({
+            defaultModelId,
+            defaultModel,
+            storyAgentTimeoutSeconds: 300,
+        });
     });
 });

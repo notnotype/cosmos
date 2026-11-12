@@ -21,9 +21,10 @@ async function schemaAt(root: string, current: boolean): Promise<string> {
     await copyFile(join(source, "migrations/migration_lock.toml"), join(migrations, "migration_lock.toml"));
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    expect(names).toHaveLength(44);
-    expect(names.at(-1)).toBe(migrationName);
-    for (const name of names.filter((name) => current || name < migrationName)) {
+    const historicalNames = names.filter((name) => name <= migrationName);
+    expect(historicalNames).toHaveLength(44);
+    expect(historicalNames.at(-1)).toBe(migrationName);
+    for (const name of historicalNames.filter((name) => current || name < migrationName)) {
         await mkdir(join(migrations, name));
         await copyFile(join(source, "migrations", name, "migration.sql"), join(migrations, name, "migration.sql"));
     }

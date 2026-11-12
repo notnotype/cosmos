@@ -9,9 +9,9 @@ describe("HttpCosmosClient SystemConfig", () => {
     it("reads the new config endpoint with a deleted model", async () => {
         const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async (input) => {
             expect(String(input)).toBe("http://localhost:4310/api/v1/system/config");
-            return jsonResponse({ defaultModelId: "deleted-model", defaultModel: null });
+            return jsonResponse({ defaultModelId: "deleted-model", defaultModel: null, storyAgentTimeoutSeconds: 300 });
         } });
-        expect(await client.getSystemConfig()).toEqual({ defaultModelId: "deleted-model", defaultModel: null });
+        expect(await client.getSystemConfig()).toEqual({ defaultModelId: "deleted-model", defaultModel: null, storyAgentTimeoutSeconds: 300 });
     });
 
     it("parses a full default model including zero price and version metadata", async () => {
@@ -24,7 +24,7 @@ describe("HttpCosmosClient SystemConfig", () => {
             highCacheWritePricePerMillion: 0, highCacheReadPricePerMillion: 0.2,
             version: 2, createdAt: "2026-11-10T00:00:00.000Z", updatedAt: "2026-11-10T01:00:00.000Z",
         };
-        const response = { defaultModelId: model.id, defaultModel: model };
+        const response = { defaultModelId: model.id, defaultModel: model, storyAgentTimeoutSeconds: 300 };
         const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async () => jsonResponse(response) });
         expect(await client.getSystemConfig()).toEqual(response);
     });
@@ -39,6 +39,14 @@ describe("HttpCosmosClient SystemConfig", () => {
         expect(await client.updateSystemConfig({ defaultModelId })).toEqual({ defaultModelId });
     });
 
+    it("updates only the timeout field", async () => {
+        const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async (_input, init) => {
+            expect(JSON.parse(String(init?.body))).toEqual({ storyAgentTimeoutSeconds: 900 });
+            return jsonResponse({ storyAgentTimeoutSeconds: 900 });
+        } });
+        await expect(client.updateSystemConfig({ storyAgentTimeoutSeconds: 900 }))
+            .resolves.toEqual({ storyAgentTimeoutSeconds: 900 });
+    });
     it("validates config writes before making a request", async () => {
         let called = false;
         const client = new HttpCosmosClient({ baseUrl: "http://localhost:4310", fetch: async () => {

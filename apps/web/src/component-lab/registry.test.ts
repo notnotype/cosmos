@@ -31,6 +31,7 @@ const expectedPublicModules = [
     "components/cosmos/provider-models-section.tsx",
     "components/cosmos/story-source-reader.tsx",
     "components/cosmos/story-agent-candidates.tsx",
+    "components/cosmos/story-agent-timeout-panel.tsx",
     "components/cosmos/connection-panel.tsx",
     "components/cosmos/default-model-panel.tsx",
     "components/cosmos/model-details.tsx",

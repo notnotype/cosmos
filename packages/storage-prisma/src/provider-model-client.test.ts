@@ -13,7 +13,7 @@ import { resolvePrismaCliPath } from "./prisma-cli.js";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const temporaryParent = join(repositoryRoot, ".agent/tmp");
 const source = join(repositoryRoot, "packages/storage-prisma/prisma");
-const boundary = "20261111080000_task_42_cache_tiered_pricing";
+const boundary = "20261112090000_task_42_story_agent_timeout";
 const require = createRequire(import.meta.url);
 
 function run(root: string, label: string, args: string[], environment: NodeJS.ProcessEnv): void {
@@ -64,7 +64,7 @@ async function snapshot(root: string): Promise<string> {
     await copyFile(join(source, "migrations/migration_lock.toml"), join(migrations, "migration_lock.toml"));
     const names = (await readdir(join(source, "migrations"), { withFileTypes: true }))
         .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-    if (names.length !== 44 || names.at(-1) !== boundary) {
+    if (names.length !== 45 || names.at(-1) !== boundary) {
         throw new Error("Re-audit the migration boundary before executing this suite.");
     }
     const manifest = [{ path: "source-schema.prisma", sha256: createHash("sha256").update(original).digest("hex") },

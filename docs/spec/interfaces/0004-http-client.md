@@ -37,8 +37,8 @@ Web 页面读取 Feed/Source/Health、触发 Source 操作或订阅 SSE，或 No
 
 | 方法 | HTTP 与校验 |
 | --- | --- |
-| `getSystemConfig()` | GET `/api/v1/system/config`；完整响应经 `systemConfigDtoSchema` strict 解析。 |
-| `updateSystemConfig(input)` | 先用 `updateSystemConfigCommandSchema` strict 解析 `{defaultModelId}`，PUT 同路径；响应只 strict 解析 `{defaultModelId:string|null}`。 |
+| `getSystemConfig()` | GET `/api/v1/system/config`；完整响应经 `systemConfigDtoSchema` strict 解析，包含必需的 `storyAgentTimeoutSeconds`（30–1800 整数秒）。 |
+| `updateSystemConfig(input)` | 先用 `updateSystemConfigCommandSchema` strict 解析 `{defaultModelId?, storyAgentTimeoutSeconds?}`（至少一项），PUT 同路径；响应用同一命令 schema 解析已保存字段，不能当完整配置读取。 |
 | `getDefaultModel()` | 旧 GET `/api/v1/config/default-model`；strict `{modelId:string|null}`。 |
 | `setDefaultModel(modelId)` | 旧 PUT 同旧路径，发送 `{modelId}`；解析旧形状确认响应。 |
 

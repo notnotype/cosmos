@@ -155,19 +155,33 @@ describe("StoryGenerationEstimate", () => {
         expect(content).not.toContain("USD");
     });
 
-    it("does not infer that the default model is missing when configuration could not be read", () => {
-        const content = text(renderEstimate({ model: null, failed: true }));
+    it("offers settings and reload actions when the saved default model is no longer available", () => {
+        const html = renderEstimate({ model: null, defaultModelId: "deleted-model", onRefresh: () => undefined });
+        const content = text(html);
 
+        expect(content).toContain("当前默认模型已失效，请重新选择默认模型。");
+        expect(html).toContain('href="/settings"');
+        expect(content).toContain("前往默认模型设置");
+        expect(content).toContain("重新读取默认模型");
+        expect(content).not.toContain("尚未设置默认模型");
+    });
+
+    it("does not infer that the default model is missing when configuration could not be read", () => {
+        const html = renderEstimate({ model: null, failed: true });
+        const content = text(html);
+
+        expect(html).toContain('role="alert"');
         expect(content).toMatch(/(?:失败|无法|不可用)/);
         expect(content).not.toMatch(/(?:未配置|没有|尚未设置|未设置).*默认模型/);
         expect(content).not.toContain("USD");
     });
 
     it("shows a loading status instead of claiming the default model is missing", () => {
-        const html = renderEstimate({ model: null, loading: true });
+        const html = renderEstimate({ model: null, loading: true, onRefresh: () => undefined });
         const content = text(html);
 
         expect(html).toContain('role="status"');
+        expect(html).toMatch(/<button[^>]*disabled[^>]*>重新读取默认模型<\/button>/);
         expect(content).toMatch(/(?:加载|读取).*中/);
         expect(content).not.toMatch(/(?:未配置|没有|尚未设置|未设置).*默认模型/);
         expect(content).not.toContain("USD");

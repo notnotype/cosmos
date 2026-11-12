@@ -63,6 +63,12 @@ Contracts 唯一拥有跨边界 JSON schema；Application ContentQuery 统一提
 - 首个 Web 消费者是持久候选卡片；generation 区域仅显示状态，避免重复展示费用，刷新后从候选读取费用。无费用不渲染实际费用，0 与极小正数不得混淆。
 - 离线验收目标：真实 API/Worker 与 fake HTTP Provider 返回 usage 输入 10 / 输出 20，每百万 token 单价 1.25 / 2.5 USD，得到 input=0.0000125、output=0.00005、total=0.0000625、currency=USD；覆盖缺失、0、成功状态、跨 Run 拒绝和重启重放。此处是验收目标，实际运行证据由 [Task 42](../../.agents/tasks/42-default-model-ui-api/README.md)记录，不表示真实外呼已验证。
 
+## Story Agent 超时与失败原因（Task 42，2026-11-12）
+
+系统配置 `storyAgentTimeoutSeconds` 默认 300、允许 30–1800 整数秒；新生成入队时转换成毫秒预算并保存到 Workflow 输入，修改配置不重写旧任务或同键重放。预算限制单次调用尝试，重试后的总历时可更长；设置 HTTP 合同见 [Product API](../spec/interfaces/0002-product-api-http.md#task-42-当前合同补充)。
+
+Generation 的 `errorCode` 在失败时给出白名单分类：`timeout`、`authentication_required`、`rate_limited`、`budget_exhausted`、`invalid_configuration`、`dependency_unavailable`、`malformed_payload`；无已知分类时为 `generation_failed`。取消继续独立为 `cancelled`，不伪装失败。分类读取同一 Story Run 的持久终态 Activity Job 机器码，不以自由文本猜测，不返回原始模型响应或内部异常。该补充取代上文旧表“失败只给 generation_failed”的说明。Web 只按码显示固定中文与恢复入口；超时文案不把当前设置当旧任务的预算。架构依据见 [ADR-0033](../adr/0033-story-agent-timeout-and-error-codes.md)。
+
 ## Conformance 场景
 
 1. 旧 DTO 解码与 legacy-text 回退，不注入任意 HTML。

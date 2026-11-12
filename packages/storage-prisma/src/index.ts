@@ -7,6 +7,7 @@ export { PrismaContentRebuildRepository } from "./repository/content-rebuild.js"
 export { PrismaContentQueryRepository } from "./repository/content-query.js";
 export { PrismaContentSelectionRepository } from "./repository/content-commands.js";
 export { PrismaStoryAgentCandidateRepository } from "./repository/story-agent-candidates.js";
+export { PrismaStoryAgentFailureCodeReader } from "./story-agent-failure-code.js";
 export { PrismaWorkflowBackend } from "./workflow-backend.js";
 export { PrismaWorkflowHostStore } from "./workflow-host-store.js";
 export { PrismaWorkflowEventSink } from "./workflow-event-sink.js";

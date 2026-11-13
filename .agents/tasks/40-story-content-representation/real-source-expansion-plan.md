@@ -1,6 +1,6 @@
 # Task 40：真实来源扩大验收计划
 
-> 状态：等待维护者审批
+> 状态：**历史计划，已执行完成**。2026-11-05 四阶段验收通过并关闭 Task 40；2026-11-13 补充验收已收口，当前结论见 [Task 首页](README.md)与[主记录](walkthrough.md)。下文的待审批、未覆盖与复选框保留编制时语境，不代表当前待办或新的外呼授权。
 > 
 > 编制日期：2026-11-04
 > 
@@ -351,7 +351,7 @@ Task 40 已完成隔离验收的 12 项批准验收点，并通过了维护者�
 **日期**：2026-11-04  
 **Task**：40（Story 内容表示与多模态阅读）  
 **相关文档**：
-- [Task 40 README](.agents/tasks/40-story-content-representation/README.md)
-- [Task 40 Walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)
-- [测试规范](../../docs/testing/README.md)
-- [可选验收](../../docs/testing/README/05-optional-acceptance.md)
+- [Task 40 README](README.md)
+- [Task 40 Walkthrough](walkthrough.md)
+- [测试规范](../../../docs/testing/README.md)
+- [可选验收](../../../docs/testing/README/05-optional-acceptance.md)

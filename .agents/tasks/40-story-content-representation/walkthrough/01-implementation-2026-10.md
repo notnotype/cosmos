@@ -1,3 +1,11 @@
+---
+parent: ../walkthrough.md
+range: Task 40 实施、审查与修复历史
+sealed_at: 2026-11-13
+tags: [task40, implementation, acceptance]
+tokens_est: 10000
+---
+
 # Task 40 Walkthrough
 
 ## 历史检查点：Normalizer 阶段
@@ -16,7 +24,7 @@ Task39 已完成，本 Task 消费其能力。Leader 为唯一记录写入者。
 
 ## 设计依据与决定
 
-依据：[目标设计](../../../docs/aegis/specs/2026-10-08-story-content-representation-design.md)、[架构](../../../docs/aegis/specs/2026-10-08-story-content-representation-architecture.md)。
+依据：[目标设计](../../../../docs/aegis/specs/2026-10-08-story-content-representation-design.md)、[架构](../../../../docs/aegis/specs/2026-10-08-story-content-representation-architecture.md)。
 
 目标：新采集正文保留图文顺序、安全可读；Web 与 Agent 共用版本化内容投影；旧数据继续可读；候选接受前不改正式事实。
 
@@ -111,23 +119,23 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 
 ## 历史分册索引
 
-- [合同实施至 RSS 验收](walkthrough/history-contract-to-rss-acceptance.md)：早期合同、Normalizer、存储、阅读和候选实现，以及首次回归和 RSS 验收。
-- [隔离产品阅读验收](walkthrough/history-product-reading-acceptance.md)：图文原位、双来源与图片读取失败的早期红色证据。
-- [图片修复与旧 goal 恢复](walkthrough/history-image-repair-and-goal-recovery.md)：图片修复及旧 goal 的历史记录。
-- [内部 @2 前置接线](walkthrough/history-internal-agent-v2.md)：产品接线完成前的计划和验证原文。
-- [完整 Story 产品接线](walkthrough/history-product-agent-wiring.md)：接线计划、红绿过程与分层验证。
-- [媒体与异常读取验收](walkthrough/history-media-and-reading-degradation.md)：媒体降级、旧文本、损坏表示与缺 Asset 验收原文。
-- [表示版本产品验收与首次提交](walkthrough/history-version-product-acceptance.md)：锁定/精确版本/回退产品验收和逐步提交基线核对。
-- [解析器、质量与旧证据演进](walkthrough/history-content-evolution-acceptance.md)：已完成并提交的计划与验证。
-- [受控与真实 Story Agent 验收](walkthrough/history-terminal-story-acceptance.md)：终端入口离线验证和真实请求结果及边界。
+- [合同实施至 RSS 验收](history-contract-to-rss-acceptance.md)：早期合同、Normalizer、存储、阅读和候选实现，以及首次回归和 RSS 验收。
+- [隔离产品阅读验收](history-product-reading-acceptance.md)：图文原位、双来源与图片读取失败的早期红色证据。
+- [图片修复与旧 goal 恢复](history-image-repair-and-goal-recovery.md)：图片修复及旧 goal 的历史记录。
+- [内部 @2 前置接线](history-internal-agent-v2.md)：产品接线完成前的计划和验证原文。
+- [完整 Story 产品接线](history-product-agent-wiring.md)：接线计划、红绿过程与分层验证。
+- [媒体与异常读取验收](history-media-and-reading-degradation.md)：媒体降级、旧文本、损坏表示与缺 Asset 验收原文。
+- [表示版本产品验收与首次提交](history-version-product-acceptance.md)：锁定/精确版本/回退产品验收和逐步提交基线核对。
+- [解析器、质量与旧证据演进](history-content-evolution-acceptance.md)：已完成并提交的计划与验证。
+- [受控与真实 Story Agent 验收](history-terminal-story-acceptance.md)：终端入口离线验证和真实请求结果及边界。
 
 ### 历史分册：独立审查与预算修复
 
-已完成的指定路由审查、两项 Required 的 RED/GREEN 及完整命令已原文移入[历史分册](walkthrough/history-independent-review-and-budget.md)。结论：重建与 structured source 均限 1 MiB，旧事实不变。
+已完成的指定路由审查、两项 Required 的 RED/GREEN 及完整命令已原文移入[历史分册](history-independent-review-and-budget.md)。结论：重建与 structured source 均限 1 MiB，旧事实不变。
 
 ### 历史分册：受控与真实 Story Agent 验收
 
-受控入口离线验证及单次真实 summary-only 终端调用的完整计划、结果、运行命令与限制已原文移入[历史分册](walkthrough/history-terminal-story-acceptance.md)。结论：一次真实 Provider/SDK/Worker 调用成功，产一个 pending 并按约定拒绝，正式 Story 未变；覆盖 summary-only 验证。
+受控入口离线验证及单次真实 summary-only 终端调用的完整计划、结果、运行命令与限制已原文移入[历史分册](history-terminal-story-acceptance.md)。结论：一次真实 Provider/SDK/Worker 调用成功，产一个 pending 并按约定拒绝，正式 Story 未变；覆盖 summary-only 验证。
 
 ### 2026-10-27：Task40 批准清单与分层证据对照
 
@@ -160,21 +168,21 @@ Retirement Track：新数据 blocks 路径替代文本/媒体分开展示；旧 
 
 结论：交付切片有单元、SQLite、生产浏览器、组件实验室和一次真实 Agent 证据；完整浏览器与 Node 进程套件非全绿。Task40 保持 active。
 
-2026-10-27 前置 schema 旧库升级的计划、RED/GREEN 与完整命令已原文归档至[升级历史](walkthrough/history-old-schema-upgrade.md)。结论：真实迁移路径下旧事实/标识/指针保持且无历史回填，新增表示/候选为空。
+2026-10-27 前置 schema 旧库升级的计划、RED/GREEN 与完整命令已原文归档至[升级历史](history-old-schema-upgrade.md)。结论：真实迁移路径下旧事实/标识/指针保持且无历史回填，新增表示/候选为空。
 
-2026-10-27 Node recovery 的计划、RED/GREEN 与完整命令已归档至[独立诊断历史](walkthrough/history-node-recovery.md)。结论：派发后结果未知时 `outcome_unknown` 终止且不自动重发；仅旧测试预期需修正，完整 Node E2E 通过。
+2026-10-27 Node recovery 的计划、RED/GREEN 与完整命令已归档至[独立诊断历史](history-node-recovery.md)。结论：派发后结果未知时 `outcome_unknown` 终止且不自动重发；仅旧测试预期需修正，完整 Node E2E 通过。
 
 ### 历史分册：首屏 JS 预算验收
 
-`8353a50` 的诊断、失败/通过与完整命令见[封口原文](walkthrough/history-js-budget-acceptance.md)。结论：浏览时不载入拖拽编辑依赖，transport 显式声明既有 Zod 避免双份校验库；首屏 313.1 KB 通过原 335974 bytes 预算。完整浏览器 65 通过/2 显式降级跳过。
+`8353a50` 的诊断、失败/通过与完整命令见[封口原文](history-js-budget-acceptance.md)。结论：浏览时不载入拖拽编辑依赖，transport 显式声明既有 Zod 避免双份校验库；首屏 313.1 KB 通过原 335974 bytes 预算。完整浏览器 65 通过/2 显式降级跳过。
 
 ### 历史分册：显式阅读降级与候选决定
 
-`c3441e4` 的计划、完整命令及门禁见[封口原文](walkthrough/history-reading-decision-combination.md)。结论：显式降级播种的生产栈组合 5/5 通过，涵盖 1024/1440 阅读/媒体降级及候选决定/失效；合成模型。Task40 active。
+`c3441e4` 的计划、完整命令及门禁见[封口原文](history-reading-decision-combination.md)。结论：显式降级播种的生产栈组合 5/5 通过，涵盖 1024/1440 阅读/媒体降级及候选决定/失效；合成模型。Task40 active。
 
 ### 历史分册：正文摘要与 Web 人工决定入口
 
-`34e0b29` 的实施、RED/GREEN 与命令见[封口原文](walkthrough/history-body-entry-offline-implementation.md)。结论：固定正文与版本，真实 API 入队，Host 在入口进程驱动；生成后删凭据并停止 Host，Web 人工决定后核对持久化。单次 POST、无重试、512 token/60s。离线通过。
+`34e0b29` 的实施、RED/GREEN 与命令见[封口原文](history-body-entry-offline-implementation.md)。结论：固定正文与版本，真实 API 入队，Host 在入口进程驱动；生成后删凭据并停止 Host，Web 人工决定后核对持久化。单次 POST、无重试、512 token/60s。离线通过。
 
 ### 2026-10-29：正文证据格式与脱敏失败分类
 

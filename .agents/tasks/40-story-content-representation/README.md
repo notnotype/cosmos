@@ -24,11 +24,11 @@
 - [已确认目标架构](../../../docs/aegis/specs/2026-10-08-story-content-representation-architecture.md)
 - [用户真相保护 ADR](../../../docs/adr/0028-user-truth-protection-v1.md)
 - [当前实现规格入口](../../../docs/spec/README.md)与[测试隔离规范](../../../docs/testing/README.md)
-- [Task 38](../38-agent-invocation/README.md) 的 Invocation Port；[Task 39](../39-pi-ai-adapter/README.md) 已完成连接配置、真实 Adapter 与 Worker `agent.invoke@2` 注册。Task 40 负责消费该能力；Story 产品已按单次显式选连接→API 入队→Worker @2→候选→人工决定接通。
+- [Task 38](../38-agent-invocation/README.md) 的 Invocation Port；[Task 39](../39-pi-ai-adapter/README.md) 已完成连接配置、真实 Adapter 与 Worker `agent.invoke@2` 注册。Task 40 负责消费该能力；当前 Story 生成按显式模型或默认模型→API 入队→Worker @2→候选→人工决定接通。
 
 ## Current Slice / Gates
 
-生命周期：实施中。内部 @2 合同及产品生成接线已完成；生成请求返回 202 和安全任务状态,浏览器保留同一请求键并可刷新恢复。API 不调用 SDK,Worker 生成后只保存 pending 候选,正式写入仍需人工决定。实施过程及逐轮证据统一记录于 walkthrough。
+生命周期：**已完成并关闭**。2026-11-05 四阶段验收通过后关闭，2026-11-13 补充的真实关系提取、内容质量审查及独立 Worker 进程验收均已通过；维护者确认原定范围验收全部完成，无范围内待验收项。当前生成使用显式模型或默认模型，API 返回 202 后由 Worker 执行；仅保存 pending 候选，正式写入仍需人工决定。最新证据与未验证边界统一见 [walkthrough](walkthrough.md#本轮最终结果通过合成模型传输独立进程)，不据补充验收重开任务。
 
 已实现的可观察行为：
 
@@ -57,7 +57,15 @@
 - ✅ 代码经两轮 code-reviewer 审查并修复全部 P1/P2
 - ✅ 27 个测试通过，类型检查全绿
 
-### 关闭时遗留（不阻塞关闭，留给后续 Task 按需处理）
+### 补充验收与当前边界（2026-11-13）
+
+真实 Provider 的关系提取、内容质量审查样例，以及使用本机模型替身的独立 Node API/Worker 三任务链路均已补充验收通过，详见 [主记录](walkthrough.md#本轮最终结果通过合成模型传输独立进程)。[Node recovery 历史诊断](walkthrough/history-node-recovery.md)已记录旧测试预期修正与完整 Node E2E 通过的证据；不再将旧超时列为当前门槛。
+
+质量审查提供查看与拒绝，没有正式写入命令是当前权限边界。真实 HTTPS 独立 Worker 组合、Story 任务执行中崩溃、长时间运行、多 Worker 和部署未在本轮验证，属于确认范围外的补强事项，不阻塞 Task 40 完成。
+
+### 关闭时遗留（2026-11-05 历史快照）
+
+以下保留当时的原始遗留摘要，不代表当前待验收项；当前结果以上述补充验收与主记录为准。
 
 - 关系提取真实任务（`story.extract-relations`）：尚未用真实 Provider 执行
 - 质量审查真实任务（`story.review-content-quality`）：尚无对应正式写入命令

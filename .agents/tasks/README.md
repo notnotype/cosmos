@@ -62,7 +62,7 @@ Task 导航：
 - [`38-agent-invocation/`](38-agent-invocation/)：Phase 3 第一切片 Agent Invocation 基础接入——版本化 `agent.invoke@1` 普通 Workflow Action、Invocation Port、`trusted_worker` 执行位置与 Fake Adapter 先行；复用现有 Run/Activity/Job/Attempt/Lease/取消/重试/completion durable truth。真实 `pi-ai`、`neuro-agent-harness`、`nb-memory`、Artifact、Workspace、Knowledge/Research 后置；编号 38 由维护者 2026-10-08 分配。
 
 - [`39-pi-ai-adapter/`](39-pi-ai-adapter/)：真实 pi-ai Adapter，承接 Task 38；编号 39 由维护者分配，当前状态与验证见任务记录。
-- [`40-story-content-representation/`](40-story-content-representation/)：Story 内容表示与多模态阅读——有序内容块、版本化投影、统一 Web/Agent 读取与候选接受；编号 40 由维护者分配。内容表示、阅读、候选决定及 Story 生成接线已实现，隔离完整产品链路已验收；独立审查/预算复核及一次真实摘要终端切片通过。已补真实前置 schema 合成旧库的隔离升级行为测试，旧事实/指针不变且无历史回填（不操作用户库）。整体验收仍未通过关闭门槛：Node recovery 已按派发保护修正且完整 Node E2E 通过，首屏 JS 已在原预算下修复，完整浏览器无失败；已有显式阅读/媒体降级与候选人工决定组合证据，不把历史跳过项冒称完整套件通过。维护者已确认一次真实 Provider 合成正文摘要与 Web 人工接受/持久化通过，非 Agent 独立复验；此前格式失败保留。真实来源及关系/质量组合仍不足，新外呼须逐次授权，Task40 仍 active，证据和后续门槛见 walkthrough。
+- [`40-story-content-representation/`](40-story-content-representation/)：Story 内容表示与多模态阅读——有序内容块、版本化投影、统一 Web/Agent 读取与候选接受；编号 40 由维护者分配。**已关闭（2026-11-05），确认范围内验收全部完成**。四阶段验收及 2026-11-13 补充的真实关系/质量样例、使用本机模型替身的独立 Worker 进程验收均通过。当前状态、证据与范围外边界见 [Task 首页](40-story-content-representation/README.md)及 [walkthrough](40-story-content-representation/walkthrough.md)；新增真实外呼仍须逐次授权。
 
 当前提交基线、验证结果和未完成边界只在 [`../../PROJECT-STATUS.md`](../../PROJECT-STATUS.md) 维护。
 

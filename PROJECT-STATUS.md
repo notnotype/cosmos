@@ -1,5 +1,7 @@
 # Cosmos Project Status
 
+> 当前补记（2026-11-13）：Task40 确认范围内验收全部完成并保持关闭；22 处历史断链已修复，当前工作树文档检查通过，见 [收口记录](.agents/tasks/40-story-content-representation/walkthrough.md#2026-11-13验收完成后的文档收口)。下方 Task42 中的断链表述保留当时快照；全局大小债务与未验证的运行层仍独立保留，本次文档修复不宣称所有仓库门禁通过。
+
 > Task42（2026-11-11）：模型缓存四价、USD/CNY 与两档整次计费已在分支 `feat/t42-cache-tiered-pricing` 实现并通过本轮隔离验收；全仓 230 files / 1446 tests、浏览器 6/6、组件实验室 12/12 通过。当前合同见[定价 Proposal](docs/proposals/model-cache-tiered-pricing-v1.md)，分层证据和过程见 [Task42 walkthrough](.agents/tasks/42-default-model-ui-api/walkthrough.md)。文档门禁仍有 Task40 既有断链与全局大小债务，不能据本轮通过宣称全部仓库门禁通过；真实 Provider、来源、账号登录、部署和远端 CI 未验。Phase 1 已收口，Phase 2 十四切片及平台面四块已交付，LIB-004 延后 Phase 3；后置债保持原界线。
 >
 > Task [36](.agents/tasks/36-reading-layout-and-object-details/README.md) 已合并并经维护者验收；证据见[完成历史](PROJECT-STATUS/history-2026-10-task36.md)，不代表当前工作树已全部验收。
@@ -45,7 +47,7 @@ Source 按 `sourceDefinitionRef + operationId + config` 创建为停用状态，
 
 **Task [42](.agents/tasks/42-default-model-ui-api/walkthrough.md) 本轮实现与隔离验收完成（2026-11-11）**：基于 `ad4c3c4`，分支 `feat/t42-cache-tiered-pricing` 已实现缓存四价、每模型币种及两档整次计费，[当前 API](docs/spec/interfaces/0002-product-api-http.md)、[客户端](docs/spec/interfaces/0004-http-client.md)、[Web](docs/spec/interfaces/0005-web-client.md)和 [ADR-0032](docs/adr/0032-model-cache-tiered-pricing.md)已同步。最终全仓 230 files / 1446 tests 全部通过（284.28s）；40 项 smoke、浏览器 6/6（56.7s）、Lab 12/12（17.8s）通过，覆盖四价创建/编辑/回填、真实 409 草稿恢复、272000/272001 整次选档和历史费用不随改价重算。全仓类型检查、Web lint、API/Worker 与依赖包构建、隔离栈 Web 构建及代码差异检查通过。独立审查发现的两项需求问题与冲突测试缺口均已修复并复核。文档检查仍有 22 条 Task40 旧断链，本轮未新增；全局尺寸既有债务及最终门禁结果单列于 Task，不宣称所有仓库门禁通过。维护者已另行授权本轮本地提交及合并到 master；未 push/deploy、未迁移用户数据库、未修改 DSH plugin；本轮真实 Provider 外呼与远端 CI 未验。早期失败、执行器诊断和精确命令保留在本轮 Task 过程记录。
 
-**Task [40](.agents/tasks/40-story-content-representation/README.md) 仍在验收中**：旧库升级、Node recovery、原 JS 预算及显式降级/候选决定已有隔离证据。维护者确认一次真实 Provider 合成正文摘要→Web 人工接受/持久化通过，内容和证据正确；非 Agent 独立复验，此前格式失败保留。Host 在入口进程，不替代独立 Worker 验收。真实来源复验、关系/质量任务及通用分类/旧 spec 仍待收口，新外呼须逐次授权，Task40 不关闭；详见 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。
+**Task [40](.agents/tasks/40-story-content-representation/README.md) 验收与文档收口完成（2026-11-13）**：确认范围内验收全部完成，保留 2026-11-05 的关闭决定。真实 Provider 关系/质量样例已分别独立复核；合成模型传输下，真实 Node API 入队、独立 Node Worker 执行三类任务并保存 pending，同键及完成后重启无新增调用，约定七张正式内容表不变。本轮修复 22 处历史断链并统一任务状态，工作树文档检查通过；过程、精确证据及边界只记于 [walkthrough](.agents/tasks/40-story-content-representation/walkthrough.md)。独立 Worker 真实 HTTPS 组合、执行中崩溃、长压和部署未验，属于范围外补强；未改产品代码或用户库，不替代全仓运行门禁。
 
 **Task 38（Agent Invocation 基础接入 v1）已完成**（2026-10-08）：新增版本化 `agent.invoke@1` Workflow Action、JSON-safe Agent Invocation 合同、Invocation Port 与确定性 Fake Adapter；复用现有 Activity Worker 的 Run/Job/Lease、取消、重试和 completion 语义。全量单元测试 139 个文件/798 个测试、全仓 typecheck、共享包构建和 docs:check 均通过。真实 `pi-ai` Adapter 已由 Task 39 承接交付；`neuro-agent-harness`、`nb-memory`、工具执行、Artifact、Workspace、Knowledge/Research 仍未实现，另开后续 Task。
 

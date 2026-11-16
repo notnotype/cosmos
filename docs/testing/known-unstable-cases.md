@@ -152,3 +152,19 @@
 - **再验证（对着定稿的 fixture 重做，覆盖两个原语）**：用「启动原语但不 `await` 它」模拟用例被中断——两个原语下**直接 `rm` 都撞出与上面表格一字不差的 EBUSY**，而走共享清理后根都被删除。
 - **一个附带事实**：Prisma **懒连接**——只 `new` 出来、没跑过查询的客户端**不持有文件句柄**（第一次探针因此没复现出 EBUSY，修正为真的 `$connect()` 后才复现）。所以泄漏的前提是「客户端已经连上」，而 `withRepository` 里的 `initialize()` 正是连上的那一步。
 - **这也顺带否掉了原建议的第③步「有界重试」**：被中断泄漏的客户端会一直连着，几秒退避删不掉，不要走那条。
+
+## 9. `scripts/acceptance/story-agent-runner.test.ts` 的 15 秒用例预算超时
+
+**状态：已修（2026-11-16）**。根因是该用例把超时写成 `}, 15_000)`，预算只有全局 60 秒的四分之一；删除覆盖后回到全局预算。
+
+| 跑法 | 结果 |
+|---|---|
+| `bun run test` 第 1 轮（改动前，235 个测试文件） | 1 failed / 1491 passed；该用例 `Test timed out in 15000ms` |
+| `bun run test` 第 2 轮（同一份代码） | 1492/1492 通过；该用例 4731ms |
+| `bunx vitest run scripts/acceptance/story-agent-runner.test.ts` | 9 passed；该用例 9900ms |
+| 删除覆盖后 `bunx vitest run`（上述 3 个文件） | 24 passed；该用例 12870ms |
+| 空闲机器复跑 `bun run test`（同日 23:50，CPU 负载 4%） | **exit 0**；`Test Files 236 passed (236)`、`Tests 1496 passed (1496)`，整轮 166.85s（用例累计 1287.88s） |
+
+**判断**：与第 7 条同一形态：15 秒预算比全局 60 秒紧 4 倍，单跑只剩约 1.5 倍余量，并行负载下必然越过。G16 已裁定「删掉小于全局的覆盖，回到 60 秒，不新增数字」；本轮却在三个测试文件里复发 9 处（`story-agent-runner.test.ts` 1 处 `15_000`、`story-body-runner.test.ts` 6 处 `30_000`、`store-idempotency-activity.test.ts` 2 处 `30_000`），已全部删除。修复后该文件 9 条用例与全量两轮均通过（1496/1496）；两轮退出码为 1（vitest-worker `Timeout calling "onTaskUpdate"`）；同日 23:50 空闲机器（游戏已退出、CPU 4%）复跑 `bun run test` exit 0，236 文件 / 1496 用例通过、整轮 166.85s，故属环境负载而非缺陷，远端 CI 仍未复跑。
+
+**建议**：若「产品必须在 X 秒内 abort」是合同，写成产品断言；不要再引入小于全局的用例级覆盖。

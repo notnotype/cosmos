@@ -24,6 +24,13 @@
 | 浏览器 E2E    | `bun run test:browser`、`bun run test:browser:component-lab` | 真实 Next/API/Worker Stack 产品流与首页主题偏好持久化/明暗跟随；开发态组件实验室交互、props、提交阻断、token、全局外观切换与隔离验收 |
 | Windows smoke | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-node.ps1` | Windows Node API/Worker、迁移、受控 HTTP RSS、Feed/Search/Story、SSE、requestId 和脱敏日志                    |
 
+## 夹具与临时根
+
+- 仓储层夹具用 schema 模板库：[schema-template.ts](../../packages/storage-prisma/src/schema-template.ts) 提供 `materializeDatabase`；两份 `withRepository`（[index.fixtures.ts](../../packages/storage-prisma/src/index.fixtures.ts)、[workflow-ingest.fixtures.ts](../../apps/worker/src/workflow-ingest.fixtures.ts)）现在都按**测试文件**只部署一次 schema（当前 45 个迁移），每条用例只拷贝部署好的模板库（约 4 毫秒），模板在 `afterAll` 删除。改造前每条仓储用例 8.2~9.9 秒。本机全量用例累计耗时 2524.06s→1287.88s（改造前后各取一轮空闲机器运行，collect 均约 100~105 秒）。`withTestDatabase.deploy` 仍逐用例分步部署（升级/迁移用例要先部署旧 schema，语义没变）。
+- 用例级 `testTimeout` 覆盖不得低于 [vitest.config.ts](../../vitest.config.ts) 的全局 60 秒；若「产品必须在 X 秒内完成」本身是合同，写成产品断言，不要用超时预算表达。复发形态与裁定见 [known-unstable-cases.md](known-unstable-cases.md) 第 7、9 条。
+- Story 验收夹具 [story-agent-isolation.ts](../../scripts/acceptance/story-agent-isolation.ts) 读冻结 schema 快照 commit，需要完整 git 历史：CI 的 Quality job 用 `fetch-depth: 0`；浅克隆会得到可执行错误，按提示 `git fetch --unshallow`。
+- [test-artifacts.ts](../../scripts/test-artifacts.ts) 回收 `.agent/tmp` 下刻意保留的测试根：默认只报告，`--apply` 才删除，`--days=N` 默认 7 天。
+
 ## 证据边界
 
 测试通过只证明对应层的可观察合同：单元测试不替代进程 E2E，Node E2E 不替代浏览器验收，浏览器验收不替代 Docker 或真实来源。受控 RSS、SSE 消费和结构化日志是当前 Cosmos 的可复现测试边界；当前哪些层级已通过或未运行，以 [`PROJECT-STATUS.md`](../../PROJECT-STATUS.md) 为准。本文不引入 Agent/LLM replay。**会「同一条用例既过又挂」的情况登记在 [`known-unstable-cases.md`](known-unstable-cases.md)**：报出某层绿灯前先看那里，已登记的不稳定用例不要用重跑结案。浏览器验收 33 条用例按「断言到底在查什么」分成产品契约 / UI 机制 / 外观三桶，见 [`browser-acceptance-triage.md`](browser-acceptance-triage.md)——**重做 UI 之前先看它**，避免把产品契约断言连同界面形状一起丢掉。

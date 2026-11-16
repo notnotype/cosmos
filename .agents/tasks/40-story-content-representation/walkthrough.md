@@ -1,6 +1,9 @@
 # Task 40 Walkthrough
 
-> 历史记录（2026-10 实施、审查与修复）已归档至 [walkthrough/01-implementation-2026-10.md](walkthrough/01-implementation-2026-10.md)。
+> 历史记录已归档至分册：
+>
+> - [walkthrough/01-implementation-2026-10.md](walkthrough/01-implementation-2026-10.md)：2026-10 实施、批准清单与验收准备。
+> - [walkthrough/02-acceptance-2026-11.md](walkthrough/02-acceptance-2026-11.md)：2026-11-04 真实来源扩大验收阶段 1/2 与 2026-11-05 代码审查修复。
 
 ## 当前状态
 

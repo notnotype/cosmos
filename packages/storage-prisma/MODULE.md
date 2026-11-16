@@ -27,7 +27,7 @@ Prisma + SQLite 存储适配层:把应用层与工作流引擎的端口(内容�
 | src/repository/{search,stories,story-merge,topics}.ts | 全文检索、故事修订拆分、合并、话题与成员 |
 | src/repository/{entities,entity-links,labels,collections,annotations}.ts | 实体与关联、标签、集合收藏、批注 |
 | src/repository/{views,board-content}.ts | SavedView/Board、区块/聚光/看板内容 |
-| src/workflow-host-store.ts(+/) | PrismaWorkflowHostStore 门面 → 继承链五分册 + internals-* 三层 |
+| src/workflow-host-store.ts(+/) | PrismaWorkflowHostStore 门面 → 继承链五分册（activity 段 = activity-store 门面 + activity-{claim,execution,completion} 三协作类）+ internals-* 三层 |
 | src/workflow-backend.ts | PrismaWorkflowBackend:nb-workflow 运行与检查点落库 |
 | src/model-provider-query-repository.ts | 安全读取投影；隐藏未发布 Provider，仅选择非秘密列；隔离 ORM 已验，正式服务未验 |
 | src/model-provider-credential-repository.ts | Provider 凭证事务适配器：登记、代次 fencing、CAS 发布与补偿收据；API 装配复用既有 Prisma |
@@ -44,8 +44,8 @@ Prisma + SQLite 存储适配层:把应用层与工作流引擎的端口(内容�
 ## 禁区
 
 - 包外只允许 import 包入口 `@cosmos/storage-prisma`(package.json 仅导出 `.`),不 import 内部分册;
-- 入口导出契约冻结;不动继承链中段(新增方法放对应聚合分册尾部);
+- 入口导出契约冻结;不动继承链中段(新增 Activity 方法进 activity-{claim,execution,completion}.ts,activity-store.ts 只做委托);
 - Prisma schema / migration 不在本包治理范围;
 - 不读写 `.cosmos/` 运行数据;测试一律使用隔离根目录。
 
-更新:2026-09-11(G02 切片 4/5)
+更新:2026-11-17(activity 段拆认领/执行/完成三协作类)

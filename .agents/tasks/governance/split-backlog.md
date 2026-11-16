@@ -11,11 +11,10 @@
 | 文件 | 行 | 字节 | 与 Task 39 的关系 |
 | --- | --- | --- | --- |
 | `apps/web/src/components/cosmos/connection-panel.tsx` | 700 | 35042 | 本轮新增模型单选 UI（+176 行），从 24.58 KB 越线 |
-| `packages/storage-prisma/src/workflow-host-store/activity-store.ts` | 668 | 31449 | 本轮新增 dispatch fence（+164 行），从 23.66 KB 越线 |
 | `packages/application/src/workflow-host-runtime.test.ts` | 915 | 33354 | 本轮只 +29 行；**`origin/master` 上已 31.44 KB / 886 行**，从未登记 |
 | `.agents/tasks/40-story-content-representation/walkthrough.md` | 253 | 41737 | 与本轮无关，`d511d79` 提交时即未登记 |
 
-前三个走代码门禁（`-c code tests`），第四个走文档门禁（`-c docs`）。
+前两个走代码门禁（`-c code tests`），最后一个走文档门禁（`-c docs`）。
 
 **master 侧已在红**（2026-10-23 实测）：把 `origin/master` 导出到仓库外目录跑 CI 同一命令，唯一违规就是 `packages/application/src/workflow-host-runtime.test.ts`（`[fail] 新增红线文件 … 31.44 KB / 约 8.0k token`，`结果: FAIL（1 项违规）`）。也就是说 Docs job 在 master 上本来就失败，不是本轮新增的破窗——但它也不是「记进台账就消失」，要等拆分或降字节才恢复。
 
@@ -34,7 +33,7 @@
 ## 3. 建议拆分接缝
 
 - **`connection-panel.tsx`**：模型选择块是天然接缝——纯逻辑已在 `connection-model-selection.ts`，把 `modelChoices` / `modelState` / `selectionNotice` 的呈现部分抽成 `connection-model-picker.tsx` 即可，父组件只保留编排。目标 ≤400 行。
-- **`activity-store.ts`**：fence 辅助**已不在这个文件里**——代次递增、发布资格与过期租约判定分别在 `internals-core.ts`、`internals-activity.ts`、`internals-events-lease.ts`。文件内只剩一个 `failFencedActivity`（`activity-store.ts:280-368`，3639 B，把判定失败的 Activity 标记为 `failed_terminal` 并关掉运行），把它移到 `workflow-host-store/dispatch-fence.ts` 只需减 729 B 即可回健康区；语义上它与 dispatch 的「可能已发出」判定同属一组，接缝成立。
+- **`activity-store.ts`（已完成，2026-11-17）**：656 行 / 31,312 B 拆成门面 + 三个协作类，按「认领 / 执行 / 完成」分阶段。门面 `activity-store.ts`（50 行 / 2,612 B）留在原继承链位置并委托；`activity-claim.ts`（342 行 / 15,957 B）认领、续租、释放与 fence 终结；`activity-execution.ts`（166 行 / 7,832 B）`startAction` 与派发授权；`activity-completion.ts`（198 行 / 10,180 B）终态结果与 Completion。四个文件均在健康区（≤400 行、≤25 KB）。验证：`bun run --cwd packages/storage-prisma typecheck` exit 0；`bun run test -- packages/storage-prisma/src` 73 文件 / 305 用例全通过（其中 `workflow-backend.test.ts` 24 条 = backend conformance 7 / runner conformance 2 / deferred Activity conformance 7 / 其它 8）；`bun run test:property -- packages/storage-prisma` 1 文件 / 1 用例通过；`bun run build:storage` exit 0；`entry-contract.test.ts` 通过（`PrismaWorkflowHostStore` 入口导出零 diff）；`bunx madge --circular --extensions ts packages/storage-prisma/src/index.ts` 0 环（72 文件）。文档影响：`packages/storage-prisma/MODULE.md` 已同步（模块地图与禁区）；`docs/spec/storage/0003-workflow-host-store.md` 行为未变，无需更新（其「实现与测试锚点」仍指向本轮之前已不存在的 `workflow-host-store.test.ts`，属历史漂移，未改动）；`docs/doc-governance/repo-map.json` 未重新生成——该图 2026-10-08 生成后已整体漂移（`moduleDocBytes` 2940 对实际 3820），重生成会把本轮之外的改动并进同一 diff。
 - **`workflow-host-runtime.test.ts`**：按 `describe` 拆成 2–3 个测试文件，与 `workflow-host-runtime.ts` 已拆的 6 个分册对齐；同时确认拆出的每个文件的用例数守恒（G15 的教训：拆分后必须全量重跑，只看聚焦测试会漏掉并发抖动）。
 - **`product-fixtures.tsx`**：按域拆，`connection-fixtures.tsx` / `story-fixtures.tsx` / `board-fixtures.tsx`，模型夹具已经拆出去可作为样板。
 - **`e2e/browser/phase2-organization.spec.ts`**：它是 822 行单文件，本轮未触碰；拆分时按「组织 / 成员 / 关系」三段走，注意 `e2e/support/` 的共享装置已经存在，别复制。

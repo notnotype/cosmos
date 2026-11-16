@@ -86,7 +86,7 @@ it.each(["delayed", "never"] as const)("aborts a %s transport at the shorter gen
     expect(result.report).toMatchObject({ status: "failed", stage: "generation_timeout", transportSends: 1,
         formalUnchanged: true, secretCleanup: "completed", disconnect: "completed" });
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
-}, 15_000);
+});
 
 it("closes and removes only its newly created root when preparation fails", async () => {
     vi.spyOn(PrismaCosmosRepository.prototype, "initialize").mockImplementationOnce(async function (this: PrismaCosmosRepository) {

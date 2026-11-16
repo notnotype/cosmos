@@ -101,7 +101,7 @@ it("rejects late Activity completion for terminal Runs while the old lease is st
                 .resolves.toBeNull();
         }
     });
-}, 30_000);
+});
 
 it("rejects terminal startAction and does not create a Job", async () => {
     await withTestDatabase("workflow-host", async (database) => {
@@ -115,7 +115,7 @@ it("rejects terminal startAction and does not create a Job", async () => {
                 .resolves.toBe(0);
         }
     });
-}, 30_000);
+});
 
 it("fences completion on Kernel revision and pending-activity identity", async () => {
     await withTestDatabase("workflow-host", async (database) => {

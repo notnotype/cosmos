@@ -1,9 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import {
     createMediaAcquirer,
     mediaDownloadCapability,
@@ -17,7 +15,10 @@ import {
 } from "../../../packages/application/src/workflow-ingest.js";
 import { IngestWorkflowControlService } from "../../../packages/application/src/workflow-control.js";
 import { PrismaCosmosRepository } from "@cosmos/storage-prisma";
-import { resolvePrismaCliPath } from "../../../packages/storage-prisma/src/prisma-cli.js";
+import {
+    materializeDatabase,
+    releaseSchemaTemplates,
+} from "../../../packages/storage-prisma/src/schema-template.js";
 
 import { createWorkflowHost } from "./workflow-host.js";
 
@@ -42,14 +43,19 @@ export async function cleanupTemporaryRoots(): Promise<void> {
     })));
 }
 
-/** 测试仓储的唯一生命周期实现：建隔离根 → 迁移 → 打开 → 交给用例 → 无论成败都关闭。 */
+// 唯一在装置模块里注册的钩子，而且必须是 afterAll：schema 模板要活过整个文件的用例，
+// 放进逐用例清理会把后面用例要用的模板删掉。逐用例的临时根仍由各测试文件自己注册的
+// afterEach(cleanupTemporaryRoots) 负责。
+afterAll(releaseSchemaTemplates);
+
+/** 测试仓储的唯一生命周期实现：建隔离根 → 铺出已迁移的库 → 打开 → 交给用例 → 无论成败都关闭。 */
 export async function withRepository(
     name: string,
     body: (repository: PrismaCosmosRepository) => Promise<void>,
 ): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), `cosmos-${name}-`));
     temporaryRoots.push(root);
-    prepareDatabase(root);
+    await materializeDatabase(root);
 
     const repository = new PrismaCosmosRepository({ dataRoot: root });
     openRepositories.add(repository);
@@ -85,24 +91,6 @@ export async function drainWorkflow(
         }
     }
     throw new Error(`Workflow ${runId} did not reach a terminal state.`);
-}
-
-export function prepareDatabase(root: string): void {
-    const schema = resolve(process.cwd(), "packages/storage-prisma/prisma/schema.prisma");
-    const prismaCli = resolvePrismaCliPath();
-    const databaseUrl = `file:${resolve(root, "cosmos.sqlite").replaceAll("\\", "/")}`;
-    writeFileSync(resolve(root, "cosmos.sqlite"), new Uint8Array());
-    execFileSync(process.execPath, [
-        prismaCli,
-        "migrate",
-        "deploy",
-        "--schema",
-        schema,
-    ], {
-        cwd: process.cwd(),
-        env: { ...process.env, DATABASE_URL: databaseUrl },
-        stdio: "ignore",
-    });
 }
 
 export async function createFixtureSource(

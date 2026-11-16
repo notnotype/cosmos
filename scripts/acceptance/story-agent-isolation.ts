@@ -10,6 +10,27 @@ import type { SecretStorePort } from "@cosmos/application";
 export const repositoryRoot = resolve(import.meta.dirname, "../..");
 // This immutable commit supplies the base 43 migrations; schema-snapshot-manifest.json identifies the explicit working-tree overlay.
 export const snapshotCommit = "7ca568a91c57fba7bd8256727662936143b63a14";
+
+/**
+ * 快照 commit 必须真的在本地对象库里，否则下面每条用例都会以
+ * `Command failed: git ls-tree` 失败——那既看不出是环境问题，也看不出该怎么修。
+ * 浅克隆（`actions/checkout` 默认 fetch-depth: 1）与新机器未拉全历史都会命中这里，
+ * 所以 CI 的 Quality job 显式用 fetch-depth: 0；本地报这条错就 `git fetch --unshallow`。
+ */
+function requireSnapshotCommit(): void {
+    try {
+        execFileSync("git", ["cat-file", "-e", `${snapshotCommit}^{commit}`], {
+            cwd: repositoryRoot,
+            stdio: "ignore",
+        });
+    } catch {
+        throw new Error(
+            `Story acceptance 需要快照 commit ${snapshotCommit.slice(0, 7)}，但本地对象库里没有它。`
+            + "浅克隆请先 git fetch --unshallow；CI 的 Quality job 需要 fetch-depth: 0。",
+        );
+    }
+}
+
 const schemaPrefix = "packages/storage-prisma/prisma";
 const overlayMigrationNames = [
     "20261111080000_task_42_cache_tiered_pricing",
@@ -17,6 +38,7 @@ const overlayMigrationNames = [
 ] as const;
 
 export async function prepareStoryIsolation() {
+    requireSnapshotCommit();
     const parent = join(repositoryRoot, ".agent", "tmp");
     await mkdir(parent, { recursive: true });
     const root = await mkdtemp(join(parent, "task40-story-"));

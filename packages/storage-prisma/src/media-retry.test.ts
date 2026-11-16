@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { PrismaCosmosRepository } from "./index.js";
@@ -121,7 +121,7 @@ describe("media retry storage (ADR-0015)", () => {
         });
     });
 
-    it("collapses concurrent retries through the attempt-count CAS", async () => {
+    it("rejects a stale attempt count without writing", async () => {
         await withRepositoryFixture(async ({ repository, prisma, fence }) => {
             const stale = await repository.applyMediaRetryOutcome({
                 workflowRunId: fence.workflowRunId,
@@ -141,6 +141,44 @@ describe("media retry storage (ADR-0015)", () => {
                 where: { type: "media.retry.attempted.v1" },
             })).toBe(0);
         });
+    });
+
+    it("writes the retry outcome through a conditional statement on attemptCount", async () => {
+        // 「并发重试只落一次」靠的是 `WHERE id AND attemptCount` 这一条原子条件更新。
+        // 光靠 Promise.all 咬不住它：SQLite 的交互式事务在两个并发调用之间会被串行化，
+        // 先读后写的实现照样让第二条调用读到已经 +1 的值。所以这里观测落库语句本身——
+        // 换成等价的条件更新（含 raw SQL）仍然过，去掉 attemptCount 谓词就会红。
+        await withRepository("media-retry-cas-guard", async (repository, prisma) => {
+            const events: Array<{ query: string; params: string }> = [];
+            // `$on("query")` 的重载由客户端构造参数里的 log 推出，夹具按普适的 PrismaClient
+            // 交出来时拿不到那个字面量；本用例在第三参打开了 query 事件，故按该事实收窄一次。
+            const client: PrismaClient<Prisma.PrismaClientOptions, "query"> = prisma as PrismaClient<
+                Prisma.PrismaClientOptions,
+                "query"
+            >;
+            client.$on("query", (event) => {
+                events.push({ query: event.query, params: event.params });
+            });
+            const fence = await seedFixture(prisma);
+            events.length = 0;
+
+            const applied = await repository.applyMediaRetryOutcome({
+                workflowRunId: fence.workflowRunId,
+                fence: fence.context,
+                expectedAttemptCount: 1,
+                outcome: {
+                    assetId: "asset-network",
+                    status: "failed",
+                    errorCode: "timeout",
+                    errorMessage: "图片下载超时",
+                },
+            });
+
+            expect(applied).toBe(true);
+            const updates = events.filter((event) => /^\s*UPDATE\s/.test(event.query.replace(/[`"]/g, "")));
+            expect(updates).toHaveLength(1);
+            expect(updates[0]?.query.replace(/[`"]/g, "")).toMatch(/WHERE\b.*\battemptCount\b/);
+        }, { clientOptions: { log: [{ emit: "event", level: "query" }] } });
     });
 });
 

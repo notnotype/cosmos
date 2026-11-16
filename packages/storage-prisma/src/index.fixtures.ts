@@ -1,14 +1,21 @@
-import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { afterEach } from "vitest";
+import { join } from "node:path";
+import { afterAll, afterEach } from "vitest";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { type LoggerPort } from "@cosmos/application";
 import type { SourceSnapshot } from "@cosmos/contracts";
 import { PrismaCosmosRepository } from "./index.js";
-import { resolvePrismaCliPath } from "./prisma-cli.js";
+import {
+    deploySchema,
+    materializeDatabase,
+    releaseSchemaTemplates,
+    sqliteUrl,
+} from "./schema-template.js";
+
+// 升级类用例与 e2e 播种脚本按既有路径从这里导入这两个原语。
+export { deploySchema, sqliteUrl };
 
 
 
@@ -56,7 +63,10 @@ export function captureLogger(): {
 }
 
 /**
- * 测试仓储的唯一生命周期实现：建隔离根 → 迁移 → 打开 → 交给用例 → 无论成败都关闭。
+ * 测试仓储的唯一生命周期实现：建隔离根 → 铺出已迁移的库 → 打开 → 交给用例 → 无论成败都关闭。
+ *
+ * 库来自 schema 模板的拷贝（见 `schema-template.ts`）：逐用例跑 `migrate deploy` 要 4~6 秒，
+ * 一条用例的成本几乎全在那里；拷贝一份模板是毫秒级，用例拿到的仍然是逐用例全新的库。
  *
  * 关闭要**登记**而不是只写在用例的 `finally` 里：vitest 因超时中断用例时，被中断的
  * async 函数不会继续执行，`finally` 不跑，Prisma 客户端就把 sqlite 文件句柄留着；
@@ -77,8 +87,7 @@ export async function withRepository(
 ): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), `cosmos-${name}-`));
     temporaryRoots.push(root);
-    const databasePath = join(root, "cosmos.sqlite");
-    prepareDatabase(root, options.schemaPath);
+    const databasePath = await materializeDatabase(root, options.schemaPath);
 
     const prisma = new PrismaClient({
         ...options.clientOptions,
@@ -92,34 +101,6 @@ export async function withRepository(
     } finally {
         await releaseRepository(repository);
     }
-}
-
-/** sqlite 文件路径转 Prisma 的 datasource url。 */
-export function sqliteUrl(databasePath: string): string {
-    return `file:${databasePath.replaceAll("\\", "/")}`;
-}
-
-/** 包内 canonical 的那份 schema。 */
-function defaultSchemaPath(): string {
-    return resolve(process.cwd(), "packages/storage-prisma/prisma/schema.prisma");
-}
-
-/**
- * 把指定 schema 部署到某个 DB 文件。**不截断文件**，所以可以在同一个 DB 上分步部署——
- * 升级类用例要先部署 legacy schema、再用当前 schema 覆盖同一个文件。
- */
-export function deploySchema(databasePath: string, schemaPath?: string): void {
-    execFileSync(process.execPath, [
-        resolvePrismaCliPath(),
-        "migrate",
-        "deploy",
-        "--schema",
-        schemaPath ?? defaultSchemaPath(),
-    ], {
-        cwd: process.cwd(),
-        env: { ...process.env, DATABASE_URL: sqliteUrl(databasePath) },
-        stdio: "ignore",
-    });
 }
 
 /** 只有数据库、没有仓储的用例（迁移升级、backend 一致性）用的上下文。 */
@@ -189,13 +170,8 @@ export async function cleanupTemporaryRoots(): Promise<void> {
 }
 
 afterEach(cleanupTemporaryRoots);
-
-/** 建一个空的 DB 文件并把 schema 部署进去；分步部署见 `deploySchema`。 */
-export function prepareDatabase(root: string, schemaPath?: string): void {
-    const databasePath = resolve(root, "cosmos.sqlite");
-    writeFileSync(databasePath, new Uint8Array());
-    deploySchema(databasePath, schemaPath);
-}
+// schema 模板要活过整个文件的用例，所以是 afterAll 而不是 afterEach。
+afterAll(releaseSchemaTemplates);
 
 export async function createFixtureSource(
     repository: PrismaCosmosRepository,

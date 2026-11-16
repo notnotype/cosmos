@@ -21,7 +21,7 @@ it("records a rejection only after an external API decision and verifies unchang
         await result.recordDecision();
         expect(result.report).toMatchObject({ status: "decision_recorded", decision: "rejected", formalUnchanged: true, manualPersistenceVerified: true });
     } finally { await result.close(); }
-}, 30_000);
+});
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -45,7 +45,7 @@ it("queues the disclosed source body through HTTP, keeps pending unchanged and w
         pendingCount: 1, formalUnchanged: true, secretCleanup: "completed", decision: "none" });
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
     expect(await readFile(join(result.root, "result.json"), "utf8")).not.toContain("synthetic-task40-key");
-}, 30_000);
+});
 
 it("cancels an active generation without retry and removes temporary credentials", async () => {
     const controller = new AbortController();
@@ -56,7 +56,7 @@ it("cancels an active generation without retry and removes temporary credentials
     expect(sends).toBe(1);
     expect(result.report).toMatchObject({ status: "failed", stage: "generation_cancelled", secretCleanup: "completed", disconnect: "completed" });
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
-}, 30_000);
+});
 
 it("bounds a stalled provider and cleans up without retry", async () => {
     const result = await runBodyStoryAcceptance({ credential: "synthetic-task40-key", maxDurationMs: 1_000,
@@ -64,7 +64,7 @@ it("bounds a stalled provider and cleans up without retry", async () => {
     roots.push(result.root);
     expect(result.report).toMatchObject({ status: "failed", stage: "generation_timeout", transportSends: 1, secretCleanup: "completed", disconnect: "completed" });
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
-}, 30_000);
+});
 it.each(["proposal_schema_invalid", "proposal_json_invalid", "completion_incomplete", "candidate_save_failed"] as const)("classifies %s without retaining model text in the report", async (expected) => {
     let sends = 0;
     const text = expected === "proposal_json_invalid" ? "PRIVATE-NOT-JSON" : JSON.stringify({ task: "story.summarize", title: "PRIVATE-TITLE", summary: "PRIVATE-SUMMARY",
@@ -83,7 +83,7 @@ it.each(["proposal_schema_invalid", "proposal_json_invalid", "completion_incompl
     expect(sends).toBe(1);
     expect(await readFile(join(result.root, "result.json"), "utf8")).not.toMatch(/PRIVATE|synthetic-task40-key/);
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
-}, 30_000);
+});
 
 it.each(["network", "invalid"] as const)("fails closed and cleans credentials after %s without retry or formal writes", async (outcome) => {
     const requests: unknown[] = [];
@@ -93,4 +93,4 @@ it.each(["network", "invalid"] as const)("fails closed and cleans credentials af
     expect(requests).toHaveLength(1);
     expect(await readdir(join(result.root, "data", "secrets"))).toEqual([]);
     expect(await readFile(join(result.root, "result.json"), "utf8")).not.toContain("PRIVATE");
-}, 30_000);
+});
